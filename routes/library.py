@@ -122,7 +122,8 @@ def compare_libraries():
             'success': True,
             'comparison': comparison_result,
             'comparison_id': comparison_id,
-            'library_id': local_library_data['id']
+            'library_id': local_library_data['id'],
+            'debug_file': comparison_result.get('debug_file')
         })
         
     except Exception as e:
@@ -429,3 +430,60 @@ def debug_match():
     except Exception as e:
         logger.error(f"Error in debug match: {e}")
         return jsonify({'error': f'Failed to debug match: {str(e)}'}), 500
+
+@library_bp.route('/debug-log/<path:filename>', methods=['GET'])
+def get_debug_log(filename):
+    """Get debug log file contents."""
+    try:
+        # Security check - only allow files in library_data directory
+        if not filename.startswith('matching_debug_') or not filename.endswith('.json'):
+            return jsonify({'error': 'Invalid debug file'}), 400
+        
+        file_path = Path('library_data') / filename
+        
+        if not file_path.exists():
+            return jsonify({'error': 'Debug file not found'}), 404
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            debug_data = json.load(f)
+        
+        return jsonify({
+            'success': True,
+            'debug_data': debug_data,
+            'filename': filename
+        })
+        
+    except Exception as e:
+        logger.error(f"Error reading debug log: {e}")
+        return jsonify({'error': f'Failed to read debug log: {str(e)}'}), 500
+
+@library_bp.route('/list-debug-logs', methods=['GET'])
+def list_debug_logs():
+    """List all available debug log files."""
+    try:
+        debug_dir = Path('library_data')
+        debug_files = []
+        
+        if debug_dir.exists():
+            for file_path in debug_dir.glob('matching_debug_*.json'):
+                try:
+                    stat = file_path.stat()
+                    debug_files.append({
+                        'filename': file_path.name,
+                        'created': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        'size_kb': round(stat.st_size / 1024, 2)
+                    })
+                except Exception as e:
+                    logger.warning(f"Could not read stats for {file_path}: {e}")
+        
+        # Sort by creation time (newest first)
+        debug_files.sort(key=lambda x: x['created'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'debug_files': debug_files
+        })
+        
+    except Exception as e:
+        logger.error(f"Error listing debug logs: {e}")
+        return jsonify({'error': f'Failed to list debug logs: {str(e)}'}), 500

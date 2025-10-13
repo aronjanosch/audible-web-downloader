@@ -405,3 +405,39 @@ class LibraryComparator:
         normalized = re.sub(r'\s+', ' ', normalized).strip()
         
         return normalized
+    
+    def _log_debug(self, message: str, data: Dict = None):
+        """Add debug information to log."""
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "message": message
+        }
+        if data:
+            entry["data"] = data
+        
+        self.debug_log.append(entry)
+        logger.debug(f"[MATCH_DEBUG] {message}: {data}")
+    
+    def _save_debug_log(self):
+        """Save debug log to file."""
+        if not self.debug_file:
+            return
+            
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.debug_file), exist_ok=True)
+            
+            debug_data = {
+                "comparison_timestamp": datetime.now().isoformat(),
+                "match_threshold": self.match_threshold,
+                "author_threshold": 0.7,
+                "total_log_entries": len(self.debug_log),
+                "log_entries": self.debug_log
+            }
+            
+            with open(self.debug_file, 'w', encoding='utf-8') as f:
+                json.dump(debug_data, f, indent=2, ensure_ascii=False)
+                
+            logger.info(f"Debug log saved to {self.debug_file}")
+        except Exception as e:
+            logger.error(f"Failed to save debug log: {e}")

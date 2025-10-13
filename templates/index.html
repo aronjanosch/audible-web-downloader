@@ -202,6 +202,9 @@
         document.getElementById('showMissingBtn').addEventListener('click', function() {
             toggleFilter('missing');
         });
+        document.getElementById('viewDebugBtn').addEventListener('click', function() {
+            viewDebugLog(this.dataset.debugFile);
+        });
         
         // Library filters
         document.querySelectorAll('.library-filter').forEach(btn => {
@@ -925,5 +928,175 @@
         
         return col;
     }
+    
+    async function viewDebugLog(filename) {
+        if (!filename) {
+            showAlert('No debug file available', 'warning');
+            return;
+        }
+        
+        try {
+            const result = await apiCall(`/api/library/debug-log/${filename}`);
+            
+            if (result.success) {
+                showDebugModal(result.debug_data, filename);
+            } else {
+                showAlert('Failed to load debug file', 'danger');
+            }
+        } catch (error) {
+            showAlert('Error loading debug file: ' + error.message, 'danger');
+        }
+    }
+    
+    function showDebugModal(debugData, filename) {
+        // Create debug modal content
+        const logEntries = debugData.log_entries || [];
+        
+        // Find matching attempts for better overview
+        const matchingAttempts = logEntries.filter(entry => 
+            entry.message.includes('Processing Audible Book') || 
+            entry.message.includes('RESULT:')
+        );
+        
+        let debugHtml = `
+            <div class="debug-info">
+                <h5>Debug Log: ${filename}</h5>
+                <div class="mb-3">
+                    <strong>Comparison Settings:</strong><br>
+                    Match Threshold: ${debugData.match_threshold}<br>
+                    Author Threshold: ${debugData.author_threshold}<br>
+                    Total Log Entries: ${debugData.total_log_entries}
+                </div>
+                
+                <div class="debug-summary mb-3">
+                    <strong>Summary:</strong><br>
+        `;
+        
+        // Count results
+        const matchedCount = logEntries.filter(e => e.message === 'RESULT: MATCHED').length;
+        const notMatchedCount = logEntries.filter(e => e.message === 'RESULT: NOT MATCHED').length;
+        
+        debugHtml += `
+                    Matched: ${matchedCount}<br>
+                    Not Matched: ${notMatchedCount}<br>
+                    Total Processed: ${matchedCount + notMatchedCount}
+                </div>
+                
+                <div class="accordion" id="debugAccordion">
+        `;
+        
+        // Group entries by book processing
+        let currentBook = null;
+        let bookEntries = [];
+        let bookIndex = 0;
+        
+        for (const entry of logEntries) {
+            if (entry.message.includes('Processing Audible Book')) {
+                // Save previous book if exists
+                if (currentBook && bookEntries.length > 0) {
+                    debugHtml += createBookDebugSection(currentBook, bookEntries, bookIndex++);
+                }
+                
+                // Start new book
+                currentBook = entry;
+                bookEntries = [entry];
+            } else if (currentBook && (entry.message.includes('RESULT:') || entry.message.includes('Audible Book Details'))) {
+                bookEntries.push(entry);
+            }
+        }
+        
+        // Add last book
+        if (currentBook && bookEntries.length > 0) {
+            debugHtml += createBookDebugSection(currentBook, bookEntries, bookIndex);
+        }
+        
+        debugHtml += `
+                </div>
+                
+                <div class="mt-3">
+                    <button class="btn btn-secondary" onclick="downloadDebugFile('${filename}')">Download Full Log</button>
+                </div>
+            </div>
+        `;
+        
+        // Show in modal
+        const existingModal = document.getElementById('debugModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        const modalHtml = `
+            <div class="modal fade" id="debugModal" tabindex="-1">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Matching Debug Information</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                            ${debugHtml}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('debugModal'));
+        modal.show();
+    }
+    
+    function createBookDebugSection(bookEntry, entries, index) {
+        const bookData = bookEntry.data || {};
+        const resultEntry = entries.find(e => e.message.includes('RESULT:'));
+        const isMatched = resultEntry && resultEntry.message.includes('MATCHED');
+        
+        const panelClass = isMatched ? 'bg-success-subtle' : 'bg-danger-subtle';
+        const headerClass = isMatched ? 'text-success' : 'text-danger';
+        const resultText = isMatched ? '✅ MATCHED' : '❌ NOT MATCHED';
+        
+        let html = `
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading${index}">
+                    <button class="accordion-button collapsed ${panelClass}" type="button" 
+                            data-bs-toggle="collapse" data-bs-target="#collapse${index}">
+                        <span class="${headerClass} fw-bold me-2">${resultText}</span>
+                        <span>${bookData.title || 'Unknown Title'} by ${bookData.authors || 'Unknown Author'}</span>
+                    </button>
+                </h2>
+                <div id="collapse${index}" class="accordion-collapse collapse" 
+                     data-bs-parent="#debugAccordion">
+                    <div class="accordion-body">
+        `;
+        
+        // Show book details and matching attempts
+        for (const entry of entries) {
+            if (entry.data) {
+                html += `<div class="mb-2"><strong>${entry.message}:</strong><br>`;
+                html += `<pre class="bg-light p-2 small">${JSON.stringify(entry.data, null, 2)}</pre></div>`;
+            }
+        }
+        
+        html += `
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        return html;
+    }
+    
+    async function downloadDebugFile(filename) {
+        window.open(`/api/library/debug-log/${filename}`, '_blank');
+    }
+    
+    // Add global function for modal cleanup
+    window.addEventListener('hidden.bs.modal', function(event) {
+        if (event.target.id === 'debugModal') {
+            event.target.remove();
+        }
+    });
 </script>
 {% endblock %}
