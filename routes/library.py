@@ -50,11 +50,13 @@ def scan_local_library():
         logger.error(f"Error scanning local library: {e}")
         return jsonify({'error': f'Failed to scan library: {str(e)}'}), 500
 
-@library_bp.route('/compare', methods=['GET'])
+@library_bp.route('/compare', methods=['POST'])
 def compare_libraries():
     """Compare Audible library with local library."""
-    # Get libraries from session
-    audible_library = session.get('library', [])
+    data = request.get_json() or {}
+    
+    # Get audible library from request data or fallback to session
+    audible_library = data.get('audible_library', session.get('library', []))
     local_library_data = session.get('local_library', {})
     local_books = local_library_data.get('books', [])
     

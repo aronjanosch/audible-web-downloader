@@ -294,6 +294,11 @@
             displayLibrary(library);
             showAlert(`Loaded ${library.length} books!`, 'success');
             
+            // Show compare button if we have local library data
+            if (localLibrary.length > 0) {
+                document.getElementById('compareLibrariesBtn').style.display = 'block';
+            }
+            
         } catch (error) {
             showAlert('Failed to load library: ' + error.message, 'danger');
         } finally {
@@ -743,7 +748,12 @@
         showLoading(btn, true);
         
         try {
-            const result = await apiCall('/api/library/compare');
+            const result = await apiCall('/api/library/compare', {
+                method: 'POST',
+                body: JSON.stringify({ 
+                    audible_library: library 
+                })
+            });
             libraryComparison = result.comparison;
             
             // Show filter buttons
