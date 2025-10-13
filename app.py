@@ -15,6 +15,7 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
     app.config['ACCOUNTS_FILE'] = "accounts.json"
     app.config['DOWNLOADS_DIR'] = "downloads"
+    app.config['LOCAL_LIBRARY_PATH'] = os.environ.get('LOCAL_LIBRARY_PATH', '')
     
     # Initialize extensions
     csrf = CSRFProtect(app)
@@ -26,15 +27,18 @@ def create_app():
     from routes.main import main_bp
     from routes.auth import auth_bp
     from routes.download import download_bp
+    from routes.library import library_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(download_bp)
+    app.register_blueprint(library_bp)
     
     # Exempt API endpoints from CSRF protection (after blueprints are registered)
     csrf.exempt(app.blueprints.get('main'))
     csrf.exempt(app.blueprints.get('auth'))
     csrf.exempt(app.blueprints.get('download'))
+    csrf.exempt(app.blueprints.get('library'))
     
     # Error handlers
     @app.errorhandler(404)

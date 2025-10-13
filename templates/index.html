@@ -27,6 +27,19 @@
 
 <!-- Library Content -->
 <div id="libraryContent" style="display: none;">
+    <!-- Library Filters -->
+    <div class="filter-tabs">
+        <button class="btn btn-sm library-filter active" id="allBooksFilter" data-filter="all">
+            <i class="fas fa-list"></i> All Books
+        </button>
+        <button class="btn btn-sm library-filter" id="missingBooksFilter" data-filter="missing" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i> Missing from Local
+        </button>
+        <button class="btn btn-sm library-filter" id="availableBooksFilter" data-filter="available" style="display: none;">
+            <i class="fas fa-check-circle"></i> Available Locally
+        </button>
+    </div>
+    
     <!-- Search Bar -->
     <div class="row mb-4">
         <div class="col-md-6">
@@ -123,6 +136,11 @@
         });
     }
     
+    // Local library variables
+    let localLibrary = [];
+    let libraryComparison = null;
+    let currentFilter = 'all';
+    
     function setupEventListeners() {
         // Account selection
         document.getElementById('accountSelect').addEventListener('change', function() {
@@ -168,6 +186,28 @@
         // View switcher
         document.getElementById('cardViewBtn').addEventListener('click', () => switchView('card'));
         document.getElementById('listViewBtn').addEventListener('click', () => switchView('list'));
+        
+        // Local library
+        document.getElementById('setPathBtn').addEventListener('click', function() {
+            setLibraryPath();
+        });
+        document.getElementById('scanLocalBtn').addEventListener('click', function() {
+            scanLocalLibrary();
+        });
+        document.getElementById('compareLibrariesBtn').addEventListener('click', function() {
+            compareLibraries();
+        });
+        document.getElementById('showMissingBtn').addEventListener('click', function() {
+            toggleFilter('missing');
+        });
+        
+        // Library filters
+        document.querySelectorAll('.library-filter').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const filter = this.dataset.filter;
+                toggleFilter(filter);
+            });
+        });
     }
     
     async function selectAccount(accountName) {
@@ -633,6 +673,209 @@
         } else {
             document.getElementById('libraryList').style.display = 'block';
         }
+    }
+    
+    // Local library functions
+    async function setLibraryPath() {
+        const path = document.getElementById('libraryPath').value.trim();
+        if (!path) {
+            showAlert('Please enter a library path', 'warning');
+            return;
+        }
+        
+        try {
+            const result = await apiCall('/api/library/set-path', {
+                method: 'POST',
+                body: JSON.stringify({ library_path: path })
+            });
+            
+            showAlert(result.message, 'success');
+        } catch (error) {
+            showAlert('Failed to set library path: ' + error.message, 'danger');
+        }
+    }
+    
+    async function scanLocalLibrary() {
+        const path = document.getElementById('libraryPath').value.trim();
+        if (!path) {
+            showAlert('Please set a library path first', 'warning');
+            return;
+        }
+        
+        const btn = document.getElementById('scanLocalBtn');
+        btn.setAttribute('data-original-text', btn.innerHTML);
+        showLoading(btn, true);
+        
+        try {
+            const result = await apiCall('/api/library/scan-local', {
+                method: 'POST',
+                body: JSON.stringify({ library_path: path })
+            });
+            
+            localLibrary = result.books || [];
+            showAlert(`Scanned ${result.book_count} books from local library`, 'success');
+            
+            // Show compare button if we have both libraries
+            if (library.length > 0) {
+                document.getElementById('compareLibrariesBtn').style.display = 'block';
+            }
+            
+        } catch (error) {
+            showAlert('Failed to scan library: ' + error.message, 'danger');
+        } finally {
+            showLoading(btn, false);
+        }
+    }
+    
+    async function compareLibraries() {
+        if (library.length === 0) {
+            showAlert('Please fetch your Audible library first', 'warning');
+            return;
+        }
+        
+        if (localLibrary.length === 0) {
+            showAlert('Please scan your local library first', 'warning');
+            return;
+        }
+        
+        const btn = document.getElementById('compareLibrariesBtn');
+        btn.setAttribute('data-original-text', btn.innerHTML);
+        showLoading(btn, true);
+        
+        try {
+            const result = await apiCall('/api/library/compare');
+            libraryComparison = result.comparison;
+            
+            // Show filter buttons
+            document.getElementById('missingBooksFilter').style.display = 'inline-block';
+            document.getElementById('availableBooksFilter').style.display = 'inline-block';
+            document.getElementById('showMissingBtn').style.display = 'block';
+            
+            // Update stats
+            updateLibraryStats(libraryComparison);
+            
+            // Re-display library with availability indicators
+            displayLibraryWithAvailability();
+            
+            showAlert(`Found ${libraryComparison.missing_count} missing books and ${libraryComparison.available_count} available locally`, 'info');
+            
+        } catch (error) {
+            showAlert('Failed to compare libraries: ' + error.message, 'danger');
+        } finally {
+            showLoading(btn, false);
+        }
+    }
+    
+    function toggleFilter(filter) {
+        currentFilter = filter;
+        
+        // Update active filter button
+        document.querySelectorAll('.library-filter').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+        
+        // Filter and display books
+        let booksToShow = library;
+        
+        if (libraryComparison) {
+            switch (filter) {
+                case 'missing':
+                    booksToShow = libraryComparison.missing_from_local;
+                    break;
+                case 'available':
+                    booksToShow = libraryComparison.available_locally;
+                    break;
+                case 'all':
+                default:
+                    booksToShow = library;
+                    break;
+            }
+        }
+        
+        displayLibrary(booksToShow);
+    }
+    
+    function displayLibraryWithAvailability() {
+        if (!libraryComparison) {
+            displayLibrary(library);
+            return;
+        }
+        
+        // Add availability info to books
+        const missingAsins = new Set(libraryComparison.missing_from_local.map(book => book.asin));
+        const availableAsins = new Set(libraryComparison.available_locally.map(book => book.asin));
+        
+        const booksWithAvailability = library.map(book => ({
+            ...book,
+            availability: missingAsins.has(book.asin) ? 'missing' : (availableAsins.has(book.asin) ? 'available' : 'unknown')
+        }));
+        
+        displayLibrary(booksWithAvailability);
+    }
+    
+    function updateLibraryStats(comparison) {
+        const statsEl = document.getElementById('libraryStats');
+        const statsTextEl = document.getElementById('statsText');
+        
+        if (comparison) {
+            const coverage = ((comparison.available_count / comparison.total_audible) * 100).toFixed(1);
+            statsTextEl.innerHTML = `
+                <div>Audible: ${comparison.total_audible} books</div>
+                <div>Local: ${comparison.total_local} books</div>
+                <div>Missing: ${comparison.missing_count} books</div>
+                <div>Coverage: ${coverage}%</div>
+            `;
+            statsEl.style.display = 'block';
+        } else {
+            statsEl.style.display = 'none';
+        }
+    }
+    
+    // Override the original createBookCard to add availability indicators
+    function createBookCard(book) {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-lg-3 col-xl-2';
+        
+        const hours = Math.floor(book.length_mins / 60);
+        const minutes = book.length_mins % 60;
+        const duration = book.length_mins ? `${hours}h ${minutes}m` : 'Unknown';
+        
+        // Add availability class
+        let availabilityClass = '';
+        let availabilityIcon = '';
+        
+        if (book.availability === 'missing') {
+            availabilityClass = 'book-missing';
+            availabilityIcon = '<i class="fas fa-exclamation-circle text-danger position-absolute top-0 end-0 m-2"></i>';
+        } else if (book.availability === 'available') {
+            availabilityClass = 'book-available';
+            availabilityIcon = '<i class="fas fa-check-circle text-success position-absolute top-0 end-0 m-2"></i>';
+        }
+        
+        col.innerHTML = `
+            <div class="card book-card ${availabilityClass}" data-asin="${book.asin}">
+                <div class="status-overlay"></div>
+                ${availabilityIcon}
+                <input class="form-check-input book-checkbox position-absolute top-0 start-0 m-2" type="checkbox" id="book_${book.asin}" data-asin="${book.asin}">
+                <img src="${book.cover_url || 'https://via.placeholder.com/150x200?text=No+Cover'}" 
+                     class="card-img-top book-cover" alt="${book.title}">
+                <div class="card-body">
+                    <h6 class="card-title">${book.title}</h6>
+                    <p class="card-text text-muted">${book.authors}</p>
+                </div>
+            </div>
+        `;
+        
+        const card = col.querySelector('.book-card');
+        card.addEventListener('click', (e) => {
+            if (e.target.classList.contains('fas')) return; // Don't select when clicking icons
+            const checkbox = card.querySelector('.book-checkbox');
+            checkbox.checked = !checkbox.checked;
+            toggleBookSelection(book.asin, checkbox.checked);
+        });
+        
+        return col;
     }
 </script>
 {% endblock %}

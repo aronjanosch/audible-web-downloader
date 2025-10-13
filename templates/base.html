@@ -154,6 +154,27 @@
             font-size: 1.2rem;
             display: none;
         }
+        .book-missing {
+            border: 2px solid #dc3545 !important;
+        }
+        .book-available {
+            border: 2px solid #28a745 !important;
+        }
+        .filter-tabs {
+            margin-bottom: 1rem;
+        }
+        .library-filter {
+            background: none;
+            border: 1px solid #dee2e6;
+            color: #495057;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .library-filter.active {
+            background: #007bff;
+            border-color: #007bff;
+            color: white;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -224,6 +245,46 @@
                         <button id="refreshLibraryBtn" class="btn btn-info btn-sm" style="display: none;">
                             <i class="fas fa-sync"></i> Refresh Library
                         </button>
+                    </div>
+                </div>
+                
+                <!-- Local Library -->
+                <div id="localLibrarySection" class="mb-4">
+                    <h5>Local Library</h5>
+                    
+                    <!-- Library Path -->
+                    <div class="mb-3">
+                        <label for="libraryPath" class="form-label">Library Path:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm" 
+                                   id="libraryPath" placeholder="Path to your audiobooks">
+                            <button class="btn btn-outline-light btn-sm" type="button" id="setPathBtn">
+                                <i class="fas fa-folder"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Library Actions -->
+                    <div class="d-grid gap-2">
+                        <button id="scanLocalBtn" class="btn btn-light btn-sm">
+                            <i class="fas fa-search"></i> Scan Local Library
+                        </button>
+                        <button id="compareLibrariesBtn" class="btn btn-info btn-sm" style="display: none;">
+                            <i class="fas fa-balance-scale"></i> Compare Libraries
+                        </button>
+                        <button id="showMissingBtn" class="btn btn-warning btn-sm" style="display: none;">
+                            <i class="fas fa-exclamation-circle"></i> Show Missing Books
+                        </button>
+                    </div>
+                    
+                    <!-- Library Stats -->
+                    <div id="libraryStats" class="mt-3" style="display: none;">
+                        <div class="card bg-light text-dark">
+                            <div class="card-body">
+                                <h6 class="card-title">Library Stats</h6>
+                                <small id="statsText" class="text-muted"></small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
