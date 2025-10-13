@@ -138,6 +138,8 @@
     
     // Local library variables
     let localLibrary = [];
+    let localLibraryId = null;
+    let currentLibraryPath = '';
     let libraryComparison = null;
     let currentFilter = 'all';
     
@@ -295,7 +297,7 @@
             showAlert(`Loaded ${library.length} books!`, 'success');
             
             // Show compare button if we have local library data
-            if (localLibrary.length > 0) {
+            if (localLibraryId) {
                 document.getElementById('compareLibrariesBtn').style.display = 'block';
             }
             
@@ -351,6 +353,7 @@
         currentAccount = null;
         library = [];
         selectedBooks.clear();
+        // Keep local library data as it's not account-specific
     }
 
     function switchView(view) {
@@ -717,8 +720,21 @@
                 body: JSON.stringify({ library_path: path })
             });
             
+            // Store library information
             localLibrary = result.books || [];
-            showAlert(`Scanned ${result.book_count} books from local library`, 'success');
+            localLibraryId = result.library_id;
+            currentLibraryPath = result.library_path;
+            
+            const message = result.cached ? 
+                `Loaded ${result.book_count} books from cached library (last scanned: ${new Date(result.last_scanned).toLocaleDateString()})` :
+                `Scanned ${result.book_count} books from local library`;
+            
+            showAlert(message, 'success');
+            
+            // Update stats if available
+            if (result.stats) {
+                updateLibraryStats(result.stats);
+            }
             
             // Show compare button if we have both libraries
             if (library.length > 0) {
@@ -738,7 +754,7 @@
             return;
         }
         
-        if (localLibrary.length === 0) {
+        if (!localLibraryId) {
             showAlert('Please scan your local library first', 'warning');
             return;
         }
@@ -751,7 +767,9 @@
             const result = await apiCall('/api/library/compare', {
                 method: 'POST',
                 body: JSON.stringify({ 
-                    audible_library: library 
+                    audible_library: library,
+                    library_id: localLibraryId,
+                    audible_account: currentAccount || 'unknown'
                 })
             });
             libraryComparison = result.comparison;
@@ -824,18 +842,38 @@
         displayLibrary(booksWithAvailability);
     }
     
-    function updateLibraryStats(comparison) {
+    function updateLibraryStats(stats) {
         const statsEl = document.getElementById('libraryStats');
         const statsTextEl = document.getElementById('statsText');
         
-        if (comparison) {
-            const coverage = ((comparison.available_count / comparison.total_audible) * 100).toFixed(1);
-            statsTextEl.innerHTML = `
-                <div>Audible: ${comparison.total_audible} books</div>
-                <div>Local: ${comparison.total_local} books</div>
-                <div>Missing: ${comparison.missing_count} books</div>
-                <div>Coverage: ${coverage}%</div>
-            `;
+        if (stats) {
+            // Handle both comparison stats and library scan stats
+            if (stats.total_audible !== undefined) {
+                // This is comparison stats
+                const coverage = ((stats.available_count / stats.total_audible) * 100).toFixed(1);
+                statsTextEl.innerHTML = `
+                    <div>Audible: ${stats.total_audible} books</div>
+                    <div>Local: ${stats.total_local} books</div>
+                    <div>Missing: ${stats.missing_count} books</div>
+                    <div>Coverage: ${coverage}%</div>
+                `;
+            } else {
+                // This is library scan stats
+                const sizeGB = stats.total_size_gb ? stats.total_size_gb.toFixed(2) : '0';
+                const avgHours = stats.avg_duration_hours ? stats.avg_duration_hours.toFixed(1) : '0';
+                const languageList = Object.entries(stats.languages || {})
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(([lang, count]) => `${lang}: ${count}`)
+                    .join(', ');
+                
+                statsTextEl.innerHTML = `
+                    <div>Books: ${stats.total_books}</div>
+                    <div>Size: ${sizeGB} GB</div>
+                    <div>Avg Length: ${avgHours}h</div>
+                    ${languageList ? `<div>Languages: ${languageList}</div>` : ''}
+                `;
+            }
             statsEl.style.display = 'block';
         } else {
             statsEl.style.display = 'none';

@@ -13,16 +13,18 @@ import unicodedata
 from mutagen.mp4 import MP4
 from mutagen.id3 import ID3NoHeaderError
 import logging
+from library_storage import LibraryStorage
 
 logger = logging.getLogger(__name__)
 
 class LocalLibraryScanner:
     """Scans and manages local audiobook library."""
     
-    def __init__(self, library_path: str):
+    def __init__(self, library_path: str, storage: Optional[LibraryStorage] = None):
         """Initialize scanner with library path."""
         self.library_path = Path(library_path)
         self.supported_extensions = {'.m4b', '.m4a', '.mp3', '.aax'}
+        self.storage = storage or LibraryStorage()
         
     def scan_library(self) -> List[Dict]:
         """
@@ -47,6 +49,36 @@ class LocalLibraryScanner:
             
         logger.info(f"Scanned {len(books)} books from local library")
         return books
+    
+    def scan_and_save_library(self) -> tuple[str, List[Dict]]:
+        """
+        Scan local library and save to persistent storage.
+        
+        Returns:
+            Tuple of (library_id, books_list)
+        """
+        books = self.scan_library()
+        
+        # Calculate scan statistics
+        scan_stats = {
+            'scan_duration_seconds': 0,  # Could add timing if needed
+            'directories_scanned': len([d for d in self.library_path.iterdir() if d.is_dir()]),
+            'files_processed': len(books),
+            'errors_encountered': 0  # Could track errors during scanning
+        }
+        
+        # Save to persistent storage
+        library_id = self.storage.save_library(
+            str(self.library_path), 
+            books, 
+            scan_stats
+        )
+        
+        return library_id, books
+    
+    def load_cached_library(self) -> Optional[Dict]:
+        """Load previously cached library data if available."""
+        return self.storage.load_library_by_path(str(self.library_path))
     
     def _scan_author_directory(self, author_dir: Path) -> List[Dict]:
         """Scan an author's directory for books and series."""
