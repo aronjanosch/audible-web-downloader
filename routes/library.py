@@ -372,3 +372,60 @@ def list_comparisons():
     except Exception as e:
         logger.error(f"Error listing comparisons: {e}")
         return jsonify({'error': f'Failed to list comparisons: {str(e)}'}), 500
+
+@library_bp.route('/debug-match', methods=['POST'])
+def debug_match():
+    """Debug matching for specific books."""
+    data = request.get_json() or {}
+    
+    audible_title = data.get('audible_title', '')
+    local_title = data.get('local_title', '')
+    author = data.get('author', '')
+    
+    if not all([audible_title, local_title, author]):
+        return jsonify({'error': 'audible_title, local_title, and author are required'}), 400
+    
+    try:
+        comparator = LibraryComparator()
+        
+        # Test normalization
+        norm_audible = comparator._normalize_for_matching(audible_title)
+        norm_local = comparator._normalize_for_matching(local_title)
+        
+        # Test similarity
+        title_sim = comparator._calculate_advanced_similarity(norm_audible, norm_local)
+        author_sim = comparator._calculate_word_similarity(author.lower(), author.lower())
+        
+        # Test full match
+        audible_book = {'title': audible_title, 'authors': author}
+        local_books = [{'title': local_title, 'authors': author}]
+        
+        match_result = comparator._fuzzy_match_book(audible_book, local_books)
+        
+        return jsonify({
+            'success': True,
+            'debug_info': {
+                'original_titles': {
+                    'audible': audible_title,
+                    'local': local_title
+                },
+                'normalized_titles': {
+                    'audible': norm_audible,
+                    'local': norm_local
+                },
+                'similarities': {
+                    'title': title_sim,
+                    'author': author_sim
+                },
+                'thresholds': {
+                    'title': comparator.match_threshold,
+                    'author': 0.7
+                },
+                'match_result': match_result,
+                'would_match': title_sim >= comparator.match_threshold and author_sim >= 0.7
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in debug match: {e}")
+        return jsonify({'error': f'Failed to debug match: {str(e)}'}), 500

@@ -216,7 +216,7 @@ class LibraryComparator:
     """Compares Audible and local libraries to find missing books."""
     
     def __init__(self):
-        self.match_threshold = 0.8  # Similarity threshold for fuzzy matching
+        self.match_threshold = 0.6  # Reduced threshold for better matching
     
     def compare_libraries(self, audible_books: List[Dict], local_books: List[Dict]) -> Dict:
         """
@@ -283,20 +283,24 @@ class LibraryComparator:
     
     def _fuzzy_match_book(self, audible_book: Dict, local_books: List[Dict]) -> bool:
         """Perform fuzzy matching to find similar books."""
-        audible_title = audible_book.get('title', '').lower()
-        audible_author = audible_book.get('authors', '').lower()
+        audible_title = self._normalize_for_matching(audible_book.get('title', ''))
+        audible_author = self._normalize_for_matching(audible_book.get('authors', ''))
         
         for local_book in local_books:
-            local_title = local_book.get('title', '').lower()
-            local_author = local_book.get('authors', '').lower()
+            local_title = self._normalize_for_matching(local_book.get('title', ''))
+            local_author = self._normalize_for_matching(local_book.get('authors', ''))
             
-            # Calculate similarity (simple word overlap method)
-            title_similarity = self._calculate_word_similarity(audible_title, local_title)
+            # First check if authors match (more reliable)
             author_similarity = self._calculate_word_similarity(audible_author, local_author)
             
-            # Consider it a match if both title and author are similar enough
-            if title_similarity >= self.match_threshold and author_similarity >= 0.6:
-                return True
+            if author_similarity >= 0.7:  # Authors should match well
+                # More flexible title matching
+                title_similarity = self._calculate_advanced_similarity(audible_title, local_title)
+                
+                if title_similarity >= self.match_threshold:
+                    logger.debug(f"Match found: '{audible_book.get('title')}' -> '{local_book.get('title')}' "
+                               f"(title: {title_similarity:.2f}, author: {author_similarity:.2f})")
+                    return True
                 
         return False
     
@@ -315,6 +319,79 @@ class LibraryComparator:
         union = len(words1.union(words2))
         
         return intersection / union if union > 0 else 0.0
+    
+    def _normalize_for_matching(self, text: str) -> str:
+        """Advanced normalization for better matching."""
+        if not text:
+            return ""
+        
+        # Convert to lowercase
+        text = text.lower()
+        
+        # Remove diacritics
+        text = unicodedata.normalize('NFD', text)
+        text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+        
+        # Replace common separators and punctuation with spaces
+        text = re.sub(r'[:\-_,.;!?()[\]{}"\']', ' ', text)
+        
+        # Replace German/English equivalents
+        replacements = {
+            'band': '',  # Remove "Band" as it's just "Volume"
+            'teil': '',  # Remove "Teil" (Part)
+            'buch': '',  # Remove "Buch" (Book)  
+            'volume': '',
+            'vol': '',
+            'part': '',
+            'pt': '',
+        }
+        
+        for old, new in replacements.items():
+            text = re.sub(r'\b' + old + r'\b', new, text)
+        
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text
+    
+    def _calculate_advanced_similarity(self, text1: str, text2: str) -> float:
+        """Calculate advanced similarity with better handling of variations."""
+        if not text1 or not text2:
+            return 0.0
+        
+        # Simple exact match after normalization
+        if text1 == text2:
+            return 1.0
+        
+        # Word-based similarity
+        words1 = set(text1.split())
+        words2 = set(text2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        # Calculate Jaccard similarity
+        intersection = len(words1.intersection(words2))
+        union = len(words1.union(words2))
+        jaccard = intersection / union if union > 0 else 0.0
+        
+        # Bonus for substring containment
+        substring_bonus = 0.0
+        if text1 in text2 or text2 in text1:
+            substring_bonus = 0.2
+        
+        # Check for number/volume matching (e.g., "c23" matches "23")
+        numbers1 = set(re.findall(r'\d+', text1))
+        numbers2 = set(re.findall(r'\d+', text2))
+        
+        number_bonus = 0.0
+        if numbers1 and numbers2:
+            number_match = len(numbers1.intersection(numbers2)) / max(len(numbers1), len(numbers2))
+            number_bonus = number_match * 0.3
+        
+        final_score = min(1.0, jaccard + substring_bonus + number_bonus)
+        
+        return final_score
     
     def _normalize_for_lookup(self, text: str) -> str:
         """Normalize text for lookup comparison."""
