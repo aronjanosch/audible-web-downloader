@@ -26,9 +26,14 @@ FLASK_ENV=development python run.py
 
 The application runs on `http://localhost:5000` by default.
 
-## Memories
+## Development Guidelines
 
 - Always use uv for dependencies and to run the python code
+- Follow Flask application factory pattern with blueprints
+- Use early returns for error conditions to avoid deeply nested if statements  
+- Implement proper error handling with user-friendly messages
+- Use descriptive variable names with auxiliary verbs (e.g., is_authenticated, has_downloads)
+- Prefer functional programming; avoid unnecessary classes except for Flask views
 
 ## Architecture
 
@@ -113,3 +118,21 @@ The **AudiobookDownloader** class implements a sophisticated download system:
 - **Downloads**: `downloads/{sanitized_book_title}/` with both source (.aaxc) and converted (.m4b) files
 - **Temporary files**: Voucher files (.json) and metadata files created during processing
 - **State persistence**: `downloads/download_states.json` for tracking download progress
+
+## External Dependencies
+
+- **FFmpeg** - Required system dependency for AAX to M4B conversion
+  - Ubuntu/Debian: `sudo apt install ffmpeg`
+  - macOS: `brew install ffmpeg`  
+  - Windows: Download from FFmpeg official website
+- **Python 3.13+** - Runtime requirement as specified in pyproject.toml
+
+## Development Commands
+
+```bash
+# Development mode with debugging
+FLASK_ENV=development uv run python run.py
+
+# Check code style and run tests (if available)
+uv run pytest  # Run tests if test files exist
+```

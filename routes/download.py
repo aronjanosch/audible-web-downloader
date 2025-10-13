@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify, session, current_app
+from flask import Blueprint, request, jsonify, session, current_app, Response
 import asyncio
 import json
 import os
+import time
 from downloader import download_books, AudiobookDownloader
 
 download_bp = Blueprint('download', __name__)
@@ -148,3 +149,77 @@ def download_status():
         'status': 'downloading' if active_downloads > 0 else 'idle',
         'active_downloads': active_downloads
     })
+
+@download_bp.route('/api/download/progress-stream')
+def download_progress_stream():
+    """Server-Sent Events endpoint for real-time progress updates"""
+    current_account = session.get('current_account')
+    if not current_account:
+        return jsonify({'error': 'No account selected'}), 400
+    
+    accounts = load_accounts()
+    if current_account not in accounts:
+        return jsonify({'error': 'Account not found'}), 404
+    
+    region = accounts[current_account]['region']
+    downloader = AudiobookDownloader(current_account, region)
+    
+    def generate_progress_updates():
+        """Generate progress updates as Server-Sent Events"""
+        last_progress_data = {}
+        consecutive_no_changes = 0
+        
+        while True:
+            try:
+                # Get all download states
+                all_states = downloader.download_states
+                
+                # Format progress data
+                progress_data = {}
+                active_downloads = 0
+                
+                for asin, state in all_states.items():
+                    progress_info = {
+                        'state': state.get('state', 'unknown'),
+                        'title': state.get('title', 'Unknown'),
+                        'timestamp': state.get('timestamp', 0),
+                        'progress_percent': state.get('progress_percent', 0),
+                        'downloaded_bytes': state.get('downloaded_bytes', 0),
+                        'total_bytes': state.get('total_bytes'),
+                        'error': state.get('error')
+                    }
+                    progress_data[asin] = progress_info
+                    
+                    # Count active downloads
+                    if state.get('state') not in ['converted', 'error']:
+                        active_downloads += 1
+                
+                # Only send data if there are changes or active downloads
+                if progress_data != last_progress_data or active_downloads > 0:
+                    yield f"data: {json.dumps(progress_data)}\n\n"
+                    last_progress_data = progress_data.copy()
+                    consecutive_no_changes = 0
+                else:
+                    consecutive_no_changes += 1
+                
+                # Stop streaming after 30 seconds of no active downloads and no changes
+                if active_downloads == 0 and consecutive_no_changes > 30:
+                    break
+                    
+                time.sleep(1)  # Send updates every second
+                
+            except Exception as e:
+                # Send error as SSE event
+                error_data = {'error': str(e)}
+                yield f"data: {json.dumps(error_data)}\n\n"
+                break
+    
+    return Response(
+        generate_progress_updates(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+        }
+    )
