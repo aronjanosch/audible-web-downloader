@@ -175,6 +175,28 @@ def test_path_builder():
     print(f"Output: {result}")
     print(f"Expected: /library/Simple Book Title")
 
+    # Test 8: String format from library fetch (real-world scenario)
+    print("\n8. String Format from Library Fetch:")
+    test_data = {
+        'title': 'The Fellowship of the Ring',
+        'authors': 'J.R.R. Tolkien',  # String instead of list
+        'narrators': 'Rob Inglis',  # String instead of list
+        'series': 'The Lord of the Rings',  # String instead of list
+        'release_date': '2001-09-05'
+    }
+    result = downloader.build_audiobookshelf_path(
+        base_path,
+        test_data['title'],
+        test_data['authors'],
+        test_data['narrators'],
+        test_data['series'],
+        test_data['release_date'],
+        use_audiobookshelf_structure=True
+    )
+    print(f"Input: {test_data}")
+    print(f"Output: {result}")
+    print(f"Expected: /library/J.R.R. Tolkien/The Lord of the Rings/2001 - The Fellowship of the Ring {{Rob Inglis}}")
+
     print("\n" + "=" * 80)
     print("All tests completed!")
 

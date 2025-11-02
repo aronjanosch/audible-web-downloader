@@ -155,16 +155,25 @@ class AudiobookDownloader:
             return Path(base_path) / self._sanitize_filename(title)
 
         # 1. Build Author Folder
-        author_names = [author['name'] for author in (authors or [])]
+        # Handle both string format (from library) and list format (from API)
+        if isinstance(authors, str):
+            # Already a formatted string from library fetch
+            author_folder = authors if authors else "Unknown Author"
+        elif isinstance(authors, list) and authors:
+            # List of dicts from API
+            author_names = [author.get('name', '') if isinstance(author, dict) else str(author) for author in authors]
+            author_names = [name for name in author_names if name]  # Filter empty strings
 
-        if len(author_names) > 3:
-            author_folder = "Various Authors"
-        elif len(author_names) > 2:
-            author_folder = ", ".join(author_names[:-1]) + " and " + author_names[-1]
-        elif len(author_names) == 2:
-            author_folder = " & ".join(author_names)
-        elif len(author_names) == 1:
-            author_folder = author_names[0]
+            if len(author_names) > 3:
+                author_folder = "Various Authors"
+            elif len(author_names) > 2:
+                author_folder = ", ".join(author_names[:-1]) + " and " + author_names[-1]
+            elif len(author_names) == 2:
+                author_folder = " & ".join(author_names)
+            elif len(author_names) == 1:
+                author_folder = author_names[0]
+            else:
+                author_folder = "Unknown Author"
         else:
             author_folder = "Unknown Author"
 
@@ -172,18 +181,25 @@ class AudiobookDownloader:
 
         # 2. Build Series Folder (Optional)
         series_folder = None
-        if series and len(series) > 0 and series[0].get('title'):
-            series_folder = self._sanitize_filename(series[0]['title'])
+        series_sequence = None
+
+        if isinstance(series, str):
+            # Series is a string from library fetch
+            if series:
+                series_folder = self._sanitize_filename(series)
+        elif isinstance(series, list) and series:
+            # Series is a list from API
+            if series[0].get('title'):
+                series_folder = self._sanitize_filename(series[0]['title'])
+            series_sequence = series[0].get('sequence')
 
         # 3. Build Title Folder
         title_parts = []
 
         # Add sequence if in series
-        if series and len(series) > 0:
-            sequence = series[0].get('sequence')
-            if sequence:
-                # Format sequence (e.g., "Vol. 1" or "Vol. 1.5")
-                title_parts.append(f"Vol. {sequence}")
+        if series_sequence:
+            # Format sequence (e.g., "Vol. 1" or "Vol. 1.5")
+            title_parts.append(f"Vol. {series_sequence}")
 
         # Add year
         if release_date:
@@ -194,9 +210,19 @@ class AudiobookDownloader:
         title_parts.append(title)
 
         # Build title folder with narrator in curly braces
-        if narrators and len(narrators) > 0:
-            narrator_names = [n['name'] for n in narrators[:2]]  # Limit to first 2
-            narrator_str = " & ".join(narrator_names)
+        # Handle both string format (from library) and list format (from API)
+        narrator_str = None
+        if isinstance(narrators, str):
+            # Already a formatted string from library fetch
+            narrator_str = narrators if narrators else None
+        elif isinstance(narrators, list) and narrators:
+            # List of dicts from API
+            narrator_names = [n.get('name', '') if isinstance(n, dict) else str(n) for n in narrators[:2]]
+            narrator_names = [name for name in narrator_names if name]  # Filter empty strings
+            if narrator_names:
+                narrator_str = " & ".join(narrator_names)
+
+        if narrator_str:
             title_folder = " - ".join(title_parts) + f" {{{narrator_str}}}"
         else:
             title_folder = " - ".join(title_parts)
@@ -211,16 +237,21 @@ class AudiobookDownloader:
 
     def _get_file_paths(self, book_title: str, asin: str, product: Dict = None) -> Dict[str, Path]:
         # Build directory path using AudioBookshelf structure if enabled
-        if product and self.use_audiobookshelf_structure:
-            book_dir = self.build_audiobookshelf_path(
-                base_path=str(self.downloads_dir),
-                title=book_title,
-                authors=product.get('authors', []),
-                narrators=product.get('narrators', []),
-                series=product.get('series'),
-                release_date=product.get('release_date'),
-                use_audiobookshelf_structure=self.use_audiobookshelf_structure
-            )
+        if self.use_audiobookshelf_structure and product:
+            try:
+                book_dir = self.build_audiobookshelf_path(
+                    base_path=str(self.downloads_dir),
+                    title=book_title,
+                    authors=product.get('authors', []),
+                    narrators=product.get('narrator') or product.get('narrators', []),  # Handle both field names
+                    series=product.get('series'),
+                    release_date=product.get('release_date'),
+                    use_audiobookshelf_structure=self.use_audiobookshelf_structure
+                )
+            except Exception as e:
+                print(f"Warning: Failed to build AudioBookshelf path, falling back to flat structure: {e}")
+                safe_title = self._sanitize_filename(book_title)
+                book_dir = self.downloads_dir / safe_title
         else:
             # Legacy flat structure
             safe_title = self._sanitize_filename(book_title)
