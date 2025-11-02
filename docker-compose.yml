@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   audible-web-downloader:
     build: .
     container_name: audible-web-downloader
+    user: "1000:1000"
     ports:
       - "5505:5505"
     volumes:
@@ -14,8 +13,6 @@ services:
       # Mount library directory for final organized M4B audiobooks
       - ./library:/app/library
     environment:
-      - PUID=1000
-      - PGID=1000
       - TZ=Europe/Berlin
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       - FLASK_ENV=${FLASK_ENV:-production}
