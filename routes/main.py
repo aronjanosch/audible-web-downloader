@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, session, current
 import json
 import os
 from pathlib import Path
+from settings import settings_manager
 
 main_bp = Blueprint('main', __name__)
 
@@ -24,7 +25,21 @@ def load_libraries():
     libraries_file = Path("libraries.json")
     if libraries_file.exists():
         with open(libraries_file, 'r') as f:
-            return json.load(f)
+            libraries = json.load(f)
+
+            # Migrate: Remove deprecated use_audiobookshelf_structure field
+            migrated = False
+            for library_name, library_config in libraries.items():
+                if 'use_audiobookshelf_structure' in library_config:
+                    del library_config['use_audiobookshelf_structure']
+                    migrated = True
+
+            # Save migrated configuration
+            if migrated:
+                save_libraries(libraries)
+                print("✓ Migrated libraries.json to remove deprecated use_audiobookshelf_structure field")
+
+            return libraries
     return {}
 
 def save_libraries(libraries):
@@ -128,7 +143,6 @@ def add_library():
     data = request.get_json()
     library_name = data.get('library_name')
     library_path = data.get('library_path')
-    use_audiobookshelf_structure = data.get('use_audiobookshelf_structure', True)  # Default to True
 
     if not library_name or not library_path:
         return jsonify({'error': 'Library name and path are required'}), 400
@@ -144,7 +158,6 @@ def add_library():
 
     libraries[library_name] = {
         'path': library_path,
-        'use_audiobookshelf_structure': use_audiobookshelf_structure,
         'created_at': library_path_obj.stat().st_mtime
     }
 
@@ -163,4 +176,55 @@ def delete_library(library_name):
     del libraries[library_name]
     save_libraries(libraries)
 
-    return jsonify({'success': True}) 
+    return jsonify({'success': True})
+
+@main_bp.route('/api/settings/naming', methods=['GET'])
+def get_naming_settings():
+    """Get current naming pattern settings, presets, and placeholders"""
+    try:
+        settings = settings_manager.get_all_settings()
+        return jsonify({
+            'success': True,
+            'settings': settings
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@main_bp.route('/api/settings/naming', methods=['POST'])
+def update_naming_settings():
+    """Update the naming pattern"""
+    try:
+        data = request.get_json()
+        pattern = data.get('pattern')
+        preset = data.get('preset')
+
+        if not pattern:
+            return jsonify({
+                'success': False,
+                'error': 'Pattern is required'
+            }), 400
+
+        # Validate the pattern
+        is_valid, error_message = settings_manager.validate_pattern(pattern)
+        if not is_valid:
+            return jsonify({
+                'success': False,
+                'error': error_message
+            }), 400
+
+        # Save the new pattern
+        settings_manager.set_naming_pattern(pattern, preset)
+
+        return jsonify({
+            'success': True,
+            'pattern': pattern,
+            'preset': preset
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500 

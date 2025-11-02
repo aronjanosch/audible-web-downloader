@@ -56,7 +56,6 @@ def download_selected_books():
 
     library_config = libraries[library_name]
     library_path = library_config['path']
-    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
     # Fetch library directly since session storage is too large for browser cookies
     from auth import fetch_library
@@ -85,8 +84,7 @@ def download_selected_books():
             region,
             selected_books,
             cleanup_aax=cleanup_aax,
-            library_path=library_path,
-            use_audiobookshelf_structure=use_audiobookshelf_structure
+            library_path=library_path
         ))
 
         successful_downloads = len([r for r in results if r])
@@ -122,9 +120,8 @@ def download_status_asin(asin):
     region = accounts[current_account]['region']
     library_config = libraries[download_library]
     library_path = library_config['path']
-    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
     state = downloader.get_download_state(asin)
     return jsonify(state)
 
@@ -150,9 +147,8 @@ def download_progress():
     region = accounts[current_account]['region']
     library_config = libraries[download_library]
     library_path = library_config['path']
-    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
 
     # Get all download states
     all_states = downloader.download_states
@@ -195,9 +191,8 @@ def download_status():
     region = accounts[current_account]['region']
     library_config = libraries[download_library]
     library_path = library_config['path']
-    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
 
     # Count active downloads
     active_downloads = 0
@@ -233,9 +228,8 @@ def download_progress_stream():
     region = accounts[current_account]['region']
     library_config = libraries[download_library]
     library_path = library_config['path']
-    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
 
     def generate_progress_updates():
         """Generate progress updates as Server-Sent Events"""

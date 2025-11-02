@@ -14,6 +14,7 @@ from asyncio import Semaphore
 import time
 import hashlib
 from typing import Optional, Dict, List
+from settings import get_naming_pattern
 
 class DownloadState(Enum):
     PENDING = "pending"
@@ -27,10 +28,9 @@ class DownloadState(Enum):
     ERROR = "error"
 
 class AudiobookDownloader:
-    def __init__(self, account_name, region="us", max_concurrent_downloads=3, library_path=None, use_audiobookshelf_structure=False):
+    def __init__(self, account_name, region="us", max_concurrent_downloads=3, library_path=None):
         self.account_name = account_name
         self.region = region
-        self.use_audiobookshelf_structure = use_audiobookshelf_structure
 
         if not library_path:
             raise ValueError("library_path is required. Please configure a library before downloading.")
@@ -134,6 +134,136 @@ class AudiobookDownloader:
     def _sanitize_filename(self, filename):
         return re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', filename)[:200]
 
+    def _format_author(self, authors) -> str:
+        """Format author name(s) from various input formats."""
+        if isinstance(authors, str):
+            return authors if authors else "Unknown Author"
+        elif isinstance(authors, list) and authors:
+            author_names = [author.get('name', '') if isinstance(author, dict) else str(author) for author in authors]
+            author_names = [name for name in author_names if name]
+
+            if len(author_names) > 3:
+                return "Various Authors"
+            elif len(author_names) > 2:
+                return ", ".join(author_names[:-1]) + " and " + author_names[-1]
+            elif len(author_names) == 2:
+                return " & ".join(author_names)
+            elif len(author_names) == 1:
+                return author_names[0]
+        return "Unknown Author"
+
+    def _format_narrator(self, narrators) -> str:
+        """Format narrator name(s) from various input formats."""
+        if isinstance(narrators, str):
+            return narrators if narrators else ""
+        elif isinstance(narrators, list) and narrators:
+            narrator_names = [n.get('name', '') if isinstance(n, dict) else str(n) for n in narrators[:2]]
+            narrator_names = [name for name in narrator_names if name]
+            if narrator_names:
+                return " & ".join(narrator_names)
+        return ""
+
+    def _format_series(self, series) -> tuple[Optional[str], Optional[str]]:
+        """
+        Format series information.
+        Returns: (series_name, volume_number)
+        """
+        if isinstance(series, str) and series:
+            return series, None
+        elif isinstance(series, list) and series:
+            series_name = series[0].get('title', '') if series[0].get('title') else None
+            volume = series[0].get('sequence', None)
+            return series_name, volume
+        return None, None
+
+    def build_path_from_pattern(
+        self,
+        base_path: str,
+        title: str,
+        authors=None,
+        narrators=None,
+        series=None,
+        release_date: str = None,
+        publisher: str = None,
+        language: str = None,
+        asin: str = None
+    ) -> Path:
+        """
+        Build a file path based on the current naming pattern from settings.
+
+        Args:
+            base_path: Base directory path
+            title: Book title
+            authors: Author(s) information (string or list of dicts)
+            narrators: Narrator(s) information (string or list of dicts)
+            series: Series information (string or list of dicts)
+            release_date: Release date string (YYYY-MM-DD format)
+            publisher: Publisher name
+            language: Book language
+            asin: Amazon Standard Identification Number
+
+        Returns:
+            Path object with the complete file path
+        """
+        # Get the current naming pattern from settings
+        pattern = get_naming_pattern()
+
+        # Format metadata components
+        author_str = self._format_author(authors)
+        narrator_str = self._format_narrator(narrators)
+        series_name, volume = self._format_series(series)
+
+        # Extract year from release date
+        year = ""
+        if release_date:
+            year = release_date.split('-')[0]
+
+        # Create placeholder replacements - all placeholders are now simple/atomic
+        replacements = {
+            '{Author}': author_str,
+            '{Series}': series_name if series_name else "",
+            '{Title}': title,  # Just the raw book title
+            '{Year}': year,
+            '{Narrator}': narrator_str,
+            '{Publisher}': publisher if publisher else "",
+            '{Language}': language if language else "",
+            '{ASIN}': asin if asin else "",
+            '{Volume}': str(volume) if volume else ""  # Just the number (e.g., "1", "2")
+        }
+
+        # Replace placeholders in pattern
+        path_str = pattern
+        for placeholder, value in replacements.items():
+            path_str = path_str.replace(placeholder, value)
+
+        # Clean up path: remove empty segments and consecutive slashes
+        path_parts = []
+        for part in path_str.split('/'):
+            part = part.strip()
+            if part:  # Skip empty segments (happens when optional placeholders are empty)
+                # Sanitize each path component
+                sanitized = self._sanitize_filename(part)
+                if sanitized and sanitized != ".m4b":  # Don't add segments that are just the extension
+                    path_parts.append(sanitized)
+
+        # Build final path
+        if not path_parts:
+            # Fallback to flat structure if pattern results in empty path
+            safe_title = self._sanitize_filename(title)
+            return Path(base_path) / safe_title / f"{safe_title}.m4b"
+
+        # Construct path: all parts except the last are folders, last is the filename
+        if len(path_parts) == 1:
+            # Only filename provided, no folder structure
+            # Create a folder with the title name
+            safe_title = self._sanitize_filename(title)
+            folder_path = Path(base_path) / safe_title
+            # Use the pattern-generated filename
+            return folder_path / path_parts[0]
+        else:
+            # Multiple parts: folders + filename
+            return Path(base_path).joinpath(*path_parts)
+
     def build_audiobookshelf_path(
         self,
         base_path: str,
@@ -236,33 +366,54 @@ class AudiobookDownloader:
             return Path(base_path) / author_folder / title_folder
 
     def _get_file_paths(self, book_title: str, asin: str, product: Dict = None) -> Dict[str, Path]:
-        # Build directory path using AudioBookshelf structure if enabled
-        if self.use_audiobookshelf_structure and product:
+        # Build directory path using the naming pattern from settings
+        if product:
             try:
-                book_dir = self.build_audiobookshelf_path(
+                # Use the new pattern-based path builder
+                # Prefer series_data (full structure with sequence) over series (string)
+                series_info = product.get('series_data') or product.get('series')
+
+                full_path = self.build_path_from_pattern(
                     base_path=str(self.downloads_dir),
                     title=book_title,
                     authors=product.get('authors', []),
-                    narrators=product.get('narrator') or product.get('narrators', []),  # Handle both field names
-                    series=product.get('series'),
+                    narrators=product.get('narrator') or product.get('narrators', []),
+                    series=series_info,
                     release_date=product.get('release_date'),
-                    use_audiobookshelf_structure=self.use_audiobookshelf_structure
+                    publisher=product.get('publisher'),
+                    language=product.get('language'),
+                    asin=asin
                 )
+                # Extract directory (parent) from full path
+                book_dir = full_path.parent
+                # The filename from the pattern (should end with .m4b)
+                pattern_filename = full_path.name
+
+                # If pattern filename doesn't include extension, use safe title
+                if not pattern_filename.endswith('.m4b'):
+                    pattern_filename = self._sanitize_filename(book_title) + '.m4b'
+
+                # Strip .m4b extension to get base name for other files
+                base_name = pattern_filename[:-4] if pattern_filename.endswith('.m4b') else pattern_filename
+
             except Exception as e:
-                print(f"Warning: Failed to build AudioBookshelf path, falling back to flat structure: {e}")
+                print(f"Warning: Failed to build path from pattern, falling back to flat structure: {e}")
                 safe_title = self._sanitize_filename(book_title)
                 book_dir = self.downloads_dir / safe_title
+                base_name = safe_title
+                pattern_filename = f"{safe_title}.m4b"
         else:
-            # Legacy flat structure
+            # No product metadata, use flat structure
             safe_title = self._sanitize_filename(book_title)
             book_dir = self.downloads_dir / safe_title
+            base_name = safe_title
+            pattern_filename = f"{safe_title}.m4b"
 
-        safe_title = self._sanitize_filename(book_title)
         return {
-            'aaxc_file': book_dir / f"{safe_title}.aaxc",
-            'voucher_file': book_dir / f"{safe_title}.json",
-            'simple_voucher_file': book_dir / f"{safe_title}_simple.json",
-            'm4b_file': book_dir / f"{safe_title}.m4b",
+            'aaxc_file': book_dir / f"{base_name}.aaxc",
+            'voucher_file': book_dir / f"{base_name}.json",
+            'simple_voucher_file': book_dir / f"{base_name}_simple.json",
+            'm4b_file': book_dir / pattern_filename,
             'metadata_file': book_dir / f"content_metadata_{asin}.json"
         }
 
@@ -481,10 +632,10 @@ class AudiobookDownloader:
         except Exception as e:
             print(f"Could not add enhanced metadata: {e}")
 
-async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3, library_path=None, use_audiobookshelf_structure=False):
+async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3, library_path=None):
     if not library_path:
         raise ValueError("library_path is required. Please configure a library before downloading.")
 
-    downloader = AudiobookDownloader(account_name, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
+    downloader = AudiobookDownloader(account_name, region, library_path=library_path)
     tasks = [downloader.download_book(book['asin'], book['title'], book.get('quality', quality), cleanup_aax, max_retries, book) for book in selected_books]
     return await asyncio.gather(*tasks, return_exceptions=True)

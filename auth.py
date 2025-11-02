@@ -94,13 +94,17 @@ class AudibleAuth:
                     if 'narrators' in item and item['narrators']:
                         narrators = [narrator.get('name', '') for narrator in item['narrators']]
                     
-                    # Extract series info
+                    # Extract series info - preserve full structure for downloads
                     series_info = ""
+                    series_data = None
                     if 'series' in item and item['series']:
                         series_list = item['series']
                         if series_list:
+                            # Keep full series data with sequence for downloads
+                            series_data = series_list
+                            # Display string for UI
                             series_info = series_list[0].get('title', '')
-                    
+
                     # Extract cover image
                     cover_url = ""
                     if 'product_images' in item and item['product_images']:
@@ -131,7 +135,8 @@ class AudibleAuth:
                         'release_date': release_date,
                         'release_year': release_year,
                         'publisher': item.get('publisher_name', ''),
-                        'series': series_info,
+                        'series': series_info,  # String for UI display
+                        'series_data': series_data,  # Full list structure with sequence numbers
                         'cover_url': cover_url,
                         'description': item.get('publisher_summary', ''),
                     }

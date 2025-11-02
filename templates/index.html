@@ -1355,13 +1355,11 @@
         for (const [name, library] of Object.entries(libraries)) {
             const libraryItem = document.createElement('div');
             libraryItem.className = 'card bg-light text-dark mb-2';
-            const absStructureBadge = library.use_audiobookshelf_structure ?
-                '<span class="badge bg-info ms-2">AudioBookshelf Structure</span>' : '';
             libraryItem.innerHTML = `
                 <div class="card-body p-2">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <strong>${name}</strong>${absStructureBadge}<br>
+                            <strong>${name}</strong><br>
                             <small class="text-muted">${library.path}</small>
                         </div>
                         <button class="btn btn-sm btn-danger" onclick="deleteLibrary('${name}')">
@@ -1402,7 +1400,6 @@
     async function addLibrary() {
         const libraryName = document.getElementById('libraryName').value.trim();
         const libraryPath = document.getElementById('libraryPath').value.trim();
-        const useAudiobookshelfStructure = document.getElementById('useAudiobookshelfStructure').checked;
 
         if (!libraryName || !libraryPath) {
             showAlert('Please enter both library name and path', 'warning');
@@ -1414,8 +1411,7 @@
                 method: 'POST',
                 body: JSON.stringify({
                     library_name: libraryName,
-                    library_path: libraryPath,
-                    use_audiobookshelf_structure: useAudiobookshelfStructure
+                    library_path: libraryPath
                 })
             });
 
@@ -1445,5 +1441,157 @@
             showAlert('Failed to remove library: ' + error.message, 'danger');
         }
     }
+
+    // Naming Pattern Settings
+    let namingSettings = null;
+    let namingPatternModal = null;
+
+    async function loadNamingSettings() {
+        try {
+            const data = await apiCall('/api/settings/naming');
+            namingSettings = data.settings;
+            return namingSettings;
+        } catch (error) {
+            console.error('Failed to load naming settings:', error);
+            return null;
+        }
+    }
+
+    function updatePatternPreview(pattern) {
+        // Sample book metadata for preview
+        const sampleData = {
+            '{Author}': 'Edgar Allan Poe',
+            '{Series}': 'Erzählungen',
+            '{Title}': 'Edgar Allan Poe: Erzählungen 1',
+            '{Year}': '2024',
+            '{Narrator}': 'Edgar Allan Poe',
+            '{Publisher}': 'Audible Studios',
+            '{Language}': 'de',
+            '{ASIN}': 'B08X123456',
+            '{Volume}': '1'
+        };
+
+        let preview = pattern;
+        for (const [placeholder, value] of Object.entries(sampleData)) {
+            preview = preview.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+        }
+
+        // Clean up empty segments (but preserve empty strings from optional placeholders)
+        preview = preview.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+
+        document.getElementById('patternPreview').textContent = preview || 'Invalid pattern';
+    }
+
+    function showConfigureNamingModal() {
+        const modal = document.getElementById('namingPatternModal');
+        namingPatternModal = new bootstrap.Modal(modal);
+
+        // Load current settings
+        if (namingSettings) {
+            const presetSelect = document.getElementById('namingPreset');
+            const patternInput = document.getElementById('customPattern');
+
+            presetSelect.value = namingSettings.selected_preset || 'audiobookshelf';
+            patternInput.value = namingSettings.naming_pattern;
+
+            updatePresetDescription(namingSettings.selected_preset);
+            updatePatternPreview(namingSettings.naming_pattern);
+        }
+
+        namingPatternModal.show();
+    }
+
+    function updatePresetDescription(presetKey) {
+        const presets = namingSettings?.presets || {};
+        const preset = presets[presetKey];
+
+        if (preset) {
+            document.getElementById('presetDescription').textContent = preset.description;
+        }
+    }
+
+    async function saveNamingPattern() {
+        const pattern = document.getElementById('customPattern').value.trim();
+        const preset = document.getElementById('namingPreset').value;
+
+        if (!pattern) {
+            showValidationError('Pattern cannot be empty');
+            return;
+        }
+
+        try {
+            const data = await apiCall('/api/settings/naming', {
+                method: 'POST',
+                body: JSON.stringify({
+                    pattern: pattern,
+                    preset: preset
+                })
+            });
+
+            if (data.success) {
+                showAlert('Naming pattern saved successfully!', 'success');
+                namingPatternModal.hide();
+                await loadNamingSettings();
+            } else {
+                showValidationError(data.error || 'Failed to save pattern');
+            }
+        } catch (error) {
+            showValidationError(error.message || 'Failed to save pattern');
+        }
+    }
+
+    function showValidationError(message) {
+        const validationDiv = document.getElementById('patternValidation');
+        validationDiv.className = 'alert alert-danger';
+        validationDiv.textContent = message;
+        validationDiv.style.display = 'block';
+
+        setTimeout(() => {
+            validationDiv.style.display = 'none';
+        }, 5000);
+    }
+
+    // Event listeners for naming pattern modal
+    document.addEventListener('DOMContentLoaded', function() {
+        loadNamingSettings();
+
+        // Configure Naming Button
+        const configureBtn = document.getElementById('configureNamingBtn');
+        if (configureBtn) {
+            configureBtn.addEventListener('click', showConfigureNamingModal);
+        }
+
+        // Preset selection change
+        const presetSelect = document.getElementById('namingPreset');
+        if (presetSelect) {
+            presetSelect.addEventListener('change', function() {
+                const selectedPreset = this.value;
+                updatePresetDescription(selectedPreset);
+
+                if (selectedPreset !== 'custom' && namingSettings?.presets) {
+                    const preset = namingSettings.presets[selectedPreset];
+                    if (preset) {
+                        document.getElementById('customPattern').value = preset.pattern;
+                        updatePatternPreview(preset.pattern);
+                    }
+                }
+            });
+        }
+
+        // Pattern input change
+        const patternInput = document.getElementById('customPattern');
+        if (patternInput) {
+            patternInput.addEventListener('input', function() {
+                updatePatternPreview(this.value);
+                document.getElementById('namingPreset').value = 'custom';
+            });
+        }
+
+        // Save button
+        const saveBtn = document.getElementById('saveNamingPattern');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', saveNamingPattern);
+        }
+    });
 </script>
 {% endblock %}
