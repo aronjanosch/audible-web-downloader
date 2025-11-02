@@ -669,33 +669,14 @@ class AudiobookDownloader:
                     if sanitized and sanitized != ".m4b":  # Don't add segments that are just the extension
                         path_parts.append(sanitized)
 
-        # Build final path with folder-based structure for Audiobookshelf compatibility
+        # Build final path directly from pattern (pattern is the source of truth)
         if not path_parts:
             # Fallback to flat structure if pattern results in empty path
             safe_title = self._sanitize_filename(title)
             return Path(base_path) / safe_title / f"{safe_title}.m4b"
 
-        # Extract the last part (filename with .m4b extension)
-        filename_part = path_parts[-1]
-
-        # Remove .m4b extension from filename to use as folder name
-        if filename_part.endswith('.m4b'):
-            folder_name = filename_part[:-4]  # Remove '.m4b'
-        else:
-            # Fallback if no .m4b extension (shouldn't happen with valid patterns)
-            folder_name = filename_part
-
-        # Build path: all parts except last are folders, last part (minus .m4b) becomes a folder too
-        if len(path_parts) == 1:
-            # Only filename provided, create folder with that name
-            folder_path = Path(base_path) / folder_name
-        else:
-            # Multiple parts: all become folders including the last one (minus .m4b)
-            folder_path = Path(base_path).joinpath(*path_parts[:-1], folder_name)
-
-        # Place M4B file inside the folder with a simple name (title)
-        safe_title = self._sanitize_filename(title)
-        return folder_path / f"{safe_title}.m4b"
+        # Join all parts to create the full path as defined by the pattern
+        return Path(base_path).joinpath(*path_parts)
 
     def build_audiobookshelf_path(
         self,
