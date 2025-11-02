@@ -1355,11 +1355,13 @@
         for (const [name, library] of Object.entries(libraries)) {
             const libraryItem = document.createElement('div');
             libraryItem.className = 'card bg-light text-dark mb-2';
+            const absStructureBadge = library.use_audiobookshelf_structure ?
+                '<span class="badge bg-info ms-2">AudioBookshelf Structure</span>' : '';
             libraryItem.innerHTML = `
                 <div class="card-body p-2">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <strong>${name}</strong><br>
+                            <strong>${name}</strong>${absStructureBadge}<br>
                             <small class="text-muted">${library.path}</small>
                         </div>
                         <button class="btn btn-sm btn-danger" onclick="deleteLibrary('${name}')">
@@ -1400,6 +1402,7 @@
     async function addLibrary() {
         const libraryName = document.getElementById('libraryName').value.trim();
         const libraryPath = document.getElementById('libraryPath').value.trim();
+        const useAudiobookshelfStructure = document.getElementById('useAudiobookshelfStructure').checked;
 
         if (!libraryName || !libraryPath) {
             showAlert('Please enter both library name and path', 'warning');
@@ -1411,7 +1414,8 @@
                 method: 'POST',
                 body: JSON.stringify({
                     library_name: libraryName,
-                    library_path: libraryPath
+                    library_path: libraryPath,
+                    use_audiobookshelf_structure: useAudiobookshelfStructure
                 })
             });
 

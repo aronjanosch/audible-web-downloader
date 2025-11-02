@@ -108,17 +108,33 @@ class LocalLibraryScanner:
         try:
             # Try to get metadata from file
             metadata = self._get_file_metadata(file_path)
-            
+
             # Extract title from filename if not in metadata
             title = metadata.get('title') or self._extract_title_from_filename(file_path.stem)
-            
+
+            # Try to parse AudioBookshelf folder structure
+            abs_metadata = self._parse_audiobookshelf_title(file_path.parent.name)
+            if abs_metadata:
+                # Override with AudioBookshelf metadata if available
+                if abs_metadata.get('title'):
+                    title = abs_metadata['title']
+                if abs_metadata.get('narrator'):
+                    metadata['narrator'] = abs_metadata['narrator']
+                if abs_metadata.get('year'):
+                    metadata['year'] = abs_metadata['year']
+                if abs_metadata.get('sequence'):
+                    metadata['sequence'] = abs_metadata['sequence']
+
             # Detect language from filename or path
             language = self._detect_language(file_path)
-            
+
             book_data = {
                 'title': title,
                 'authors': metadata.get('author') or author_name,
                 'series': series_name,
+                'narrator': metadata.get('narrator'),
+                'year': metadata.get('year'),
+                'sequence': metadata.get('sequence'),
                 'file_path': str(file_path),
                 'file_size': file_path.stat().st_size,
                 'language': language,
@@ -128,13 +144,73 @@ class LocalLibraryScanner:
                 'normalized_title': self._normalize_title(title),
                 'normalized_author': self._normalize_title(metadata.get('author') or author_name)
             }
-            
+
             return book_data
-            
+
         except Exception as e:
             logger.warning(f"Failed to extract metadata from {file_path}: {e}")
             return None
     
+    def _parse_audiobookshelf_title(self, folder_name: str) -> Optional[Dict]:
+        """
+        Parse AudioBookshelf title folder format.
+
+        Examples:
+        - "Wizards First Rule"
+        - "1994 - Wizards First Rule"
+        - "Vol. 1 - 1994 - Wizards First Rule {Sam Tsoutsouvas}"
+        - "Book 1 - 1994 - Wizards First Rule - A Subtitle {Narrator}"
+
+        Returns:
+            Dict with parsed metadata (sequence, year, title, narrator) or None
+        """
+        if not folder_name:
+            return None
+
+        result = {}
+
+        # Extract narrator (always in curly braces at the end)
+        narrator_match = re.search(r'\{([^}]+)\}\s*$', folder_name)
+        if narrator_match:
+            result['narrator'] = narrator_match.group(1).strip()
+            folder_name = folder_name[:narrator_match.start()].strip()
+
+        # Split by " - " separator
+        parts = [p.strip() for p in folder_name.split(' - ')]
+
+        if not parts:
+            return None
+
+        # Try to extract sequence and year from first parts
+        remaining_parts = []
+
+        for part in parts:
+            # Check for year (4 digits, optionally in parentheses) - check this first
+            year_match = re.match(r'^\(?(\d{4})\)?$', part)
+            if year_match and 'year' not in result:
+                result['year'] = year_match.group(1)
+                continue
+
+            # Check for sequence pattern with keywords
+            sequence_match = re.match(r'^(?:Vol\.?|Book|Volume)\s+(\d+(?:\.\d+)?)', part, re.IGNORECASE)
+            if sequence_match and 'sequence' not in result:
+                result['sequence'] = sequence_match.group(1)
+                continue
+
+            # Check for standalone number as sequence (but not 4-digit years)
+            if re.match(r'^\d{1,3}(?:\.\d+)?\.?$', part) and 'sequence' not in result:
+                result['sequence'] = part.rstrip('.')
+                continue
+
+            # If not sequence or year, it's part of the title
+            remaining_parts.append(part)
+
+        # Join remaining parts as the title
+        if remaining_parts:
+            result['title'] = ' - '.join(remaining_parts)
+
+        return result if result else None
+
     def _get_file_metadata(self, file_path: Path) -> Dict:
         """Extract metadata from audio file using mutagen."""
         metadata = {}

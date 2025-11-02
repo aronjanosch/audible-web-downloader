@@ -54,7 +54,9 @@ def download_selected_books():
     if library_name not in libraries:
         return jsonify({'error': 'Selected library not found'}), 404
 
-    library_path = libraries[library_name]['path']
+    library_config = libraries[library_name]
+    library_path = library_config['path']
+    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
     # Fetch library directly since session storage is too large for browser cookies
     from auth import fetch_library
@@ -83,7 +85,8 @@ def download_selected_books():
             region,
             selected_books,
             cleanup_aax=cleanup_aax,
-            library_path=library_path
+            library_path=library_path,
+            use_audiobookshelf_structure=use_audiobookshelf_structure
         ))
 
         successful_downloads = len([r for r in results if r])
@@ -117,9 +120,11 @@ def download_status_asin(asin):
         return jsonify({'error': 'Download library not found'}), 404
 
     region = accounts[current_account]['region']
-    library_path = libraries[download_library]['path']
+    library_config = libraries[download_library]
+    library_path = library_config['path']
+    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
     state = downloader.get_download_state(asin)
     return jsonify(state)
 
@@ -143,9 +148,11 @@ def download_progress():
         return jsonify({})  # Return empty if library no longer exists
 
     region = accounts[current_account]['region']
-    library_path = libraries[download_library]['path']
+    library_config = libraries[download_library]
+    library_path = library_config['path']
+    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
 
     # Get all download states
     all_states = downloader.download_states
@@ -186,9 +193,11 @@ def download_status():
         return jsonify({'status': 'idle'})
 
     region = accounts[current_account]['region']
-    library_path = libraries[download_library]['path']
+    library_config = libraries[download_library]
+    library_path = library_config['path']
+    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
 
     # Count active downloads
     active_downloads = 0
@@ -222,10 +231,12 @@ def download_progress_stream():
         return jsonify({'error': 'Download library not found'}), 404
 
     region = accounts[current_account]['region']
-    library_path = libraries[download_library]['path']
+    library_config = libraries[download_library]
+    library_path = library_config['path']
+    use_audiobookshelf_structure = library_config.get('use_audiobookshelf_structure', False)
 
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
-    
+    downloader = AudiobookDownloader(current_account, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
+
     def generate_progress_updates():
         """Generate progress updates as Server-Sent Events"""
         last_progress_data = {}

@@ -27,9 +27,10 @@ class DownloadState(Enum):
     ERROR = "error"
 
 class AudiobookDownloader:
-    def __init__(self, account_name, region="us", max_concurrent_downloads=3, library_path=None):
+    def __init__(self, account_name, region="us", max_concurrent_downloads=3, library_path=None, use_audiobookshelf_structure=False):
         self.account_name = account_name
         self.region = region
+        self.use_audiobookshelf_structure = use_audiobookshelf_structure
 
         if not library_path:
             raise ValueError("library_path is required. Please configure a library before downloading.")
@@ -132,10 +133,100 @@ class AudiobookDownloader:
     
     def _sanitize_filename(self, filename):
         return re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', filename)[:200]
-    
-    def _get_file_paths(self, book_title: str, asin: str) -> Dict[str, Path]:
+
+    def build_audiobookshelf_path(
+        self,
+        base_path: str,
+        title: str,
+        authors: List[Dict] = None,
+        narrators: List[Dict] = None,
+        series: List[Dict] = None,
+        release_date: str = None,
+        use_audiobookshelf_structure: bool = False
+    ) -> Path:
+        """
+        Build AudioBookshelf-compatible directory path.
+
+        Returns:
+            Path object with structure: base_path/Author/[Series]/Title/
+        """
+        if not use_audiobookshelf_structure:
+            # Legacy flat structure
+            return Path(base_path) / self._sanitize_filename(title)
+
+        # 1. Build Author Folder
+        author_names = [author['name'] for author in (authors or [])]
+
+        if len(author_names) > 3:
+            author_folder = "Various Authors"
+        elif len(author_names) > 2:
+            author_folder = ", ".join(author_names[:-1]) + " and " + author_names[-1]
+        elif len(author_names) == 2:
+            author_folder = " & ".join(author_names)
+        elif len(author_names) == 1:
+            author_folder = author_names[0]
+        else:
+            author_folder = "Unknown Author"
+
+        author_folder = self._sanitize_filename(author_folder)
+
+        # 2. Build Series Folder (Optional)
+        series_folder = None
+        if series and len(series) > 0 and series[0].get('title'):
+            series_folder = self._sanitize_filename(series[0]['title'])
+
+        # 3. Build Title Folder
+        title_parts = []
+
+        # Add sequence if in series
+        if series and len(series) > 0:
+            sequence = series[0].get('sequence')
+            if sequence:
+                # Format sequence (e.g., "Vol. 1" or "Vol. 1.5")
+                title_parts.append(f"Vol. {sequence}")
+
+        # Add year
+        if release_date:
+            year = release_date.split('-')[0]  # Extract YYYY from YYYY-MM-DD
+            title_parts.append(year)
+
+        # Add title
+        title_parts.append(title)
+
+        # Build title folder with narrator in curly braces
+        if narrators and len(narrators) > 0:
+            narrator_names = [n['name'] for n in narrators[:2]]  # Limit to first 2
+            narrator_str = " & ".join(narrator_names)
+            title_folder = " - ".join(title_parts) + f" {{{narrator_str}}}"
+        else:
+            title_folder = " - ".join(title_parts)
+
+        title_folder = self._sanitize_filename(title_folder)
+
+        # 4. Construct Path
+        if series_folder:
+            return Path(base_path) / author_folder / series_folder / title_folder
+        else:
+            return Path(base_path) / author_folder / title_folder
+
+    def _get_file_paths(self, book_title: str, asin: str, product: Dict = None) -> Dict[str, Path]:
+        # Build directory path using AudioBookshelf structure if enabled
+        if product and self.use_audiobookshelf_structure:
+            book_dir = self.build_audiobookshelf_path(
+                base_path=str(self.downloads_dir),
+                title=book_title,
+                authors=product.get('authors', []),
+                narrators=product.get('narrators', []),
+                series=product.get('series'),
+                release_date=product.get('release_date'),
+                use_audiobookshelf_structure=self.use_audiobookshelf_structure
+            )
+        else:
+            # Legacy flat structure
+            safe_title = self._sanitize_filename(book_title)
+            book_dir = self.downloads_dir / safe_title
+
         safe_title = self._sanitize_filename(book_title)
-        book_dir = self.downloads_dir / safe_title
         return {
             'aaxc_file': book_dir / f"{safe_title}.aaxc",
             'voucher_file': book_dir / f"{safe_title}.json",
@@ -192,22 +283,22 @@ class AudiobookDownloader:
                 filename.unlink()
             raise e
     
-    async def download_book(self, book_asin: str, book_title: str, quality: str = "High", cleanup_aax: bool = True, max_retries: int = 3) -> Optional[str]:
+    async def download_book(self, book_asin: str, book_title: str, quality: str = "High", cleanup_aax: bool = True, max_retries: int = 3, product: Dict = None) -> Optional[str]:
         if not self.auth:
             raise Exception("Authentication required.")
 
-        paths = self._get_file_paths(book_title, book_asin)
+        paths = self._get_file_paths(book_title, book_asin, product)
         m4b_file = paths['m4b_file']
 
         if self.get_download_state(book_asin).get('state') == DownloadState.CONVERTED.value and m4b_file.exists():
             print(f"✅ '{book_title}' already downloaded and converted.")
             return str(m4b_file)
-        
+
         print(f"📥 Starting download: '{book_title}' (ASIN: {book_asin}) with quality: {quality}")
         self.set_download_state(book_asin, DownloadState.PENDING, title=book_title)
-        
+
         paths['aaxc_file'].parent.mkdir(parents=True, exist_ok=True)
-        
+
         for attempt in range(max_retries):
             async with self.download_semaphore:
                 try:
@@ -359,10 +450,10 @@ class AudiobookDownloader:
         except Exception as e:
             print(f"Could not add enhanced metadata: {e}")
 
-async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3, library_path=None):
+async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3, library_path=None, use_audiobookshelf_structure=False):
     if not library_path:
         raise ValueError("library_path is required. Please configure a library before downloading.")
 
-    downloader = AudiobookDownloader(account_name, region, library_path=library_path)
-    tasks = [downloader.download_book(book['asin'], book['title'], book.get('quality', quality), cleanup_aax, max_retries) for book in selected_books]
+    downloader = AudiobookDownloader(account_name, region, library_path=library_path, use_audiobookshelf_structure=use_audiobookshelf_structure)
+    tasks = [downloader.download_book(book['asin'], book['title'], book.get('quality', quality), cleanup_aax, max_retries, book) for book in selected_books]
     return await asyncio.gather(*tasks, return_exceptions=True)

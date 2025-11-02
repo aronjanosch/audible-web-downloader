@@ -128,6 +128,7 @@ def add_library():
     data = request.get_json()
     library_name = data.get('library_name')
     library_path = data.get('library_path')
+    use_audiobookshelf_structure = data.get('use_audiobookshelf_structure', True)  # Default to True
 
     if not library_name or not library_path:
         return jsonify({'error': 'Library name and path are required'}), 400
@@ -143,6 +144,7 @@ def add_library():
 
     libraries[library_name] = {
         'path': library_path,
+        'use_audiobookshelf_structure': use_audiobookshelf_structure,
         'created_at': library_path_obj.stat().st_mtime
     }
 
