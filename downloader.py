@@ -1163,25 +1163,59 @@ class AudiobookDownloader:
             product = book_details.get('product', {})
             audiobook = MP4(str(m4b_file))
 
+            # Title
             if product.get('title'):
                 audiobook['©nam'] = [product['title']]
                 audiobook['©alb'] = [product['title']]
+            
+            # Subtitle
+            if product.get('subtitle'):
+                audiobook['----:com.apple.iTunes:SUBTITLE'] = [product['subtitle'].encode('utf-8')]
+            
+            # Authors
             if product.get('authors'):
                 audiobook['©ART'] = [', '.join(a['name'] for a in product['authors'])]
+            
+            # Narrators (use custom iTunes tag, NOT ©gen which is Genre)
             if product.get('narrators'):
-                audiobook['©gen'] = [', '.join(n['name'] for n in product['narrators'])]
+                narrator_str = ', '.join(n['name'] for n in product['narrators'])
+                audiobook['----:com.apple.iTunes:NARRATOR'] = [narrator_str.encode('utf-8')]
+            
+            # Publisher
             if product.get('publisher_name'):
                 audiobook['©pub'] = [product['publisher_name']]
+            
+            # Release date and year
             if product.get('release_date'):
                 audiobook['©day'] = [product['release_date']]
+                # Extract year for publish year field
+                year = product['release_date'].split('-')[0]
+                audiobook['©yer'] = [year]
+            
+            # Description
             if product.get('publisher_summary'):
                 audiobook['desc'] = [product['publisher_summary'][:255]]
+            
+            # Series
             if product.get('series'):
                 series = product['series'][0]
                 audiobook['©grp'] = [f"{series['title']} #{series['sequence']}"]
-
-            audiobook['stik'] = [2]
+            
+            # Language
+            if product.get('language'):
+                audiobook['----:com.apple.iTunes:LANGUAGE'] = [product['language'].encode('utf-8')]
+            
+            # ISBN (if available)
+            if product.get('isbn'):
+                audiobook['----:com.apple.iTunes:ISBN'] = [product['isbn'].encode('utf-8')]
+            
+            # ASIN
             audiobook['©cmt'] = [f"ASIN: {asin}"]
+            audiobook['----:com.apple.iTunes:ASIN'] = [asin.encode('utf-8')]
+            
+            # Media type (2 = Audiobook)
+            audiobook['stik'] = [2]
+            
             audiobook.save()
             self._log(f"✓ Metadata added successfully", asin)
         except Exception as e:
