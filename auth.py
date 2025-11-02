@@ -7,8 +7,9 @@ class AudibleAuth:
     def __init__(self, account_name, region="us"):
         self.account_name = account_name
         self.region = region
-        self.config_dir = Path(f".audible_{account_name}")
-        self.config_dir.mkdir(exist_ok=True)
+        # Store auth files in config/auth/{account_name}/ for better organization
+        self.config_dir = Path("config") / "auth" / account_name
+        self.config_dir.mkdir(parents=True, exist_ok=True)
         self.auth_file = self.config_dir / "auth.json"
     
     async def authenticate(self):

@@ -13,15 +13,16 @@ def create_app():
     
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    app.config['ACCOUNTS_FILE'] = "accounts.json"
+    app.config['ACCOUNTS_FILE'] = "config/accounts.json"
     app.config['DOWNLOADS_DIR'] = "downloads"
     app.config['LOCAL_LIBRARY_PATH'] = os.environ.get('LOCAL_LIBRARY_PATH', '')
     
     # Initialize extensions
     csrf = CSRFProtect(app)
     
-    # Ensure downloads directory exists
+    # Ensure required directories exist
     Path(app.config['DOWNLOADS_DIR']).mkdir(exist_ok=True)
+    Path('config').mkdir(exist_ok=True)
     
     # Register blueprints
     from routes.main import main_bp

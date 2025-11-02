@@ -47,7 +47,7 @@ AVAILABLE_PLACEHOLDERS = {
     "{Volume}": "Series volume/sequence number only (e.g., 1, 2, 3)",
 }
 
-SETTINGS_FILE = Path(__file__).parent / "settings.json"
+SETTINGS_FILE = Path(__file__).parent / "config" / "settings.json"
 
 
 class SettingsManager:

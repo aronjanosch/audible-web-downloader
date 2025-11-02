@@ -48,14 +48,14 @@ class AudiobookDownloader:
 
     def _load_authenticator(self) -> Optional[audible.Authenticator]:
         """Loads the authenticator object from file."""
-        auth_file = Path(f".audible_{self.account_name}") / "auth.json"
+        auth_file = Path("config") / "auth" / self.account_name / "auth.json"
         if auth_file.exists():
             return audible.Authenticator.from_file(auth_file)
         return None
 
     def _load_auth_details(self) -> Optional[Dict]:
         """Loads the raw auth JSON file for details not exposed by the authenticator."""
-        auth_file = Path(f".audible_{self.account_name}") / "auth.json"
+        auth_file = Path("config") / "auth" / self.account_name / "auth.json"
         if auth_file.exists():
             return json.loads(auth_file.read_text())
         return None

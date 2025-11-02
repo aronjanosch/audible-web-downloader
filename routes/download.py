@@ -18,7 +18,7 @@ def load_accounts():
 def load_libraries():
     """Load libraries configuration from JSON file"""
     from pathlib import Path
-    libraries_file = Path("libraries.json")
+    libraries_file = Path("config/libraries.json")
     if libraries_file.exists():
         with open(libraries_file, 'r') as f:
             return json.load(f)

@@ -54,7 +54,36 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Starting the Application
+### Docker Deployment (Recommended for Production)
+
+1. **Build and start the container:**
+```bash
+docker-compose up -d
+```
+
+2. **Access the application:**
+```
+http://localhost:5505
+```
+
+3. **View logs:**
+```bash
+docker-compose logs -f
+```
+
+4. **Stop the container:**
+```bash
+docker-compose down
+```
+
+**Benefits of Docker deployment:**
+- Persistent configuration via mounted `config/` volume (includes auth tokens)
+- Persistent downloads via mounted `downloads/` volume
+- Easy updates: rebuild and restart the container
+- Isolated environment with all dependencies included
+- Simple backup: just backup the `config/` and `downloads/` folders
+
+### Starting the Application (Local Development)
 
 1. **Run the Flask application:**
 ```bash
@@ -97,8 +126,11 @@ http://localhost:5000
 ### File Locations
 
 - **Downloads**: `./downloads/` directory
-- **Account Data**: `./accounts.json`
-- **Authentication Files**: `./.audible_<account_name>/`
+- **Configuration**: `./config/` directory
+  - `accounts.json` - Account configurations
+  - `libraries.json` - Library paths and settings
+  - `settings.json` - Application settings
+  - `auth/{account_name}/auth.json` - Audible authentication tokens per account
 
 ## Supported Regions
 

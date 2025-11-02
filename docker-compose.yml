@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  audible-web-downloader:
+    build: .
+    container_name: audible-web-downloader
+    ports:
+      - "5505:5505"
+    volumes:
+      # Mount config directory to persist all configuration files and auth tokens
+      - ./config:/app/config
+      # Mount downloads directory to persist downloaded audiobooks
+      - ./downloads:/app/downloads
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - FLASK_ENV=${FLASK_ENV:-production}
+    restart: unless-stopped
+

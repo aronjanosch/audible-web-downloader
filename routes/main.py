@@ -22,7 +22,7 @@ def save_accounts(accounts):
 
 def load_libraries():
     """Load libraries configuration from JSON file"""
-    libraries_file = Path("libraries.json")
+    libraries_file = Path("config/libraries.json")
     if libraries_file.exists():
         with open(libraries_file, 'r') as f:
             libraries = json.load(f)
@@ -44,7 +44,7 @@ def load_libraries():
 
 def save_libraries(libraries):
     """Save libraries configuration to JSON file"""
-    libraries_file = Path("libraries.json")
+    libraries_file = Path("config/libraries.json")
     with open(libraries_file, 'w') as f:
         json.dump(libraries, f, indent=2)
 

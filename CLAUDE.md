@@ -60,9 +60,11 @@ The application follows a **modular Flask architecture** using blueprints for ro
 
 ### Data Management
 
-- **accounts.json** - Persisted account configurations and authentication status
+- **config/accounts.json** - Persisted account configurations and authentication status
+- **config/libraries.json** - Library paths and configurations
+- **config/settings.json** - Application settings including naming patterns
+- **config/auth/{account_name}/auth.json** - Audible authentication tokens per account
 - **downloads/download_states.json** - Download state tracking for resume/retry functionality
-- **.audible_{account_name}/auth.json** - Encrypted Audible authentication tokens per account
 
 ## Key Dependencies
 

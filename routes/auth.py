@@ -75,7 +75,7 @@ def check_auth():
     from pathlib import Path
     import audible
     
-    config_dir = Path(f".audible_{account_name}")
+    config_dir = Path("config") / "auth" / account_name
     auth_file = config_dir / "auth.json"
     
     is_authenticated = False
@@ -150,8 +150,8 @@ def start_login(account_name):
             
             # Save authenticator to expected location
             from pathlib import Path
-            config_dir = Path(f".audible_{account_name}")
-            config_dir.mkdir(exist_ok=True)
+            config_dir = Path("config") / "auth" / account_name
+            config_dir.mkdir(parents=True, exist_ok=True)
             auth_file = config_dir / "auth.json"
             auth.to_file(auth_file, encryption=False)
             
@@ -257,7 +257,7 @@ def fetch_library_route():
     from pathlib import Path
     import audible
     
-    config_dir = Path(f".audible_{account_name}")
+    config_dir = Path("config") / "auth" / account_name
     auth_file = config_dir / "auth.json"
     
     if not auth_file.exists():
