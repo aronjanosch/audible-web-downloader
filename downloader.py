@@ -55,10 +55,8 @@ class AudiobookDownloader:
         self.auth = self._load_authenticator()
         self._auth_details = self._load_auth_details() if self.auth else None
 
-        # Store state file in config directory for Docker persistence
-        self.state_file = Path("config") / "download_history.json"
-        self._migrate_old_state_file()  # Migrate from old location if exists
-        self.download_states = self._load_states()
+        # In-memory state tracking for duplicate detection (not persisted to disk)
+        self.download_states = {}
 
         # Track download start times for elapsed time reporting
         self.download_start_times = {}
@@ -108,29 +106,6 @@ class AudiobookDownloader:
             return json.loads(auth_file.read_text())
         return None
 
-    def _migrate_old_state_file(self):
-        """Migrate download_states.json from downloads/ to config/ if it exists."""
-        old_state_file = self.downloads_dir / "download_states.json"
-
-        # If old file exists and new file doesn't, migrate it
-        if old_state_file.exists() and not self.state_file.exists():
-            try:
-                # Ensure config directory exists
-                self.state_file.parent.mkdir(parents=True, exist_ok=True)
-
-                # Copy old state file to new location
-                shutil.copy(str(old_state_file), str(self.state_file))
-
-                timestamp = datetime.now().strftime("%H:%M:%S")
-                print(f"[{timestamp}] 📦 Migrated download history to config/ folder for Docker persistence")
-
-                # Optionally remove old file (commenting out for safety - user can delete manually)
-                # old_state_file.unlink()
-
-            except Exception as e:
-                print(f"⚠️  Warning: Could not migrate old state file: {e}")
-                print(f"    Old location: {old_state_file}")
-                print(f"    New location: {self.state_file}")
 
     def _decrypt_voucher(self, asin: str, license_response: Dict) -> Optional[Dict]:
         """Decrypts the license response voucher to get key and IV."""
@@ -161,20 +136,6 @@ class AudiobookDownloader:
             self._log(f"❌ Failed to decrypt voucher: {e}", asin)
             return None
 
-    def _load_states(self) -> Dict:
-        if self.state_file.exists():
-            try:
-                return json.load(self.state_file.open('r'))
-            except (json.JSONDecodeError, IOError):
-                return {}
-        return {}
-    
-    def _save_states(self):
-        try:
-            with self.state_file.open('w') as f:
-                json.dump(self.download_states, f, indent=2)
-        except IOError as e:
-            self._log(f"⚠️  Failed to save states: {e}")
     
     def get_download_state(self, asin: str) -> Dict:
         return self.download_states.get(asin, {})
@@ -196,25 +157,23 @@ class AudiobookDownloader:
             update_data['downloaded_by_account'] = self.account_name
 
         self.download_states[asin].update(update_data)
-        self._save_states()
     
     def update_download_progress(self, asin: str, downloaded_bytes: int, total_bytes: int = None, **metadata):
         """Update download progress without changing state"""
         if asin not in self.download_states:
             self.download_states[asin] = {}
-        
+
         progress_data = {
             'downloaded_bytes': downloaded_bytes,
             'progress_timestamp': time.time(),
             **metadata
         }
-        
+
         if total_bytes is not None:
             progress_data['total_bytes'] = total_bytes
             progress_data['progress_percent'] = min(100, (downloaded_bytes / total_bytes) * 100) if total_bytes > 0 else 0
-        
+
         self.download_states[asin].update(progress_data)
-        self._save_states()
     
     def _sanitize_filename(self, filename):
         return re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', filename)[:200]
@@ -403,7 +362,7 @@ class AudiobookDownloader:
 
     def sync_library(self) -> Dict:
         """
-        Scan library directory and populate download_history.json with existing M4B files.
+        Scan library directory and populate in-memory download states with existing M4B files.
         Returns: Statistics about the sync operation
         """
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -458,9 +417,6 @@ class AudiobookDownloader:
             except Exception as e:
                 stats['errors'] += 1
                 print(f"[{timestamp}]   ⚠️  Error processing {m4b_file.name}: {e}")
-
-        # Save updated states
-        self._save_states()
 
         print(f"[{timestamp}] ✅ Library sync complete!")
         print(f"[{timestamp}]    Files scanned: {stats['files_scanned']}")
@@ -921,7 +877,6 @@ class AudiobookDownloader:
                 # File is missing, clear state and re-download
                 self._log(f"⚠️  '{book_title}' was downloaded but file is missing. Re-downloading...", book_asin)
                 self.download_states.pop(book_asin, None)
-                self._save_states()
 
         # Fuzzy duplicate check (for different ASINs but same book, e.g., regional editions)
         # Only checks within the SAME library to allow different language versions in separate libraries
