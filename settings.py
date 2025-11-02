@@ -15,22 +15,22 @@ NAMING_PRESETS = {
     "audiobookshelf": {
         "name": "AudioBookshelf (Recommended)",
         "pattern": "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}].m4b",
-        "description": "Author/[Series/][Vol. # - ]Year - Title[ {Narrator}].m4b (conditionals omitted when empty)"
+        "description": "Author/[Series/][Vol. # - Year - Title {Narrator}]/Title.m4b (each book in its own folder)"
     },
     "flat": {
         "name": "Flat Structure",
         "pattern": "{Title}.m4b",
-        "description": "All books in a single directory, just the title"
+        "description": "Title/Title.m4b (minimal folder structure)"
     },
     "author_title": {
         "name": "Author/Title",
         "pattern": "{Author}/{Year} - {Title}[ {{{Narrator}}}].m4b",
-        "description": "Author/Year - Title[ {Narrator}].m4b"
+        "description": "Author/[Year - Title {Narrator}]/Title.m4b (organized by author)"
     },
     "series_focused": {
         "name": "Series Focused",
         "pattern": "[{Series}/][Vol. {Volume} - ]{Title} - {Author}.m4b",
-        "description": "[Series/][Vol. # - ]Title - Author.m4b (series and volume optional)"
+        "description": "[Series/][Vol. # - Title - Author]/Title.m4b (organized by series)"
     }
 }
 
@@ -63,10 +63,13 @@ Examples:
 Pattern Example:
   {Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}].m4b
 
-Results:
-  With series & volume:    "Author/Series/Vol. 1 - 2024 - Title {Narrator}.m4b"
-  Without series/volume:   "Author/2024 - Title {Narrator}.m4b"
-  Without narrator:        "Author/Series/Vol. 1 - 2024 - Title.m4b"
+Results (folder structure):
+  With series & volume:    "Author/Series/Vol. 1 - 2024 - Title {Narrator}/Title.m4b"
+  Without series/volume:   "Author/2024 - Title {Narrator}/Title.m4b"
+  Without narrator:        "Author/Series/Vol. 1 - 2024 - Title/Title.m4b"
+
+Note: Each book gets its own folder based on the naming pattern (minus .m4b extension).
+The M4B file is placed inside with a simple title-based name for Audiobookshelf compatibility.
 
 Additional Cleanup:
   - Extra spaces and dashes are automatically cleaned up

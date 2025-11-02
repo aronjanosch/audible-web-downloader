@@ -121,7 +121,9 @@ The **AudiobookDownloader** class implements a sophisticated download system:
 
 - **Account data**: `config/auth/{account_name}/` directories for per-account authentication
 - **Temporary downloads**: `downloads/{sanitized_title}/` - Working directory for AAX files, vouchers, and metadata
-- **Library location**: Configured library path with naming pattern structure (e.g., `library/Author/Series/Title.m4b`)
+- **Library location**: Configured library path with folder-based structure (e.g., `library/Author/Series/Vol 1 - Year - Title {Narrator}/Title.m4b`)
+  - Each book gets its own folder named according to the naming pattern
+  - M4B file(s) are placed inside the folder for Audiobookshelf compatibility
 - **State persistence**: `downloads/download_states.json` for tracking download progress
 
 ### Download vs Library Separation
@@ -129,7 +131,9 @@ The **AudiobookDownloader** class implements a sophisticated download system:
 The application maintains a clean separation between temporary working files and the organized library:
 
 - **downloads/** - Temporary files during processing (AAX, vouchers, conversion artifacts)
-- **library/** - Final M4B files only, organized by naming pattern
+- **library/** - Final M4B files only, organized in folders by naming pattern
+  - Each book has its own folder created from the naming pattern
+  - M4B files are placed inside these folders for Audiobookshelf compatibility
 - After successful conversion, M4B is moved from downloads to library
 - Cleanup removes all temporary files, keeping only the final M4B in library
 

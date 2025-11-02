@@ -218,12 +218,51 @@ class AudiobookDownloader:
         return re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', filename)[:200]
 
     def _format_author(self, authors) -> str:
-        """Format author name(s) from various input formats."""
+        """
+        Format author name(s) from various input formats, excluding translators.
+        Translators are identified by:
+        1. Explicit markers like "- Übersetzer", "- Translator"
+        2. Having no ASIN when other authors have ASINs (likely translator/contributor)
+        """
         if isinstance(authors, str):
             return authors if authors else "Unknown Author"
         elif isinstance(authors, list) and authors:
-            author_names = [author.get('name', '') if isinstance(author, dict) else str(author) for author in authors]
-            author_names = [name for name in author_names if name]
+            # Filter out translators by explicit markers first
+            translator_markers = [
+                '- übersetzer', '- translator', '- traducteur', '- traductor',
+                '- traduttore', '- vertaler', '- översättare'
+            ]
+            
+            primary_authors = []
+            for author in authors:
+                name = author.get('name', '') if isinstance(author, dict) else str(author)
+                if not name:
+                    continue
+                    
+                # Check for explicit translator marker
+                is_translator = any(marker in name.lower() for marker in translator_markers)
+                if not is_translator:
+                    primary_authors.append(author)
+            
+            # If no explicit filtering happened, check for ASIN-based filtering
+            # Authors with ASINs are usually primary authors; those without might be translators
+            if len(primary_authors) > 1:
+                authors_with_asin = [a for a in primary_authors if isinstance(a, dict) and a.get('asin')]
+                if authors_with_asin:
+                    # If we have authors with ASINs, only use those
+                    primary_authors = authors_with_asin
+            
+            # Extract names for final formatting
+            author_names = []
+            for author in primary_authors:
+                name = author.get('name', '') if isinstance(author, dict) else str(author)
+                if name:
+                    author_names.append(name)
+            
+            # Fallback to all author names if filtering removed everyone
+            if not author_names:
+                author_names = [author.get('name', '') if isinstance(author, dict) else str(author) for author in authors]
+                author_names = [name for name in author_names if name]
 
             if len(author_names) > 3:
                 return "Various Authors"
@@ -630,23 +669,33 @@ class AudiobookDownloader:
                     if sanitized and sanitized != ".m4b":  # Don't add segments that are just the extension
                         path_parts.append(sanitized)
 
-        # Build final path
+        # Build final path with folder-based structure for Audiobookshelf compatibility
         if not path_parts:
             # Fallback to flat structure if pattern results in empty path
             safe_title = self._sanitize_filename(title)
             return Path(base_path) / safe_title / f"{safe_title}.m4b"
 
-        # Construct path: all parts except the last are folders, last is the filename
-        if len(path_parts) == 1:
-            # Only filename provided, no folder structure
-            # Create a folder with the title name
-            safe_title = self._sanitize_filename(title)
-            folder_path = Path(base_path) / safe_title
-            # Use the pattern-generated filename
-            return folder_path / path_parts[0]
+        # Extract the last part (filename with .m4b extension)
+        filename_part = path_parts[-1]
+
+        # Remove .m4b extension from filename to use as folder name
+        if filename_part.endswith('.m4b'):
+            folder_name = filename_part[:-4]  # Remove '.m4b'
         else:
-            # Multiple parts: folders + filename
-            return Path(base_path).joinpath(*path_parts)
+            # Fallback if no .m4b extension (shouldn't happen with valid patterns)
+            folder_name = filename_part
+
+        # Build path: all parts except last are folders, last part (minus .m4b) becomes a folder too
+        if len(path_parts) == 1:
+            # Only filename provided, create folder with that name
+            folder_path = Path(base_path) / folder_name
+        else:
+            # Multiple parts: all become folders including the last one (minus .m4b)
+            folder_path = Path(base_path).joinpath(*path_parts[:-1], folder_name)
+
+        # Place M4B file inside the folder with a simple name (title)
+        safe_title = self._sanitize_filename(title)
+        return folder_path / f"{safe_title}.m4b"
 
     def build_audiobookshelf_path(
         self,
