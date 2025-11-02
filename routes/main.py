@@ -19,6 +19,20 @@ def save_accounts(accounts):
     with open(accounts_file, 'w') as f:
         json.dump(accounts, f, indent=2)
 
+def load_libraries():
+    """Load libraries configuration from JSON file"""
+    libraries_file = Path("libraries.json")
+    if libraries_file.exists():
+        with open(libraries_file, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_libraries(libraries):
+    """Save libraries configuration to JSON file"""
+    libraries_file = Path("libraries.json")
+    with open(libraries_file, 'w') as f:
+        json.dump(libraries, f, indent=2)
+
 @main_bp.route('/')
 def index():
     """Main page with account management and library display"""
@@ -90,14 +104,61 @@ def search_library():
     """API endpoint to search library"""
     search_term = request.args.get('q', '').lower()
     library = session.get('library', [])
-    
+
     if not search_term:
         return jsonify(library)
-    
+
     filtered_books = [
         book for book in library
-        if search_term in book.get('title', '').lower() or 
+        if search_term in book.get('title', '').lower() or
            search_term in book.get('authors', '').lower()
     ]
-    
-    return jsonify(filtered_books) 
+
+    return jsonify(filtered_books)
+
+@main_bp.route('/api/libraries', methods=['GET'])
+def get_libraries():
+    """API endpoint to get all libraries"""
+    libraries = load_libraries()
+    return jsonify(libraries)
+
+@main_bp.route('/api/libraries', methods=['POST'])
+def add_library():
+    """API endpoint to add a new library"""
+    data = request.get_json()
+    library_name = data.get('library_name')
+    library_path = data.get('library_path')
+
+    if not library_name or not library_path:
+        return jsonify({'error': 'Library name and path are required'}), 400
+
+    libraries = load_libraries()
+
+    if library_name in libraries:
+        return jsonify({'error': 'Library name already exists'}), 400
+
+    # Validate and create path if it doesn't exist
+    library_path_obj = Path(library_path)
+    library_path_obj.mkdir(parents=True, exist_ok=True)
+
+    libraries[library_name] = {
+        'path': library_path,
+        'created_at': library_path_obj.stat().st_mtime
+    }
+
+    save_libraries(libraries)
+
+    return jsonify({'success': True, 'library': libraries[library_name]})
+
+@main_bp.route('/api/libraries/<library_name>', methods=['DELETE'])
+def delete_library(library_name):
+    """API endpoint to delete a library"""
+    libraries = load_libraries()
+
+    if library_name not in libraries:
+        return jsonify({'error': 'Library not found'}), 404
+
+    del libraries[library_name]
+    save_libraries(libraries)
+
+    return jsonify({'success': True}) 

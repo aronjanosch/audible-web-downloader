@@ -248,52 +248,49 @@
                     </div>
                 </div>
                 
-                <!-- Local Library -->
-                <div id="localLibrarySection" class="mb-4">
-                    <h5>Local Library</h5>
-                    
-                    <!-- Library Path -->
-                    <div class="mb-3">
-                        <label for="libraryPath" class="form-label">Library Path:</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control form-control-sm" 
-                                   id="libraryPath" placeholder="Path to your audiobooks">
-                            <button class="btn btn-outline-light btn-sm" type="button" id="setPathBtn">
-                                <i class="fas fa-folder"></i>
-                            </button>
+                <!-- Libraries Management -->
+                <div id="librariesSection" class="mb-4">
+                    <h5>Download Libraries</h5>
+
+                    <!-- Add New Library -->
+                    <div class="card bg-light text-dark mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title">Add Library</h6>
+                            <form id="addLibraryForm">
+                                <div class="mb-2">
+                                    <input type="text" class="form-control form-control-sm"
+                                           id="libraryName" placeholder="Library Name (e.g., English)" required>
+                                </div>
+                                <div class="mb-2">
+                                    <input type="text" class="form-control form-control-sm"
+                                           id="libraryPath" placeholder="Library Path" required>
+                                </div>
+                                <button type="submit" class="btn btn-light btn-sm w-100">
+                                    <i class="fas fa-plus"></i> Add Library
+                                </button>
+                            </form>
                         </div>
                     </div>
-                    
-                    <!-- Library Actions -->
-                    <div class="d-grid gap-2">
-                        <button id="scanLocalBtn" class="btn btn-light btn-sm">
-                            <i class="fas fa-search"></i> Scan Local Library
-                        </button>
-                        <button id="compareLibrariesBtn" class="btn btn-info btn-sm" style="display: none;">
-                            <i class="fas fa-balance-scale"></i> Compare Libraries
-                        </button>
-                        <button id="showMissingBtn" class="btn btn-warning btn-sm" style="display: none;">
-                            <i class="fas fa-exclamation-circle"></i> Show Missing Books
-                        </button>
-                        <button id="viewDebugBtn" class="btn btn-secondary btn-sm" style="display: none;">
-                            <i class="fas fa-bug"></i> View Debug Log
-                        </button>
-                    </div>
-                    
-                    <!-- Library Stats -->
-                    <div id="libraryStats" class="mt-3" style="display: none;">
-                        <div class="card bg-light text-dark">
-                            <div class="card-body">
-                                <h6 class="card-title">Library Stats</h6>
-                                <small id="statsText" class="text-muted"></small>
-                            </div>
-                        </div>
+
+                    <!-- Library List -->
+                    <div id="configuredLibraryList" class="mb-3">
+                        <small class="text-light">No libraries configured</small>
                     </div>
                 </div>
                 
                 <!-- Download Controls -->
                 <div id="downloadControls" class="mb-4" style="display: none;">
                     <h5>Download Settings</h5>
+
+                    <!-- Library Selection -->
+                    <div class="mb-3">
+                        <label for="downloadLibrarySelect" class="form-label">Download to library: <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm" id="downloadLibrarySelect" required>
+                            <option value="">Select a library...</option>
+                        </select>
+                        <small class="text-light">Configure a library above first</small>
+                    </div>
+
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="cleanupAax" checked>
                         <label class="form-check-label" for="cleanupAax">
@@ -303,9 +300,6 @@
                     <div class="d-grid gap-2 mt-3">
                         <button id="downloadBtn" class="btn btn-success btn-sm">
                             <i class="fas fa-download"></i> Download Selected
-                        </button>
-                        <button id="clearSelectionBtn" class="btn btn-secondary btn-sm">
-                            <i class="fas fa-times"></i> Clear Selection
                         </button>
                     </div>
                 </div>

@@ -27,19 +27,6 @@
 
 <!-- Library Content -->
 <div id="libraryContent" style="display: none;">
-    <!-- Library Filters -->
-    <div class="filter-tabs">
-        <button class="btn btn-sm library-filter active" id="allBooksFilter" data-filter="all">
-            <i class="fas fa-list"></i> All Books
-        </button>
-        <button class="btn btn-sm library-filter" id="missingBooksFilter" data-filter="missing" style="display: none;">
-            <i class="fas fa-exclamation-circle"></i> Missing from Local
-        </button>
-        <button class="btn btn-sm library-filter" id="availableBooksFilter" data-filter="available" style="display: none;">
-            <i class="fas fa-check-circle"></i> Available Locally
-        </button>
-    </div>
-    
     <!-- Search Bar -->
     <div class="row mb-4">
         <div class="col-md-6">
@@ -52,6 +39,12 @@
             </div>
         </div>
         <div class="col-md-6 text-end">
+            <button id="selectAllVisibleBtn" class="btn btn-sm btn-primary me-2">
+                <i class="fas fa-check-double"></i> Select All Visible
+            </button>
+            <button id="clearSelectionBtn" class="btn btn-sm btn-secondary me-3">
+                <i class="fas fa-times"></i> Clear Selection
+            </button>
             <div class="btn-group view-switcher" role="group">
                 <button type="button" class="btn btn-secondary active" id="cardViewBtn" title="Card View"><i class="fas fa-th-large"></i></button>
                 <button type="button" class="btn btn-secondary" id="listViewBtn" title="List View"><i class="fas fa-list"></i></button>
@@ -59,7 +52,59 @@
             <span id="bookCount" class="text-muted ms-3"></span>
         </div>
     </div>
-    
+
+    <!-- Filter Bar -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body py-2">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-auto">
+                            <label class="form-label mb-0 text-muted small">
+                                <i class="fas fa-filter"></i> Filters:
+                            </label>
+                        </div>
+                        <div class="col-md-2 col-sm-6">
+                            <select class="form-select form-select-sm" id="languageFilter">
+                                <option value="">All Languages</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 col-sm-6">
+                            <select class="form-select form-select-sm" id="narratorFilter">
+                                <option value="">All Narrators</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 col-sm-6">
+                            <select class="form-select form-select-sm" id="seriesFilter">
+                                <option value="">All Series</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 col-sm-6">
+                            <select class="form-select form-select-sm" id="publisherFilter">
+                                <option value="">All Publishers</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 col-sm-6">
+                            <select class="form-select form-select-sm" id="releaseYearFilter">
+                                <option value="">All Years</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-sm btn-outline-secondary" id="clearFiltersBtn" title="Clear all filters">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-2" id="filterStatusRow" style="display: none;">
+                        <div class="col-12">
+                            <small class="text-muted" id="filterStatus"></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Spinner -->
     <div id="loadingSpinner" class="text-center py-5" style="display: none;">
         <div class="spinner-border text-primary" role="status">
@@ -142,6 +187,9 @@
     let currentLibraryPath = '';
     let libraryComparison = null;
     let currentFilter = 'all';
+
+    // Filter variables
+    let currentlyDisplayedBooks = [];
     
     function setupEventListeners() {
         // Account selection
@@ -153,33 +201,38 @@
                 hideAccountInfo();
             }
         });
-        
+
         // Add account form
         document.getElementById('addAccountForm').addEventListener('submit', function(e) {
             e.preventDefault();
             addAccount();
         });
-        
+
         // Authentication
         document.getElementById('authenticateBtn').addEventListener('click', function() {
             authenticateAccount();
         });
-        
+
         // Refresh library
         document.getElementById('refreshLibraryBtn').addEventListener('click', function() {
             fetchLibrary();
         });
-        
+
         // Download
         document.getElementById('downloadBtn').addEventListener('click', function() {
             downloadSelectedBooks();
         });
-        
+
         // Clear selection
         document.getElementById('clearSelectionBtn').addEventListener('click', function() {
             clearSelection();
         });
-        
+
+        // Select all visible books
+        document.getElementById('selectAllVisibleBtn').addEventListener('click', function() {
+            selectAllVisible();
+        });
+
         // Search
         document.getElementById('searchInput').addEventListener('input', function() {
             searchBooks(this.value);
@@ -188,31 +241,23 @@
         // View switcher
         document.getElementById('cardViewBtn').addEventListener('click', () => switchView('card'));
         document.getElementById('listViewBtn').addEventListener('click', () => switchView('list'));
-        
-        // Local library
-        document.getElementById('setPathBtn').addEventListener('click', function() {
-            setLibraryPath();
+
+        // Library management
+        document.getElementById('addLibraryForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            addLibrary();
         });
-        document.getElementById('scanLocalBtn').addEventListener('click', function() {
-            scanLocalLibrary();
-        });
-        document.getElementById('compareLibrariesBtn').addEventListener('click', function() {
-            compareLibraries();
-        });
-        document.getElementById('showMissingBtn').addEventListener('click', function() {
-            toggleFilter('missing');
-        });
-        document.getElementById('viewDebugBtn').addEventListener('click', function() {
-            viewDebugLog(this.dataset.debugFile);
-        });
-        
-        // Library filters
-        document.querySelectorAll('.library-filter').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const filter = this.dataset.filter;
-                toggleFilter(filter);
-            });
-        });
+
+        // Book filters
+        document.getElementById('languageFilter').addEventListener('change', applyFilters);
+        document.getElementById('narratorFilter').addEventListener('change', applyFilters);
+        document.getElementById('seriesFilter').addEventListener('change', applyFilters);
+        document.getElementById('publisherFilter').addEventListener('change', applyFilters);
+        document.getElementById('releaseYearFilter').addEventListener('change', applyFilters);
+        document.getElementById('clearFiltersBtn').addEventListener('click', clearAllFilters);
+
+        // Load libraries on startup
+        loadLibraries();
     }
     
     async function selectAccount(accountName) {
@@ -296,9 +341,10 @@
             });
             
             library = result.library;
+            populateFilterDropdowns(library);
             displayLibrary(library);
             showAlert(`Loaded ${library.length} books!`, 'success');
-            
+
             // Show compare button if we have local library data
             if (localLibraryId) {
                 document.getElementById('compareLibrariesBtn').style.display = 'block';
@@ -367,10 +413,13 @@
     }
     
     function displayLibrary(books) {
+        // Track currently displayed books for Select All functionality
+        currentlyDisplayedBooks = books;
+
         const grid = document.getElementById('libraryGrid');
         const list = document.getElementById('libraryList');
         const countSpan = document.getElementById('bookCount');
-        
+
         if (books.length === 0) {
             document.getElementById('noBooksMessage').style.display = 'block';
             grid.style.display = 'none';
@@ -480,14 +529,30 @@
 
         if (selected) {
             selectedBooks.add(asin);
-            if (card) card.classList.add('book-selected');
-            if (listItem) listItem.classList.add('book-selected');
+            if (card) {
+                card.classList.add('book-selected');
+                const checkbox = card.querySelector('.book-checkbox');
+                if (checkbox) checkbox.checked = true;
+            }
+            if (listItem) {
+                listItem.classList.add('book-selected');
+                const checkbox = listItem.querySelector('.book-checkbox');
+                if (checkbox) checkbox.checked = true;
+            }
         } else {
             selectedBooks.delete(asin);
-            if (card) card.classList.remove('book-selected');
-            if (listItem) listItem.classList.remove('book-selected');
+            if (card) {
+                card.classList.remove('book-selected');
+                const checkbox = card.querySelector('.book-checkbox');
+                if (checkbox) checkbox.checked = false;
+            }
+            if (listItem) {
+                listItem.classList.remove('book-selected');
+                const checkbox = listItem.querySelector('.book-checkbox');
+                if (checkbox) checkbox.checked = false;
+            }
         }
-        
+
         updateDownloadButton();
     }
     
@@ -514,43 +579,210 @@
         });
         updateDownloadButton();
     }
-    
+
+    function selectAllVisible() {
+        // Select all currently displayed books
+        currentlyDisplayedBooks.forEach(book => {
+            toggleBookSelection(book.asin, true);
+        });
+        updateDownloadButton();
+        showAlert(`Selected ${currentlyDisplayedBooks.length} visible books`, 'info');
+    }
+
     function searchBooks(query) {
-        if (!query.trim()) {
-            displayLibrary(library);
-            return;
+        applyFilters(); // Use unified filter system
+    }
+
+    function populateFilterDropdowns(books) {
+        // Get unique values for each filter, excluding empty values
+        const languages = [...new Set(books.map(b => b.language).filter(v => v && v !== 'Unknown'))].sort();
+        const narrators = [...new Set(books.map(b => b.narrator).filter(v => v))].sort();
+        const series = [...new Set(books.map(b => b.series).filter(v => v))].sort();
+        const publishers = [...new Set(books.map(b => b.publisher).filter(v => v))].sort();
+        const years = [...new Set(books.map(b => b.release_year).filter(v => v))].sort().reverse(); // Most recent first
+
+        // Populate language filter
+        const languageSelect = document.getElementById('languageFilter');
+        const currentLanguage = languageSelect.value;
+        languageSelect.innerHTML = '<option value="">All Languages</option>';
+        languages.forEach(lang => {
+            const option = document.createElement('option');
+            option.value = lang;
+            option.textContent = lang;
+            languageSelect.appendChild(option);
+        });
+        if (currentLanguage) languageSelect.value = currentLanguage;
+
+        // Populate narrator filter
+        const narratorSelect = document.getElementById('narratorFilter');
+        const currentNarrator = narratorSelect.value;
+        narratorSelect.innerHTML = '<option value="">All Narrators</option>';
+        narrators.forEach(narrator => {
+            const option = document.createElement('option');
+            option.value = narrator;
+            option.textContent = narrator;
+            narratorSelect.appendChild(option);
+        });
+        if (currentNarrator) narratorSelect.value = currentNarrator;
+
+        // Populate series filter
+        const seriesSelect = document.getElementById('seriesFilter');
+        const currentSeries = seriesSelect.value;
+        seriesSelect.innerHTML = '<option value="">All Series</option>';
+        series.forEach(s => {
+            const option = document.createElement('option');
+            option.value = s;
+            option.textContent = s;
+            seriesSelect.appendChild(option);
+        });
+        if (currentSeries) seriesSelect.value = currentSeries;
+
+        // Populate publisher filter
+        const publisherSelect = document.getElementById('publisherFilter');
+        const currentPublisher = publisherSelect.value;
+        publisherSelect.innerHTML = '<option value="">All Publishers</option>';
+        publishers.forEach(pub => {
+            const option = document.createElement('option');
+            option.value = pub;
+            option.textContent = pub;
+            publisherSelect.appendChild(option);
+        });
+        if (currentPublisher) publisherSelect.value = currentPublisher;
+
+        // Populate year filter
+        const yearSelect = document.getElementById('releaseYearFilter');
+        const currentYear = yearSelect.value;
+        yearSelect.innerHTML = '<option value="">All Years</option>';
+        years.forEach(year => {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearSelect.appendChild(option);
+        });
+        if (currentYear) yearSelect.value = currentYear;
+    }
+
+    function applyFilters() {
+        let filtered = library;
+
+        // Apply search filter
+        const searchQuery = document.getElementById('searchInput').value;
+        if (searchQuery.trim()) {
+            filtered = filtered.filter(book =>
+                book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                book.authors.toLowerCase().includes(searchQuery.toLowerCase())
+            );
         }
-        
-        const filtered = library.filter(book => 
-            book.title.toLowerCase().includes(query.toLowerCase()) ||
-            book.authors.toLowerCase().includes(query.toLowerCase())
-        );
-        
+
+        // Apply language filter
+        const language = document.getElementById('languageFilter').value;
+        if (language) {
+            filtered = filtered.filter(book => book.language === language);
+        }
+
+        // Apply narrator filter
+        const narrator = document.getElementById('narratorFilter').value;
+        if (narrator) {
+            filtered = filtered.filter(book => book.narrator === narrator);
+        }
+
+        // Apply series filter
+        const series = document.getElementById('seriesFilter').value;
+        if (series) {
+            filtered = filtered.filter(book => book.series === series);
+        }
+
+        // Apply publisher filter
+        const publisher = document.getElementById('publisherFilter').value;
+        if (publisher) {
+            filtered = filtered.filter(book => book.publisher === publisher);
+        }
+
+        // Apply release year filter
+        const releaseYear = document.getElementById('releaseYearFilter').value;
+        if (releaseYear) {
+            filtered = filtered.filter(book => book.release_year === releaseYear);
+        }
+
+        // Apply library comparison filter if active
+        if (currentFilter !== 'all' && libraryComparison) {
+            if (currentFilter === 'missing') {
+                const localAsins = new Set(libraryComparison.local_books.map(b => b.asin));
+                filtered = filtered.filter(book => !localAsins.has(book.asin));
+            } else if (currentFilter === 'available') {
+                const localAsins = new Set(libraryComparison.local_books.map(b => b.asin));
+                filtered = filtered.filter(book => localAsins.has(book.asin));
+            }
+        }
+
+        // Update filter status display
+        updateFilterStatus(filtered.length);
+
+        // Display filtered results
         displayLibrary(filtered);
     }
-    
+
+    function updateFilterStatus(filteredCount) {
+        const activeFilters = [];
+
+        if (document.getElementById('languageFilter').value) activeFilters.push('Language');
+        if (document.getElementById('narratorFilter').value) activeFilters.push('Narrator');
+        if (document.getElementById('seriesFilter').value) activeFilters.push('Series');
+        if (document.getElementById('publisherFilter').value) activeFilters.push('Publisher');
+        if (document.getElementById('releaseYearFilter').value) activeFilters.push('Year');
+        if (document.getElementById('searchInput').value.trim()) activeFilters.push('Search');
+
+        const statusRow = document.getElementById('filterStatusRow');
+        const statusText = document.getElementById('filterStatus');
+
+        if (activeFilters.length > 0) {
+            statusRow.style.display = 'block';
+            const totalBooks = library.length;
+            statusText.innerHTML = `<i class="fas fa-info-circle"></i> Showing <strong>${filteredCount}</strong> of <strong>${totalBooks}</strong> books | Active filters: <strong>${activeFilters.join(', ')}</strong>`;
+        } else {
+            statusRow.style.display = 'none';
+        }
+    }
+
+    function clearAllFilters() {
+        document.getElementById('languageFilter').value = '';
+        document.getElementById('narratorFilter').value = '';
+        document.getElementById('seriesFilter').value = '';
+        document.getElementById('publisherFilter').value = '';
+        document.getElementById('releaseYearFilter').value = '';
+        document.getElementById('searchInput').value = '';
+        applyFilters();
+    }
+
     async function downloadSelectedBooks() {
         if (selectedBooks.size === 0) {
             showAlert('Please select books to download', 'warning');
             return;
         }
-        
+
         const cleanupAax = document.getElementById('cleanupAax').checked;
-        
+        const libraryName = document.getElementById('downloadLibrarySelect').value;
+
+        if (!libraryName) {
+            showAlert('Please select a library to download to', 'warning');
+            return;
+        }
+
         // Start SSE-based progress tracking immediately before making the download request
         startProgressTracking();
-        
+
         try {
             const result = await apiCall('/api/download/books', {
                 method: 'POST',
                 body: JSON.stringify({
                     selected_asins: Array.from(selectedBooks),
-                    cleanup_aax: cleanupAax
+                    cleanup_aax: cleanupAax,
+                    library_name: libraryName
                 })
             });
-            
+
             showAlert(result.message, 'success');
-            
+
         } catch (error) {
             showAlert('Download failed: ' + error.message, 'danger');
             // Stop progress tracking if download failed to start
@@ -1098,5 +1330,116 @@
             event.target.remove();
         }
     });
+
+    // Library management functions
+    async function loadLibraries() {
+        try {
+            const libraries = await apiCall('/api/libraries');
+            updateLibraryList(libraries);
+            updateLibrarySelector(libraries);
+        } catch (error) {
+            console.error('Failed to load libraries:', error);
+        }
+    }
+
+    function updateLibraryList(libraries) {
+        const listContainer = document.getElementById('configuredLibraryList');
+
+        if (Object.keys(libraries).length === 0) {
+            listContainer.innerHTML = '<small class="text-light">No libraries configured</small>';
+            return;
+        }
+
+        listContainer.innerHTML = '';
+
+        for (const [name, library] of Object.entries(libraries)) {
+            const libraryItem = document.createElement('div');
+            libraryItem.className = 'card bg-light text-dark mb-2';
+            libraryItem.innerHTML = `
+                <div class="card-body p-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${name}</strong><br>
+                            <small class="text-muted">${library.path}</small>
+                        </div>
+                        <button class="btn btn-sm btn-danger" onclick="deleteLibrary('${name}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            listContainer.appendChild(libraryItem);
+        }
+    }
+
+    function updateLibrarySelector(libraries) {
+        const select = document.getElementById('downloadLibrarySelect');
+        const libraryKeys = Object.keys(libraries);
+
+        if (libraryKeys.length === 0) {
+            select.innerHTML = '<option value="">No libraries configured</option>';
+            select.disabled = true;
+        } else {
+            select.innerHTML = '<option value="">Select a library...</option>';
+            select.disabled = false;
+
+            for (const name of libraryKeys) {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                select.appendChild(option);
+            }
+
+            // Auto-select if only one library exists
+            if (libraryKeys.length === 1) {
+                select.value = libraryKeys[0];
+            }
+        }
+    }
+
+    async function addLibrary() {
+        const libraryName = document.getElementById('libraryName').value.trim();
+        const libraryPath = document.getElementById('libraryPath').value.trim();
+
+        if (!libraryName || !libraryPath) {
+            showAlert('Please enter both library name and path', 'warning');
+            return;
+        }
+
+        try {
+            await apiCall('/api/libraries', {
+                method: 'POST',
+                body: JSON.stringify({
+                    library_name: libraryName,
+                    library_path: libraryPath
+                })
+            });
+
+            showAlert('Library added successfully!', 'success');
+            document.getElementById('addLibraryForm').reset();
+            loadLibraries();
+
+        } catch (error) {
+            showAlert('Failed to add library: ' + error.message, 'danger');
+        }
+    }
+
+    async function deleteLibrary(libraryName) {
+        if (!confirm(`Are you sure you want to remove the library "${libraryName}"?\n\nNote: This only removes it from the app, your files will not be deleted.`)) {
+            return;
+        }
+
+        try {
+            await apiCall(`/api/libraries/${libraryName}`, {
+                method: 'DELETE'
+            });
+
+            showAlert('Library removed successfully', 'success');
+            loadLibraries();
+
+        } catch (error) {
+            showAlert('Failed to remove library: ' + error.message, 'danger');
+        }
+    }
 </script>
 {% endblock %}

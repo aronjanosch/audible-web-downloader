@@ -110,14 +110,26 @@ class AudibleAuth:
                     
                     # Extract runtime
                     runtime_mins = item.get('runtime_length_min', 0)
-                    
+
+                    # Extract release year from release_date
+                    release_date = item.get('release_date', '')
+                    release_year = ''
+                    if release_date:
+                        try:
+                            # Release date format is typically "YYYY-MM-DD"
+                            release_year = release_date.split('-')[0] if '-' in release_date else release_date[:4]
+                        except:
+                            release_year = ''
+
                     book = {
                         'asin': item.get('asin', ''),
                         'title': item.get('title', 'Unknown Title'),
                         'authors': ', '.join(authors) if authors else 'Unknown Author',
                         'narrator': ', '.join(narrators) if narrators else '',
+                        'language': item.get('language', 'Unknown'),
                         'length_mins': runtime_mins,
-                        'release_date': item.get('release_date', ''),
+                        'release_date': release_date,
+                        'release_year': release_year,
                         'publisher': item.get('publisher_name', ''),
                         'series': series_info,
                         'cover_url': cover_url,

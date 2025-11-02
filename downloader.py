@@ -27,11 +27,15 @@ class DownloadState(Enum):
     ERROR = "error"
 
 class AudiobookDownloader:
-    def __init__(self, account_name, region="us", max_concurrent_downloads=3):
+    def __init__(self, account_name, region="us", max_concurrent_downloads=3, library_path=None):
         self.account_name = account_name
         self.region = region
-        self.downloads_dir = Path("downloads")
-        self.downloads_dir.mkdir(exist_ok=True)
+
+        if not library_path:
+            raise ValueError("library_path is required. Please configure a library before downloading.")
+
+        self.downloads_dir = Path(library_path)
+        self.downloads_dir.mkdir(parents=True, exist_ok=True)
         self.download_semaphore = Semaphore(max_concurrent_downloads)
         self.decrypt_semaphore = Semaphore(1)
 
@@ -355,7 +359,10 @@ class AudiobookDownloader:
         except Exception as e:
             print(f"Could not add enhanced metadata: {e}")
 
-async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3):
-    downloader = AudiobookDownloader(account_name, region)
+async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3, library_path=None):
+    if not library_path:
+        raise ValueError("library_path is required. Please configure a library before downloading.")
+
+    downloader = AudiobookDownloader(account_name, region, library_path=library_path)
     tasks = [downloader.download_book(book['asin'], book['title'], book.get('quality', quality), cleanup_aax, max_retries) for book in selected_books]
     return await asyncio.gather(*tasks, return_exceptions=True)
