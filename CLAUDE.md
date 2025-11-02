@@ -64,6 +64,7 @@ The application follows a **modular Flask architecture** using blueprints for ro
 - **config/libraries.json** - Library paths and configurations
 - **config/settings.json** - Application settings including naming patterns
 - **config/auth/{account_name}/auth.json** - Audible authentication tokens per account
+- **downloads/** - Temporary download directory for AAX files, vouchers, and working files
 - **downloads/download_states.json** - Download state tracking for resume/retry functionality
 
 ## Key Dependencies
@@ -99,9 +100,11 @@ The **AudiobookDownloader** class implements a sophisticated download system:
 ### Processing Pipeline
 1. **License Request** - Requests download license from Audible API with quality settings
 2. **Voucher Decryption** - AES decryption of license voucher using device-specific keys
-3. **File Download** - Streaming download with chunk processing
-4. **FFmpeg Conversion** - AAX to M4B with key/IV from decrypted voucher
+3. **File Download** - Streaming download to temporary directory (`downloads/{title}/`)
+4. **FFmpeg Conversion** - AAX to M4B conversion in temp directory
 5. **Metadata Enhancement** - Fetches additional book details and embeds comprehensive metadata
+6. **Library Import** - Moves completed M4B to library following naming pattern structure
+7. **Cleanup** - Removes temporary files (AAX, vouchers, metadata) from downloads directory
 
 ## API Endpoints
 
@@ -116,10 +119,19 @@ The **AudiobookDownloader** class implements a sophisticated download system:
 
 ## File Structure Conventions
 
-- **Account data**: `.audible_{account_name}/` directories for per-account authentication
-- **Downloads**: `downloads/{sanitized_book_title}/` with both source (.aaxc) and converted (.m4b) files
-- **Temporary files**: Voucher files (.json) and metadata files created during processing
+- **Account data**: `config/auth/{account_name}/` directories for per-account authentication
+- **Temporary downloads**: `downloads/{sanitized_title}/` - Working directory for AAX files, vouchers, and metadata
+- **Library location**: Configured library path with naming pattern structure (e.g., `library/Author/Series/Title.m4b`)
 - **State persistence**: `downloads/download_states.json` for tracking download progress
+
+### Download vs Library Separation
+
+The application maintains a clean separation between temporary working files and the organized library:
+
+- **downloads/** - Temporary files during processing (AAX, vouchers, conversion artifacts)
+- **library/** - Final M4B files only, organized by naming pattern
+- After successful conversion, M4B is moved from downloads to library
+- Cleanup removes all temporary files, keeping only the final M4B in library
 
 ## External Dependencies
 

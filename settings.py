@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 # Default naming pattern (AudioBookshelf recommended structure)
-DEFAULT_NAMING_PATTERN = "{Author}/{Series}/Vol. {Volume} - {Year} - {Title} {{{Narrator}}}.m4b"
+DEFAULT_NAMING_PATTERN = "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}].m4b"
 
 # Preset naming patterns
 NAMING_PRESETS = {
     "audiobookshelf": {
         "name": "AudioBookshelf (Recommended)",
-        "pattern": "{Author}/{Series}/Vol. {Volume} - {Year} - {Title} {{{Narrator}}}.m4b",
-        "description": "Author/Series/Vol. # - Year - Title {Narrator}.m4b"
+        "pattern": "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}].m4b",
+        "description": "Author/[Series/][Vol. # - ]Year - Title[ {Narrator}].m4b (conditionals omitted when empty)"
     },
     "flat": {
         "name": "Flat Structure",
@@ -24,13 +24,13 @@ NAMING_PRESETS = {
     },
     "author_title": {
         "name": "Author/Title",
-        "pattern": "{Author}/{Year} - {Title}.m4b",
-        "description": "Author/Year - Title.m4b"
+        "pattern": "{Author}/{Year} - {Title}[ {{{Narrator}}}].m4b",
+        "description": "Author/Year - Title[ {Narrator}].m4b"
     },
     "series_focused": {
         "name": "Series Focused",
-        "pattern": "{Series}/{Volume} - {Title} - {Author}.m4b",
-        "description": "Series/#- Title - Author.m4b"
+        "pattern": "[{Series}/][Vol. {Volume} - ]{Title} - {Author}.m4b",
+        "description": "[Series/][Vol. # - ]Title - Author.m4b (series and volume optional)"
     }
 }
 
@@ -46,6 +46,33 @@ AVAILABLE_PLACEHOLDERS = {
     "{ASIN}": "Amazon Standard Identification Number",
     "{Volume}": "Series volume/sequence number only (e.g., 1, 2, 3)",
 }
+
+# Conditional syntax documentation
+CONDITIONAL_SYNTAX_INFO = """
+Conditional Bracket Syntax:
+---------------------------
+Use square brackets [] to create conditional sections that are only included when all
+placeholders within them have values. If any placeholder inside brackets is empty,
+the entire bracketed section (including surrounding text) is omitted.
+
+Examples:
+  [Vol. {Volume} - ]  → "Vol. 1 - " when volume exists, "" when volume is empty
+  [{Series}/]         → "Series Name/" when series exists, "" when series is empty
+  [ {{{Narrator}}}]   → " {Narrator}" when narrator exists, "" when narrator is empty
+
+Pattern Example:
+  {Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}].m4b
+
+Results:
+  With series & volume:    "Author/Series/Vol. 1 - 2024 - Title {Narrator}.m4b"
+  Without series/volume:   "Author/2024 - Title {Narrator}.m4b"
+  Without narrator:        "Author/Series/Vol. 1 - 2024 - Title.m4b"
+
+Additional Cleanup:
+  - Extra spaces and dashes are automatically cleaned up
+  - Empty parentheses (), brackets [], and braces {} are removed
+  - Empty directory segments are removed from paths
+"""
 
 SETTINGS_FILE = Path(__file__).parent / "config" / "settings.json"
 

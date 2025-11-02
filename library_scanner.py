@@ -290,9 +290,9 @@ class LocalLibraryScanner:
 
 class LibraryComparator:
     """Compares Audible and local libraries to find missing books."""
-    
-    def __init__(self):
-        self.match_threshold = 0.6  # Reduced threshold for better matching
+
+    def __init__(self, match_threshold: float = 0.85):
+        self.match_threshold = match_threshold  # Default 85% for stricter matching to avoid false positives
     
     def compare_libraries(self, audible_books: List[Dict], local_books: List[Dict]) -> Dict:
         """

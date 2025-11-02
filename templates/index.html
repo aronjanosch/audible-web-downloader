@@ -248,6 +248,12 @@
             addLibrary();
         });
 
+        // Sync library button
+        document.getElementById('syncLibraryBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            syncLibrary();
+        });
+
         // Book filters
         document.getElementById('languageFilter').addEventListener('change', applyFilters);
         document.getElementById('narratorFilter').addEventListener('change', applyFilters);
@@ -1375,10 +1381,12 @@
     function updateLibrarySelector(libraries) {
         const select = document.getElementById('downloadLibrarySelect');
         const libraryKeys = Object.keys(libraries);
+        const syncSection = document.getElementById('syncLibrarySection');
 
         if (libraryKeys.length === 0) {
             select.innerHTML = '<option value="">No libraries configured</option>';
             select.disabled = true;
+            syncSection.style.display = 'none';
         } else {
             select.innerHTML = '<option value="">Select a library...</option>';
             select.disabled = false;
@@ -1394,6 +1402,9 @@
             if (libraryKeys.length === 1) {
                 select.value = libraryKeys[0];
             }
+
+            // Show sync button when libraries are configured
+            syncSection.style.display = 'block';
         }
     }
 
@@ -1439,6 +1450,50 @@
 
         } catch (error) {
             showAlert('Failed to remove library: ' + error.message, 'danger');
+        }
+    }
+
+    async function syncLibrary() {
+        const librarySelect = document.getElementById('downloadLibrarySelect');
+        const libraryName = librarySelect.value;
+
+        if (!libraryName) {
+            showAlert('Please select a library to sync', 'warning');
+            return;
+        }
+
+        const syncBtn = document.getElementById('syncLibraryBtn');
+        const originalText = syncBtn.innerHTML;
+
+        try {
+            // Show loading state
+            syncBtn.disabled = true;
+            syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+
+            const result = await apiCall('/api/library/sync', {
+                method: 'POST',
+                body: JSON.stringify({
+                    library_name: libraryName
+                })
+            });
+
+            if (result.success) {
+                const stats = result.stats;
+                showAlert(
+                    `Library sync complete! Scanned ${stats.files_scanned} files, found ${stats.asins_found} books with ASINs. ` +
+                    `Added ${stats.entries_added}, updated ${stats.entries_updated}.`,
+                    'success'
+                );
+            } else {
+                showAlert('Sync completed with warnings', 'warning');
+            }
+
+        } catch (error) {
+            showAlert('Failed to sync library: ' + error.message, 'danger');
+        } finally {
+            // Restore button state
+            syncBtn.disabled = false;
+            syncBtn.innerHTML = originalText;
         }
     }
 

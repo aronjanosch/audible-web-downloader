@@ -7,6 +7,143 @@ Tests the build_audiobookshelf_path function with various metadata scenarios.
 from pathlib import Path
 from downloader import AudiobookDownloader
 
+def test_conditional_patterns():
+    """Test the conditional bracket syntax and cleanup functionality."""
+
+    # Create a mock downloader with necessary methods
+    class MockDownloader:
+        def __init__(self):
+            pass
+
+        def _sanitize_filename(self, filename):
+            import re
+            return re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', filename)[:200]
+
+        # Copy methods from AudiobookDownloader
+        _format_author = AudiobookDownloader._format_author
+        _format_narrator = AudiobookDownloader._format_narrator
+        _format_series = AudiobookDownloader._format_series
+        _process_conditional_brackets = AudiobookDownloader._process_conditional_brackets
+        _cleanup_pattern = AudiobookDownloader._cleanup_pattern
+        build_path_from_pattern = AudiobookDownloader.build_path_from_pattern
+
+    downloader = MockDownloader()
+    base_path = "/library"
+
+    print("Testing Conditional Pattern Syntax")
+    print("=" * 80)
+
+    # Test 1: Series book with volume - all conditionals included
+    print("\n1. Series Book with Volume (all conditionals included):")
+    result = downloader.build_path_from_pattern(
+        base_path,
+        title='Wizards First Rule',
+        authors=[{'name': 'Terry Goodkind'}],
+        narrators=[{'name': 'Sam Tsoutsouvas'}],
+        series=[{'title': 'Sword of Truth', 'sequence': '1'}],
+        release_date='1994-08-15'
+    )
+    print(f"Result: {result}")
+    print(f"Expected: /library/Terry Goodkind/Sword of Truth/Vol. 1 - 1994 - Wizards First Rule {{Sam Tsoutsouvas}}.m4b")
+
+    # Test 2: Standalone book - series and volume conditionals omitted
+    print("\n2. Standalone Book (no series/volume - conditionals omitted):")
+    result = downloader.build_path_from_pattern(
+        base_path,
+        title='Hackers',
+        authors=[{'name': 'Steven Levy'}],
+        narrators=[{'name': 'Mike Chamberlain'}],
+        series=[],
+        release_date='2010-05-19'
+    )
+    print(f"Result: {result}")
+    print(f"Expected: /library/Steven Levy/2010 - Hackers {{Mike Chamberlain}}.m4b")
+
+    # Test 3: Book without narrator - narrator conditional omitted
+    print("\n3. Book Without Narrator (narrator conditional omitted):")
+    result = downloader.build_path_from_pattern(
+        base_path,
+        title='Some Book',
+        authors=[{'name': 'Author Name'}],
+        narrators=None,
+        series=[{'title': 'Series Name', 'sequence': '2'}],
+        release_date='2020-01-01'
+    )
+    print(f"Result: {result}")
+    print(f"Expected: /library/Author Name/Series Name/Vol. 2 - 2020 - Some Book.m4b")
+
+    # Test 4: Series without volume number
+    print("\n4. Series Without Volume Number (volume conditional omitted):")
+    result = downloader.build_path_from_pattern(
+        base_path,
+        title='Book Title',
+        authors=[{'name': 'Author Name'}],
+        narrators=[{'name': 'Narrator Name'}],
+        series=[{'title': 'Series Name', 'sequence': None}],
+        release_date='2021-03-15'
+    )
+    print(f"Result: {result}")
+    print(f"Expected: /library/Author Name/Series Name/2021 - Book Title {{Narrator Name}}.m4b")
+
+    # Test 5: Minimal metadata - multiple conditionals omitted
+    print("\n5. Minimal Metadata (multiple conditionals omitted):")
+    result = downloader.build_path_from_pattern(
+        base_path,
+        title='Minimal Book',
+        authors=[{'name': 'Author'}],
+        narrators=None,
+        series=None,
+        release_date='2022-01-01'
+    )
+    print(f"Result: {result}")
+    print(f"Expected: /library/Author/2022 - Minimal Book.m4b")
+
+    # Test 6: Multiple authors with series
+    print("\n6. Multiple Authors with Series:")
+    result = downloader.build_path_from_pattern(
+        base_path,
+        title='The Courage to Be Disliked',
+        authors=[{'name': 'Ichiro Kishimi'}, {'name': 'Fumitake Koga'}],
+        narrators=[{'name': 'Narrator One'}],
+        series=[{'title': 'Philosophy Series', 'sequence': '1'}],
+        release_date='2018-05-08'
+    )
+    print(f"Result: {result}")
+    print(f"Expected: /library/Ichiro Kishimi & Fumitake Koga/Philosophy Series/Vol. 1 - 2018 - The Courage to Be Disliked {{Narrator One}}.m4b")
+
+    # Test 7: Test cleanup - extra spaces and dashes
+    print("\n7. Cleanup Test (testing internal cleanup function):")
+    test_strings = [
+        ("Vol.  - 2024 - Title", "Vol. - 2024 - Title"),
+        ("Title  -  - Author", "Title - Author"),
+        (" - Leading dash", "Leading dash"),
+        ("Trailing dash - ", "Trailing dash"),
+        ("Title ()", "Title"),
+        ("Title []", "Title"),
+        ("Title {}", "Title"),
+        ("Multiple    spaces", "Multiple spaces"),
+    ]
+    for input_str, expected in test_strings:
+        result = downloader._cleanup_pattern(input_str)
+        match = "✓" if result == expected else "✗"
+        print(f"  {match} '{input_str}' → '{result}' (expected: '{expected}')")
+
+    # Test 8: Edge case - no year
+    print("\n8. No Release Date:")
+    result = downloader.build_path_from_pattern(
+        base_path,
+        title='Unknown Date Book',
+        authors=[{'name': 'Author Name'}],
+        narrators=None,
+        series=None,
+        release_date=None
+    )
+    print(f"Result: {result}")
+    print(f"Expected: /library/Author Name/Unknown Date Book.m4b (with year omitted)")
+
+    print("\n" + "=" * 80)
+    print("Conditional pattern tests completed!")
+
 def test_path_builder():
     """Test the AudioBookshelf path builder with various scenarios."""
 
@@ -236,6 +373,8 @@ def test_title_parser():
 
 if __name__ == "__main__":
     try:
+        test_conditional_patterns()
+        print("\n\n")
         test_path_builder()
         test_title_parser()
     except Exception as e:

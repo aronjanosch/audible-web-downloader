@@ -9,8 +9,10 @@ services:
     volumes:
       # Mount config directory to persist all configuration files and auth tokens
       - ./config:/app/config
-      # Mount downloads directory to persist downloaded audiobooks
+      # Mount temporary downloads directory for AAX files, vouchers, and conversion work
       - ./downloads:/app/downloads
+      # Mount library directory for final organized M4B audiobooks
+      - ./library:/app/library
     environment:
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       - FLASK_ENV=${FLASK_ENV:-production}

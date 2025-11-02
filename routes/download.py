@@ -206,6 +206,46 @@ def download_status():
         'active_downloads': active_downloads
     })
 
+@download_bp.route('/api/library/sync', methods=['POST'])
+def sync_library():
+    """API endpoint to sync library and populate download history"""
+    data = request.get_json() or {}
+    library_name = data.get('library_name')
+
+    if not library_name:
+        return jsonify({'error': 'No library selected. Please select a library to sync.'}), 400
+
+    current_account = session.get('current_account')
+    if not current_account:
+        return jsonify({'error': 'No account selected'}), 400
+
+    accounts = load_accounts()
+    if current_account not in accounts:
+        return jsonify({'error': 'Account not found'}), 404
+
+    # Get library path from library_name
+    libraries = load_libraries()
+    if library_name not in libraries:
+        return jsonify({'error': 'Selected library not found'}), 404
+
+    library_config = libraries[library_name]
+    library_path = library_config['path']
+    region = accounts[current_account]['region']
+
+    try:
+        # Create downloader instance and run sync
+        downloader = AudiobookDownloader(current_account, region, library_path=library_path)
+        stats = downloader.sync_library()
+
+        return jsonify({
+            'success': True,
+            'message': f'Library sync complete! Found {stats["asins_found"]} books with ASINs.',
+            'stats': stats
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Sync error: {str(e)}'}), 500
+
 @download_bp.route('/api/download/progress-stream')
 def download_progress_stream():
     """Server-Sent Events endpoint for real-time progress updates"""
