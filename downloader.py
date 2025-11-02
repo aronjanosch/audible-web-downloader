@@ -55,7 +55,11 @@ class AudiobookDownloader:
         self.auth = self._load_authenticator()
         self._auth_details = self._load_auth_details() if self.auth else None
 
-        # In-memory state tracking for duplicate detection (not persisted to disk)
+        # Library tracking file - persists which books are in the library
+        self.library_file = Path("config") / "library.json"
+        self.library_state = self._load_library_state()
+
+        # In-memory download progress tracking (not persisted to disk)
         self.download_states = {}
 
         # Track download start times for elapsed time reporting
@@ -106,6 +110,23 @@ class AudiobookDownloader:
             return json.loads(auth_file.read_text())
         return None
 
+    def _load_library_state(self) -> Dict:
+        """Loads the library state from library.json"""
+        if self.library_file.exists():
+            try:
+                return json.load(self.library_file.open('r'))
+            except (json.JSONDecodeError, IOError):
+                return {}
+        return {}
+
+    def _save_library_state(self):
+        """Saves the library state to library.json"""
+        try:
+            self.library_file.parent.mkdir(parents=True, exist_ok=True)
+            with self.library_file.open('w') as f:
+                json.dump(self.library_state, f, indent=2)
+        except IOError as e:
+            self._log(f"⚠️  Failed to save library state: {e}")
 
     def _decrypt_voucher(self, asin: str, license_response: Dict) -> Optional[Dict]:
         """Decrypts the license response voucher to get key and IV."""
@@ -136,9 +157,27 @@ class AudiobookDownloader:
             self._log(f"❌ Failed to decrypt voucher: {e}", asin)
             return None
 
-    
+
     def get_download_state(self, asin: str) -> Dict:
+        """Get download state from in-memory progress tracking"""
         return self.download_states.get(asin, {})
+
+    def get_library_entry(self, asin: str) -> Dict:
+        """Get library entry from persistent library.json"""
+        return self.library_state.get(asin, {})
+
+    def add_to_library(self, asin: str, title: str, file_path: str, **metadata):
+        """Add a book to the library state and persist to disk"""
+        self.library_state[asin] = {
+            'asin': asin,
+            'title': title,
+            'file_path': file_path,
+            'state': DownloadState.CONVERTED.value,
+            'timestamp': time.time(),
+            'downloaded_by_account': self.account_name,
+            **metadata
+        }
+        self._save_library_state()
     
     def set_download_state(self, asin: str, state: DownloadState, **metadata):
         if asin not in self.download_states:
@@ -303,13 +342,13 @@ class AudiobookDownloader:
         # Normalize library path for comparison
         target_lib = str(Path(target_library_path).resolve())
 
-        for asin, state in self.download_states.items():
+        for asin, entry in self.library_state.items():
             # Only check converted books
-            if state.get('state') != DownloadState.CONVERTED.value:
+            if entry.get('state') != DownloadState.CONVERTED.value:
                 continue
 
             # Get stored file path
-            stored_path = state.get('file_path')
+            stored_path = entry.get('file_path')
             if not stored_path or not Path(stored_path).exists():
                 continue
 
@@ -324,8 +363,8 @@ class AudiobookDownloader:
                 continue  # Skip if path resolution fails
 
             # Compare title and author
-            stored_title = self._normalize_for_matching(state.get('title', ''))
-            # Note: authors might not be in state, we'd need to extract from file metadata
+            stored_title = self._normalize_for_matching(entry.get('title', ''))
+            # Note: authors might not be in entry, we'd need to extract from file metadata
             # For now, focus on title similarity
 
             author_similarity = self._calculate_similarity(normalized_author, normalized_author)  # Will enhance this
@@ -362,7 +401,7 @@ class AudiobookDownloader:
 
     def sync_library(self) -> Dict:
         """
-        Scan library directory and populate in-memory download states with existing M4B files.
+        Scan library directory and populate library.json with existing M4B files.
         Returns: Statistics about the sync operation
         """
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -391,19 +430,19 @@ class AudiobookDownloader:
                     audiobook = MP4(str(m4b_file))
                     title = audiobook.get('©nam', [None])[0] or m4b_file.stem
 
-                    # Check if ASIN already in download states
-                    existing_state = self.download_states.get(asin)
+                    # Check if ASIN already in library state
+                    existing_entry = self.library_state.get(asin)
 
-                    if existing_state:
+                    if existing_entry:
                         # Update existing entry with current file path
-                        existing_state['file_path'] = str(m4b_file)
-                        existing_state['title'] = title
-                        existing_state['timestamp'] = time.time()
+                        existing_entry['file_path'] = str(m4b_file)
+                        existing_entry['title'] = title
+                        existing_entry['timestamp'] = time.time()
                         stats['entries_updated'] += 1
                         print(f"[{timestamp}]   ✓ Updated: {title} ({asin})")
                     else:
                         # Add new entry
-                        self.download_states[asin] = {
+                        self.library_state[asin] = {
                             'state': DownloadState.CONVERTED.value,
                             'asin': asin,
                             'title': title,
@@ -417,6 +456,9 @@ class AudiobookDownloader:
             except Exception as e:
                 stats['errors'] += 1
                 print(f"[{timestamp}]   ⚠️  Error processing {m4b_file.name}: {e}")
+
+        # Save updated library state to disk
+        self._save_library_state()
 
         print(f"[{timestamp}] ✅ Library sync complete!")
         print(f"[{timestamp}]    Files scanned: {stats['files_scanned']}")
@@ -859,11 +901,11 @@ class AudiobookDownloader:
         paths = self._get_file_paths(book_title, book_asin, product)
         m4b_file = paths['m4b_file']
 
-        # Check if book already downloaded (using stored file_path from download history)
-        existing_state = self.get_download_state(book_asin)
-        if existing_state.get('state') == DownloadState.CONVERTED.value:
+        # Check if book already in library (using stored file_path from library.json)
+        existing_entry = self.get_library_entry(book_asin)
+        if existing_entry.get('state') == DownloadState.CONVERTED.value:
             # Check stored file path first
-            stored_path = existing_state.get('file_path')
+            stored_path = existing_entry.get('file_path')
             if stored_path and Path(stored_path).exists():
                 self._log(f"✅ '{book_title}' already in library: {Path(stored_path).name}", book_asin)
                 return str(stored_path)
@@ -871,12 +913,13 @@ class AudiobookDownloader:
                 # Fallback: check expected path based on current naming pattern
                 self._log(f"✅ '{book_title}' already in library: {m4b_file.name}", book_asin)
                 # Update stored path to current location
-                self.set_download_state(book_asin, DownloadState.CONVERTED, file_path=str(m4b_file))
+                self.add_to_library(book_asin, book_title, str(m4b_file))
                 return str(m4b_file)
             else:
                 # File is missing, clear state and re-download
                 self._log(f"⚠️  '{book_title}' was downloaded but file is missing. Re-downloading...", book_asin)
-                self.download_states.pop(book_asin, None)
+                self.library_state.pop(book_asin, None)
+                self._save_library_state()
 
         # Fuzzy duplicate check (for different ASINs but same book, e.g., regional editions)
         # Only checks within the SAME library to allow different language versions in separate libraries
@@ -930,7 +973,7 @@ class AudiobookDownloader:
             # Check if already in library
             if final_m4b_file.exists():
                 self._log(f"✅ Already in library: {final_m4b_file.name}", asin)
-                self.set_download_state(asin, DownloadState.CONVERTED, file_path=str(final_m4b_file))
+                self.add_to_library(asin, title, str(final_m4b_file))
                 return str(final_m4b_file)
 
             # Download AAX file to temp directory if not already downloaded
@@ -977,8 +1020,8 @@ class AudiobookDownloader:
             self._log(f"📁 Moving to library...", asin)
             self._move_to_library(temp_m4b_file, final_m4b_file, title, asin)
 
-            # Store file path in download state for duplicate detection
-            self.set_download_state(asin, DownloadState.CONVERTED, file_path=str(final_m4b_file))
+            # Add to library state (persisted to library.json for duplicate detection)
+            self.add_to_library(asin, title, str(final_m4b_file))
 
             # Cleanup temporary files if requested
             if cleanup_aax:

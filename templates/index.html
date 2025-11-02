@@ -190,6 +190,9 @@
 
     // Filter variables
     let currentlyDisplayedBooks = [];
+
+    // Library state - ASINs of books already in library.json
+    let libraryStateAsins = new Set();
     
     function setupEventListeners() {
         // Account selection
@@ -331,21 +334,35 @@
         window.location.href = `/auth/login/${currentAccount}`;
     }
     
+    async function loadLibraryState() {
+        try {
+            const result = await apiCall('/api/library/state');
+            if (result.success) {
+                libraryStateAsins = new Set(result.asins);
+            }
+        } catch (error) {
+            console.error('Failed to load library state:', error);
+        }
+    }
+
     async function fetchLibrary() {
         if (!currentAccount) return;
-        
+
         const btn = document.getElementById('refreshLibraryBtn');
         btn.setAttribute('data-original-text', btn.innerHTML);
         showLoading(btn, true);
-        
+
         showLoadingSpinner('Loading your Audible library...');
-        
+
         try {
+            // Load library state first to mark books already in library
+            await loadLibraryState();
+
             const result = await apiCall('/api/library/fetch', {
                 method: 'POST',
                 body: JSON.stringify({ account_name: currentAccount })
             });
-            
+
             library = result.library;
             populateFilterDropdowns(library);
             displayLibrary(library);
@@ -355,7 +372,7 @@
             if (localLibraryId) {
                 document.getElementById('compareLibrariesBtn').style.display = 'block';
             }
-            
+
         } catch (error) {
             showAlert('Failed to load library: ' + error.message, 'danger');
         } finally {
@@ -495,16 +512,22 @@
         const minutes = book.length_mins % 60;
         const duration = book.length_mins ? `${hours}h ${minutes}m` : 'Unknown';
 
+        // Check if book is in library
+        const inLibrary = libraryStateAsins.has(book.asin);
+        const libraryBadge = inLibrary
+            ? '<span class="badge bg-success ms-2"><i class="fas fa-check"></i> In Library</span>'
+            : '';
+
         item.innerHTML = `
             <input class="form-check-input book-checkbox me-3" type="checkbox" id="list_book_${book.asin}" data-asin="${book.asin}">
             <img src="${book.cover_url || 'https://via.placeholder.com/50x75?text=No+Cover'}" class="book-cover" alt="${book.title}">
             <div class="book-info">
-                <h6 class="mb-1">${book.title}</h6>
+                <h6 class="mb-1">${book.title} ${libraryBadge}</h6>
                 <p class="mb-1 text-muted">${book.authors}</p>
                 <small class="text-muted">Length: ${duration}</small>
                 <div class="progress-container mt-2" style="display: none;">
                     <div class="progress" style="height: 6px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
                              role="progressbar" style="width: 0%"></div>
                     </div>
                     <small class="progress-text text-muted mt-1"></small>
@@ -514,7 +537,7 @@
         `;
 
         item.addEventListener('click', (e) => {
-            if (e.target.type !== 'checkbox') {
+            if (e.target.type !== 'checkbox' && !e.target.classList.contains('badge')) {
                 const checkbox = item.querySelector('.book-checkbox');
                 checkbox.checked = !checkbox.checked;
                 toggleBookSelection(book.asin, checkbox.checked);
@@ -849,12 +872,12 @@
         const listItem = document.querySelector(`.book-list-item[data-asin="${asin}"]`);
 
         if (!card && !listItem) return;
-        
+
         console.log(`Updating ${asin}: ${progressInfo.state} - ${progressInfo.progress_percent}%`);
 
         let statusText = '';
         let progressPercent = progressInfo.progress_percent || 0;
-        
+
         switch (progressInfo.state) {
             case 'pending':
                 statusText = 'Pending...';
@@ -882,6 +905,12 @@
                 break;
             case 'converted':
                 statusText = '✅ Complete';
+                // Refresh library state when download completes to show badge
+                loadLibraryState().then(() => {
+                    if (library.length > 0) {
+                        displayLibrary(library);
+                    }
+                });
                 break;
             case 'error':
                 statusText = `❌ Error`;
@@ -1125,15 +1154,18 @@
     function createBookCard(book) {
         const col = document.createElement('div');
         col.className = 'col-md-4 col-lg-3 col-xl-2';
-        
+
         const hours = Math.floor(book.length_mins / 60);
         const minutes = book.length_mins % 60;
         const duration = book.length_mins ? `${hours}h ${minutes}m` : 'Unknown';
-        
+
+        // Check if book is in library
+        const inLibrary = libraryStateAsins.has(book.asin);
+
         // Add availability class
         let availabilityClass = '';
         let availabilityIcon = '';
-        
+
         if (book.availability === 'missing') {
             availabilityClass = 'book-missing';
             availabilityIcon = '<i class="fas fa-exclamation-circle text-danger position-absolute top-0 end-0 m-2"></i>';
@@ -1141,29 +1173,35 @@
             availabilityClass = 'book-available';
             availabilityIcon = '<i class="fas fa-check-circle text-success position-absolute top-0 end-0 m-2"></i>';
         }
-        
+
+        // Add library indicator badge (separate from availability icon)
+        const libraryBadge = inLibrary
+            ? '<span class="badge bg-success position-absolute bottom-0 end-0 m-2" style="z-index: 5;" title="In Library"><i class="fas fa-check"></i> In Library</span>'
+            : '';
+
         col.innerHTML = `
             <div class="card book-card ${availabilityClass}" data-asin="${book.asin}">
                 <div class="status-overlay"></div>
                 ${availabilityIcon}
                 <input class="form-check-input book-checkbox position-absolute top-0 start-0 m-2" type="checkbox" id="book_${book.asin}" data-asin="${book.asin}">
-                <img src="${book.cover_url || 'https://via.placeholder.com/150x200?text=No+Cover'}" 
+                <img src="${book.cover_url || 'https://via.placeholder.com/150x200?text=No+Cover'}"
                      class="card-img-top book-cover" alt="${book.title}">
+                ${libraryBadge}
                 <div class="card-body">
                     <h6 class="card-title">${book.title}</h6>
                     <p class="card-text text-muted">${book.authors}</p>
                 </div>
             </div>
         `;
-        
+
         const card = col.querySelector('.book-card');
         card.addEventListener('click', (e) => {
-            if (e.target.classList.contains('fas')) return; // Don't select when clicking icons
+            if (e.target.classList.contains('fas') || e.target.classList.contains('badge')) return; // Don't select when clicking icons or badge
             const checkbox = card.querySelector('.book-checkbox');
             checkbox.checked = !checkbox.checked;
             toggleBookSelection(book.asin, checkbox.checked);
         });
-        
+
         return col;
     }
     
@@ -1484,6 +1522,12 @@
                     `Added ${stats.entries_added}, updated ${stats.entries_updated}.`,
                     'success'
                 );
+
+                // Refresh library state and re-display library with updated indicators
+                await loadLibraryState();
+                if (library.length > 0) {
+                    displayLibrary(library);
+                }
             } else {
                 showAlert('Sync completed with warnings', 'warning');
             }

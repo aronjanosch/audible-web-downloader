@@ -227,4 +227,27 @@ def update_naming_settings():
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500 
+        }), 500
+
+@main_bp.route('/api/library/state', methods=['GET'])
+def get_library_state():
+    """Get library state (list of ASINs in library.json)"""
+    try:
+        library_file = Path("config") / "library.json"
+        if library_file.exists():
+            with open(library_file, 'r') as f:
+                library_state = json.load(f)
+                # Return just the ASINs for efficient lookup
+                return jsonify({
+                    'success': True,
+                    'asins': list(library_state.keys())
+                })
+        return jsonify({
+            'success': True,
+            'asins': []
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
