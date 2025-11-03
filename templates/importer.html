@@ -465,6 +465,27 @@
     .log-entry.info {
         color: #17a2b8;
     }
+    
+    /* Path Preview Styles */
+    .path-preview {
+        background-color: #f8f9fa;
+        padding: 0.75rem;
+        border-radius: 8px;
+    }
+    
+    .path-preview code {
+        background-color: white;
+        padding: 0.5rem;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+        font-size: 0.85rem;
+        word-break: break-all;
+    }
+    
+    .path-preview .text-success code {
+        border-color: #28a745;
+        background-color: #f0fff4;
+    }
 </style>
 
 <script>
@@ -792,6 +813,11 @@ function displayMatchResults(data) {
         if (item.selected) {
             importState.selectedFiles.add(index);
         }
+        
+        // Fetch path preview AFTER card is in DOM (for matched files only)
+        if (item.match_result.status === 'matched' && !item.duplicate_status) {
+            fetchPathPreview(index, item.match_result.selected_match);
+        }
     });
     
     updateSelectedCount();
@@ -810,6 +836,7 @@ function createMatchCard(item, index) {
     let statusBadge = '';
     let confidenceBadge = '';
     let matchInfo = '';
+    let pathPreview = '';
     
     if (duplicate) {
         statusBadge = '<span class="badge bg-danger">Duplicate</span>';
@@ -833,6 +860,22 @@ function createMatchCard(item, index) {
                 </div>
             </div>
         `;
+        
+        // Add path preview section
+        pathPreview = `
+            <div class="path-preview mt-3 pt-3 border-top">
+                <div class="mb-2">
+                    <small class="text-muted d-block mb-1"><i class="fas fa-folder-open"></i> Source:</small>
+                    <code class="d-block text-wrap small">${escapeHtml(fileInfo.file_path)}</code>
+                </div>
+                <div>
+                    <small class="text-muted d-block mb-1"><i class="fas fa-arrow-down"></i> Will be imported to:</small>
+                    <div id="target-path-${index}" class="text-muted small">
+                        <i class="fas fa-spinner fa-spin"></i> Generating path preview...
+                    </div>
+                </div>
+            </div>
+        `;
     } else if (matchResult.status === 'uncertain') {
         statusBadge = '<span class="badge bg-warning">Uncertain</span>';
         matchInfo = `<p class="text-warning mb-0"><i class="fas fa-question-circle"></i> ${matchResult.reason}</p>`;
@@ -842,7 +885,7 @@ function createMatchCard(item, index) {
     }
     
     card.innerHTML = `
-        <div class="row align-items-center">
+        <div class="row align-items-start">
             <div class="col-auto checkbox-wrapper" onclick="toggleSelect(${index})">
                 <input type="checkbox" class="form-check-input" ${selected ? 'checked' : ''} ${duplicate ? 'disabled' : ''}>
             </div>
@@ -861,6 +904,7 @@ function createMatchCard(item, index) {
                     </div>
                 </div>
                 ${matchInfo}
+                ${pathPreview}
                 ${!duplicate && matchResult.status !== 'not_found' ? `
                     <button class="btn btn-sm btn-outline-primary mt-2" onclick="openManualSearch(${index})">
                         <i class="fas fa-search"></i> Search Different Match
@@ -869,6 +913,9 @@ function createMatchCard(item, index) {
             </div>
         </div>
     `;
+    
+    // Note: fetchPathPreview will be called AFTER the card is added to DOM
+    // (see displayMatchResults function)
     
     return card;
 }
@@ -1008,6 +1055,32 @@ function displaySearchResults(results) {
     });
     
     document.getElementById('searchResults').style.display = 'block';
+}
+
+function fetchPathPreview(index, audibleProduct) {
+    const targetElement = document.getElementById(`target-path-${index}`);
+    if (!targetElement) return;
+    
+    fetch('/api/importer/preview-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            audible_product: audibleProduct,
+            library_path: importState.targetLibrary
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            targetElement.innerHTML = `<code class="d-block text-wrap small text-success">${escapeHtml(data.target_path)}</code>`;
+        } else {
+            targetElement.innerHTML = `<span class="text-danger small">Error: ${escapeHtml(data.error)}</span>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error fetching path preview:', error);
+        targetElement.innerHTML = `<span class="text-danger small">Failed to generate preview</span>`;
+    });
 }
 
 function selectManualMatch(product) {

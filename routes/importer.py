@@ -232,6 +232,69 @@ def match_files():
         return jsonify({'error': f'Failed to match files: {str(e)}'}), 500
 
 
+@importer_bp.route('/preview-path', methods=['POST'])
+def preview_import_path():
+    """
+    Preview the target import path for a file.
+    
+    Request body:
+        {
+            "audible_product": {...},
+            "library_path": "/path/to/library"
+        }
+    
+    Response:
+        {
+            "success": true,
+            "target_path": "/path/to/library/Author/Title.m4b"
+        }
+    """
+    try:
+        data = request.get_json()
+        audible_product = data.get('audible_product')
+        library_path = data.get('library_path')
+        
+        if not audible_product:
+            return jsonify({'error': 'audible_product is required'}), 400
+        
+        if not library_path:
+            return jsonify({'error': 'library_path is required'}), 400
+        
+        # Use a temporary importer instance to build the path
+        # We don't need authentication for path building
+        from downloader import AudiobookDownloader
+        
+        # Create a minimal downloader instance for path building
+        downloader = AudiobookDownloader(
+            account_name="temp",
+            region="us",
+            library_path=library_path,
+            downloads_dir="downloads"
+        )
+        
+        # Build the target path
+        target_path = downloader.build_path_from_pattern(
+            base_path=library_path,
+            title=audible_product.get('title', 'Unknown'),
+            authors=audible_product.get('authors', []),
+            narrators=audible_product.get('narrators', []),
+            series=audible_product.get('series'),
+            release_date=audible_product.get('release_date'),
+            publisher=audible_product.get('publisher_name'),
+            language=audible_product.get('language'),
+            asin=audible_product.get('asin')
+        )
+        
+        return jsonify({
+            'success': True,
+            'target_path': str(target_path)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating path preview: {e}", exc_info=True)
+        return jsonify({'error': f'Failed to generate preview: {str(e)}'}), 500
+
+
 @importer_bp.route('/search-manual', methods=['POST'])
 def manual_search():
     """
