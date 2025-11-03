@@ -40,6 +40,10 @@
             background-clip: text;
         }
         
+        .account-selector-group {
+            min-width: 250px;
+        }
+        
         .account-selector {
             min-width: 200px;
         }
@@ -273,11 +277,16 @@
                 
                 <!-- Account Selector and Actions -->
                 <div class="d-flex align-items-center gap-3">
-                    <!-- Account Selector -->
+                    <!-- Account Selector with Add Button -->
                     <div class="d-flex align-items-center gap-2">
-                        <select class="form-select form-select-sm account-selector" id="accountSelect">
-                            <option value="">Select account...</option>
-                        </select>
+                        <div class="input-group input-group-sm account-selector-group">
+                            <select class="form-select form-select-sm account-selector" id="accountSelect">
+                                <option value="">Select account...</option>
+                            </select>
+                            <button class="btn btn-outline-primary" type="button" id="addAccountBtn" title="Add Account">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
                         <span id="authStatusIndicator" class="badge auth-status-badge bg-secondary" style="display: none;">
                             <i class="fas fa-circle"></i> No Account
                         </span>
@@ -310,49 +319,26 @@
         <div class="offcanvas-body">
             <!-- Account Management Section -->
             <div class="settings-section">
-                <h6><i class="fas fa-user-circle"></i> Accounts</h6>
+                <h6><i class="fas fa-user-circle"></i> Current Account</h6>
                 
                 <!-- Current Account Info -->
                 <div id="accountStatus" style="display: none;">
                     <div id="authStatus" class="alert alert-warning mb-3">
                         <i class="fas fa-exclamation-triangle"></i> Not authenticated
                     </div>
-                    <button id="generateAccountInviteBtn" class="btn btn-sm btn-outline-primary w-100 mb-2" style="display: none;">
+                    <button id="generateAccountInviteBtn" class="btn btn-sm btn-outline-primary w-100 mb-3" style="display: none;">
                         <i class="fas fa-link"></i> Generate Invite Link
+                    </button>
+                    
+                    <!-- Delete Account Button -->
+                    <button class="btn btn-sm btn-outline-danger w-100" id="deleteAccountBtn">
+                        <i class="fas fa-trash"></i> Delete Current Account
                     </button>
                 </div>
                 
-                <!-- Add New Account -->
-                <form id="addAccountForm" class="mb-3">
-                    <label class="form-label small fw-bold">Add New Account</label>
-                    <div class="mb-2">
-                        <input type="text" class="form-control form-control-sm" 
-                               id="accountName" placeholder="Account Name" required>
-                    </div>
-                    <div class="mb-2">
-                        <select class="form-select form-select-sm" id="accountRegion">
-                            <option value="us">United States</option>
-                            <option value="uk">United Kingdom</option>
-                            <option value="de">Germany</option>
-                            <option value="fr">France</option>
-                            <option value="ca">Canada</option>
-                            <option value="it">Italy</option>
-                            <option value="au">Australia</option>
-                            <option value="in">India</option>
-                            <option value="jp">Japan</option>
-                            <option value="es">Spain</option>
-                            <option value="br">Brazil</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                        <i class="fas fa-plus"></i> Add Account
-                    </button>
-                </form>
-                
-                <!-- Delete Account Button -->
-                <button class="btn btn-sm btn-outline-danger w-100" id="deleteAccountBtn" style="display: none;">
-                    <i class="fas fa-trash"></i> Delete Current Account
-                </button>
+                <div id="noAccountSelected" class="text-muted small">
+                    <i class="fas fa-info-circle"></i> No account selected. Use the "+" button next to the account selector to add one.
+                </div>
             </div>
             
             <!-- Libraries Management Section -->
@@ -514,6 +500,53 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Account Modal -->
+    <div class="modal fade" id="addAccountModal" tabindex="-1" aria-labelledby="addAccountModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAccountModalLabel">
+                        <i class="fas fa-user-plus me-2"></i>Add Audible Account
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addAccountForm">
+                        <div class="mb-3">
+                            <label for="accountName" class="form-label">Account Name</label>
+                            <input type="text" class="form-control" id="accountName" 
+                                   placeholder="e.g., My Account, John's Account" required>
+                            <small class="text-muted">Choose a name to identify this account</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="accountRegion" class="form-label">Region</label>
+                            <select class="form-select" id="accountRegion" required>
+                                <option value="us">United States</option>
+                                <option value="uk">United Kingdom</option>
+                                <option value="de">Germany</option>
+                                <option value="fr">France</option>
+                                <option value="ca">Canada</option>
+                                <option value="it">Italy</option>
+                                <option value="au">Australia</option>
+                                <option value="in">India</option>
+                                <option value="jp">Japan</option>
+                                <option value="es">Spain</option>
+                                <option value="br">Brazil</option>
+                            </select>
+                            <small class="text-muted">Select your Audible marketplace region</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitAddAccount">
+                        <i class="fas fa-plus"></i> Add Account
+                    </button>
                 </div>
             </div>
         </div>
