@@ -974,26 +974,52 @@
             return;
         }
 
+        const downloadBtn = document.getElementById('downloadBtn');
+        const bookCount = selectedBooks.size;
+        const originalContent = downloadBtn.innerHTML;
+        
+        // Add loading animation to button
+        downloadBtn.disabled = true;
+        downloadBtn.innerHTML = `
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Adding to queue...
+        `;
+        
+        // Add animation class
+        downloadBtn.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            downloadBtn.style.transform = 'scale(1)';
+        }, 150);
+        
+        // Reset button after 3 seconds regardless of API response
+        setTimeout(() => {
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = originalContent;
+        }, 3000);
+
         // Start SSE-based progress tracking immediately before making the download request
         startProgressTracking();
 
-        try {
-            const result = await apiCall('/api/download/books', {
-                method: 'POST',
-                body: JSON.stringify({
-                    selected_asins: Array.from(selectedBooks),
-                    cleanup_aax: cleanupAax,
-                    library_name: libraryName
-                })
-            });
-
-            showAlert(result.message, 'success');
-
-        } catch (error) {
-            showAlert('Download failed: ' + error.message, 'danger');
+        // Fire and forget the API call - don't wait for it
+        apiCall('/api/download/books', {
+            method: 'POST',
+            body: JSON.stringify({
+                selected_asins: Array.from(selectedBooks),
+                cleanup_aax: cleanupAax,
+                library_name: libraryName
+            })
+        }).then(() => {
+            // Show success notification at bottom
+            showBottomNotification(
+                `${bookCount} book${bookCount > 1 ? 's' : ''} added to download queue! <a href="/downloads" class="text-white text-decoration-underline ms-2">View Progress →</a>`,
+                'success',
+                8000
+            );
+        }).catch(error => {
+            showBottomNotification('Download failed: ' + error.message, 'error', 5000);
             // Stop progress tracking if download failed to start
             stopProgressTracking();
-        }
+        });
     }
 
     function startProgressTracking() {

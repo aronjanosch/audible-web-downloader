@@ -1,11 +1,16 @@
-from flask import Blueprint, request, jsonify, session, current_app, Response
+from flask import Blueprint, request, jsonify, session, current_app, Response, render_template
 import asyncio
 import json
 import os
 import time
-from downloader import download_books, AudiobookDownloader
+from downloader import download_books, AudiobookDownloader, DownloadQueueManager
 
 download_bp = Blueprint('download', __name__)
+
+@download_bp.route('/downloads')
+def downloads_page():
+    """Download progress monitoring page"""
+    return render_template('downloads.html')
 
 def load_accounts():
     """Load saved Audible accounts from JSON file"""
@@ -101,57 +106,23 @@ def download_selected_books():
 @download_bp.route('/api/download/status/<asin>')
 def download_status_asin(asin):
     """API endpoint to check download status for a specific book"""
-    current_account = session.get('current_account')
-    if not current_account:
-        return jsonify({'error': 'No account selected'}), 400
-
-    download_library = session.get('download_library')
-    if not download_library:
-        return jsonify({'error': 'No active download library'}), 400
-
-    accounts = load_accounts()
-    if current_account not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-
-    libraries = load_libraries()
-    if download_library not in libraries:
-        return jsonify({'error': 'Download library not found'}), 404
-
-    region = accounts[current_account]['region']
-    library_config = libraries[download_library]
-    library_path = library_config['path']
-
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
-    state = downloader.get_download_state(asin)
-    return jsonify(state)
+    # Use shared queue manager for download status
+    queue_manager = DownloadQueueManager()
+    state = queue_manager.get_download(asin)
+    
+    if state:
+        return jsonify(state)
+    else:
+        return jsonify({})
 
 @download_bp.route('/api/download/progress')
 def download_progress():
     """API endpoint to get progress for all downloads"""
-    current_account = session.get('current_account')
-    if not current_account:
-        return jsonify({'error': 'No account selected'}), 400
-
-    download_library = session.get('download_library')
-    if not download_library:
-        return jsonify({})  # Return empty progress if no active downloads
-
-    accounts = load_accounts()
-    if current_account not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-
-    libraries = load_libraries()
-    if download_library not in libraries:
-        return jsonify({})  # Return empty if library no longer exists
-
-    region = accounts[current_account]['region']
-    library_config = libraries[download_library]
-    library_path = library_config['path']
-
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
-
+    # Use shared queue manager for download progress
+    queue_manager = DownloadQueueManager()
+    
     # Get all download states
-    all_states = downloader.download_states
+    all_states = queue_manager.get_all_downloads()
 
     # Format progress data
     progress_data = {}
@@ -163,7 +134,11 @@ def download_progress():
             'progress_percent': state.get('progress_percent', 0),
             'downloaded_bytes': state.get('downloaded_bytes', 0),
             'total_bytes': state.get('total_bytes'),
-            'error': state.get('error')
+            'speed': state.get('speed', 0),
+            'eta': state.get('eta', 0),
+            'elapsed': state.get('elapsed', 0),
+            'error': state.get('error'),
+            'error_type': state.get('error_type')
         }
         progress_data[asin] = progress_info
 
@@ -172,38 +147,16 @@ def download_progress():
 @download_bp.route('/api/download/status')
 def download_status():
     """API endpoint to check overall download status"""
-    current_account = session.get('current_account')
-    if not current_account:
-        return jsonify({'status': 'idle'})
-
-    download_library = session.get('download_library')
-    if not download_library:
-        return jsonify({'status': 'idle'})
-
-    accounts = load_accounts()
-    if current_account not in accounts:
-        return jsonify({'status': 'idle'})
-
-    libraries = load_libraries()
-    if download_library not in libraries:
-        return jsonify({'status': 'idle'})
-
-    region = accounts[current_account]['region']
-    library_config = libraries[download_library]
-    library_path = library_config['path']
-
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
-
-    # Count active downloads
-    active_downloads = 0
-    for state_data in downloader.download_states.values():
-        state = state_data.get('state', '')
-        if state in ['pending', 'license_requested', 'license_granted', 'downloading', 'decrypting']:
-            active_downloads += 1
+    # Use shared queue manager for download status
+    queue_manager = DownloadQueueManager()
+    stats = queue_manager.get_statistics()
 
     return jsonify({
-        'status': 'downloading' if active_downloads > 0 else 'idle',
-        'active_downloads': active_downloads
+        'status': 'downloading' if stats['active'] > 0 else 'idle',
+        'active_downloads': stats['active'],
+        'queued': stats['queued'],
+        'completed': stats['completed'],
+        'failed': stats['failed']
     })
 
 @download_bp.route('/api/library/sync', methods=['POST'])
@@ -249,42 +202,19 @@ def sync_library():
 @download_bp.route('/api/download/progress-stream')
 def download_progress_stream():
     """Server-Sent Events endpoint for real-time progress updates"""
-    current_account = session.get('current_account')
-    if not current_account:
-        return jsonify({'error': 'No account selected'}), 400
-
-    download_library = session.get('download_library')
-    if not download_library:
-        return jsonify({'error': 'No active download library'}), 400
-
-    accounts = load_accounts()
-    if current_account not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-
-    libraries = load_libraries()
-    if download_library not in libraries:
-        return jsonify({'error': 'Download library not found'}), 404
-
-    region = accounts[current_account]['region']
-    library_config = libraries[download_library]
-    library_path = library_config['path']
-
-    downloader = AudiobookDownloader(current_account, region, library_path=library_path)
+    queue_manager = DownloadQueueManager()
 
     def generate_progress_updates():
         """Generate progress updates as Server-Sent Events"""
-        last_progress_data = {}
-        consecutive_no_changes = 0
         
         while True:
             try:
-                # Get all download states
-                all_states = downloader.download_states
+                # Get all download states from shared manager
+                all_states = queue_manager.get_all_downloads()
+                stats = queue_manager.get_statistics()
                 
-                # Format progress data
+                # Format progress data with all fields
                 progress_data = {}
-                active_downloads = 0
-                
                 for asin, state in all_states.items():
                     progress_info = {
                         'state': state.get('state', 'unknown'),
@@ -293,25 +223,23 @@ def download_progress_stream():
                         'progress_percent': state.get('progress_percent', 0),
                         'downloaded_bytes': state.get('downloaded_bytes', 0),
                         'total_bytes': state.get('total_bytes'),
-                        'error': state.get('error')
+                        'speed': state.get('speed', 0),
+                        'eta': state.get('eta', 0),
+                        'elapsed': state.get('elapsed', 0),
+                        'error': state.get('error'),
+                        'error_type': state.get('error_type'),
+                        'downloaded_by_account': state.get('downloaded_by_account')
                     }
                     progress_data[asin] = progress_info
-                    
-                    # Count active downloads
-                    if state.get('state') not in ['converted', 'error']:
-                        active_downloads += 1
                 
-                # Only send data if there are changes or active downloads
-                if progress_data != last_progress_data or active_downloads > 0:
-                    yield f"data: {json.dumps(progress_data)}\n\n"
-                    last_progress_data = progress_data.copy()
-                    consecutive_no_changes = 0
-                else:
-                    consecutive_no_changes += 1
+                # Send combined update with progress and statistics
+                update = {
+                    'downloads': progress_data,
+                    'stats': stats,
+                    'timestamp': time.time()
+                }
                 
-                # Stop streaming after 30 seconds of no active downloads and no changes
-                if active_downloads == 0 and consecutive_no_changes > 30:
-                    break
+                yield f"data: {json.dumps(update)}\n\n"
                     
                 time.sleep(1)  # Send updates every second
                 

@@ -30,6 +30,186 @@ class DownloadState(Enum):
     CONVERTED = "converted"
     ERROR = "error"
 
+class DownloadQueueManager:
+    """
+    Singleton manager for download queue and progress tracking.
+    Provides persistent state storage shared across all downloader instances.
+    """
+    _instance = None
+    _lock = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        # Only initialize once (singleton pattern)
+        if self._initialized:
+            return
+        
+        self._initialized = True
+        self._queue_file = Path("config") / "download_queue.json"
+        self._queue_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing queue or create empty
+        self._load_queue()
+        
+        # Initialize batch tracking
+        if '_batch_info' not in self._queue:
+            self._queue['_batch_info'] = {
+                'current_batch_id': None,
+                'batch_complete': False,
+                'batch_start_time': None
+            }
+    
+    def _load_queue(self):
+        """Load download queue from disk"""
+        if self._queue_file.exists():
+            try:
+                with open(self._queue_file, 'r') as f:
+                    self._queue = json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"Warning: Could not load download queue: {e}")
+                self._queue = {}
+        else:
+            self._queue = {}
+    
+    def _save_queue(self):
+        """Persist download queue to disk"""
+        try:
+            with open(self._queue_file, 'w') as f:
+                json.dump(self._queue, f, indent=2)
+        except IOError as e:
+            print(f"Warning: Could not save download queue: {e}")
+    
+    def get_all_downloads(self) -> Dict:
+        """Get all downloads in the queue (excluding batch info)"""
+        # Return a copy without the batch metadata
+        downloads = {k: v for k, v in self._queue.items() if not k.startswith('_')}
+        return downloads
+    
+    def get_download(self, asin: str) -> Optional[Dict]:
+        """Get a specific download by ASIN"""
+        return self._queue.get(asin)
+    
+    def update_download(self, asin: str, updates: Dict):
+        """Update download state"""
+        if asin not in self._queue:
+            self._queue[asin] = {}
+        
+        # Merge updates into existing entry
+        self._queue[asin].update(updates)
+        self._queue[asin]['last_updated'] = time.time()
+        
+        # Persist to disk
+        self._save_queue()
+    
+    def add_to_queue(self, asin: str, title: str, **metadata):
+        """Add a new download to the queue"""
+        # Check if we need to start a new batch
+        batch_info = self._queue.get('_batch_info', {})
+        
+        # Start a new batch if:
+        # 1. No current batch exists, OR
+        # 2. Current batch is marked complete
+        if not batch_info.get('current_batch_id') or batch_info.get('batch_complete', False):
+            # Start a new batch
+            batch_id = f"batch_{int(time.time())}"
+            self._queue['_batch_info'] = {
+                'current_batch_id': batch_id,
+                'batch_complete': False,
+                'batch_start_time': time.time()
+            }
+        
+        self._queue[asin] = {
+            'asin': asin,
+            'title': title,
+            'state': DownloadState.PENDING.value,
+            'added_at': time.time(),
+            'last_updated': time.time(),
+            'batch_id': self._queue['_batch_info']['current_batch_id'],
+            **metadata
+        }
+        self._save_queue()
+    
+    def remove_from_queue(self, asin: str):
+        """Remove a download from the queue"""
+        if asin in self._queue:
+            del self._queue[asin]
+            self._save_queue()
+    
+    def get_statistics(self) -> Dict:
+        """Get download statistics"""
+        batch_info = self._queue.get('_batch_info', {})
+        current_batch_id = batch_info.get('current_batch_id')
+        
+        stats = {
+            'active': 0,
+            'queued': 0,
+            'completed': 0,
+            'failed': 0,
+            'total_speed': 0,
+            'total_downloads': 0,
+            'batch_complete': batch_info.get('batch_complete', False),
+            'batch_id': current_batch_id
+        }
+        
+        for asin, download in self._queue.items():
+            # Skip metadata entries
+            if asin.startswith('_'):
+                continue
+                
+            # Only count downloads in current batch
+            if download.get('batch_id') != current_batch_id:
+                continue
+                
+            stats['total_downloads'] += 1
+            state = download.get('state', '')
+            
+            if state in ['pending', 'retrying']:
+                stats['queued'] += 1
+            elif state in ['license_requested', 'license_granted', 'downloading', 'download_complete', 'decrypting']:
+                stats['active'] += 1
+                # Add up download speeds for active downloads
+                if 'speed' in download:
+                    stats['total_speed'] += download['speed']
+            elif state == 'converted':
+                stats['completed'] += 1
+            elif state == 'error':
+                stats['failed'] += 1
+        
+        # Check if batch is complete (all downloads finished)
+        if stats['total_downloads'] > 0 and stats['active'] == 0 and stats['queued'] == 0:
+            if not batch_info.get('batch_complete', False):
+                # Mark batch as complete
+                self._queue['_batch_info']['batch_complete'] = True
+                self._save_queue()
+                stats['batch_complete'] = True
+        
+        return stats
+    
+    def clear_completed(self, older_than_hours: int = 24):
+        """Remove completed downloads older than specified hours"""
+        current_time = time.time()
+        cutoff_time = current_time - (older_than_hours * 3600)
+        
+        asins_to_remove = []
+        for asin, download in self._queue.items():
+            if download.get('state') == 'converted':
+                last_updated = download.get('last_updated', 0)
+                if last_updated < cutoff_time:
+                    asins_to_remove.append(asin)
+        
+        for asin in asins_to_remove:
+            del self._queue[asin]
+        
+        if asins_to_remove:
+            self._save_queue()
+        
+        return len(asins_to_remove)
+
 class AudiobookDownloader:
     def __init__(self, account_name, region="us", max_concurrent_downloads=3, library_path=None, downloads_dir=None):
         self.account_name = account_name
@@ -59,8 +239,8 @@ class AudiobookDownloader:
         self.library_file = Path("config") / "library.json"
         self.library_state = self._load_library_state()
 
-        # In-memory download progress tracking (not persisted to disk)
-        self.download_states = {}
+        # Use shared queue manager for download progress tracking (persisted to disk)
+        self.queue_manager = DownloadQueueManager()
 
         # Track download start times for elapsed time reporting
         self.download_start_times = {}
@@ -159,8 +339,8 @@ class AudiobookDownloader:
 
 
     def get_download_state(self, asin: str) -> Dict:
-        """Get download state from in-memory progress tracking"""
-        return self.download_states.get(asin, {})
+        """Get download state from shared queue manager"""
+        return self.queue_manager.get_download(asin) or {}
 
     def get_library_entry(self, asin: str) -> Dict:
         """Get library entry from persistent library.json"""
@@ -180,9 +360,14 @@ class AudiobookDownloader:
         self._save_library_state()
     
     def set_download_state(self, asin: str, state: DownloadState, **metadata):
-        if asin not in self.download_states:
-            self.download_states[asin] = {}
-
+        # Check if this is a new download
+        existing = self.queue_manager.get_download(asin)
+        
+        if not existing:
+            # New download - add to queue with batch tracking
+            title = metadata.get('title', 'Unknown')
+            self.queue_manager.add_to_queue(asin, title, downloaded_by_account=self.account_name)
+        
         # Always include ASIN and account info in state
         update_data = {
             'state': state.value,
@@ -192,16 +377,13 @@ class AudiobookDownloader:
         }
 
         # Add account info if not already present
-        if 'downloaded_by_account' not in self.download_states[asin]:
+        if not existing or 'downloaded_by_account' not in existing:
             update_data['downloaded_by_account'] = self.account_name
 
-        self.download_states[asin].update(update_data)
+        self.queue_manager.update_download(asin, update_data)
     
     def update_download_progress(self, asin: str, downloaded_bytes: int, total_bytes: int = None, **metadata):
         """Update download progress without changing state"""
-        if asin not in self.download_states:
-            self.download_states[asin] = {}
-
         progress_data = {
             'downloaded_bytes': downloaded_bytes,
             'progress_timestamp': time.time(),
@@ -212,7 +394,7 @@ class AudiobookDownloader:
             progress_data['total_bytes'] = total_bytes
             progress_data['progress_percent'] = min(100, (downloaded_bytes / total_bytes) * 100) if total_bytes > 0 else 0
 
-        self.download_states[asin].update(progress_data)
+        self.queue_manager.update_download(asin, progress_data)
     
     def _sanitize_filename(self, filename):
         return re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f-\x9f]', '_', filename)[:200]
@@ -881,20 +1063,29 @@ class AudiobookDownloader:
 
                             # Update progress if we have an asin
                             if asin:
-                                self.update_download_progress(asin, downloaded_bytes, total_bytes)
+                                # Calculate download speed and ETA
+                                current_time = time.time()
+                                elapsed = current_time - download_start_time
+                                speed = downloaded_bytes / elapsed if elapsed > 0 else 0
+                                eta = (total_bytes - downloaded_bytes) / speed if speed > 0 and total_bytes else 0
+                                
+                                # Update progress with speed and ETA
+                                self.update_download_progress(
+                                    asin, 
+                                    downloaded_bytes, 
+                                    total_bytes,
+                                    speed=speed,
+                                    eta=eta,
+                                    elapsed=elapsed
+                                )
 
                                 # Log progress every 10% or every 5 seconds
-                                current_time = time.time()
                                 if total_bytes and total_bytes > 0:
                                     percent = (downloaded_bytes / total_bytes) * 100
                                     percent_milestone = int(percent / 10) * 10  # Round down to nearest 10%
 
                                     if (percent_milestone > last_logged_percent and percent_milestone % 10 == 0) or \
                                        (current_time - last_log_time > 5):
-                                        # Calculate download speed
-                                        elapsed = current_time - download_start_time
-                                        speed = downloaded_bytes / elapsed if elapsed > 0 else 0
-
                                         downloaded_str = self._format_bytes(downloaded_bytes)
                                         total_str = self._format_bytes(total_bytes)
                                         speed_str = self._format_bytes(speed)
@@ -983,11 +1174,25 @@ class AudiobookDownloader:
                     self._log(f"❌ Error on attempt {attempt + 1}/{max_retries}: {e}", book_asin)
                     if attempt < max_retries - 1:
                         self._log(f"⏳ Retrying in 5 seconds...", book_asin)
-                        self.set_download_state(book_asin, DownloadState.RETRYING, error=str(e), attempt=attempt + 1)
+                        self.set_download_state(
+                            book_asin, 
+                            DownloadState.RETRYING, 
+                            error=str(e),
+                            error_type=type(e).__name__,
+                            attempt=attempt + 1,
+                            max_retries=max_retries
+                        )
                         await asyncio.sleep(5)
                     else:
                         self._log(f"💔 Failed after {max_retries} attempts", book_asin)
-                        self.set_download_state(book_asin, DownloadState.ERROR, error=str(e))
+                        self.set_download_state(
+                            book_asin, 
+                            DownloadState.ERROR, 
+                            error=str(e),
+                            error_type=type(e).__name__,
+                            failed_at=time.time(),
+                            attempts=max_retries
+                        )
                         # Cleanup start time on failure
                         if book_asin in self.download_start_times:
                             del self.download_start_times[book_asin]
@@ -1004,6 +1209,7 @@ class AudiobookDownloader:
             if final_m4b_file.exists():
                 self._log(f"✅ Already in library: {final_m4b_file.name}", asin)
                 self.add_to_library(asin, title, str(final_m4b_file))
+                self.set_download_state(asin, DownloadState.CONVERTED, title=title, file_path=str(final_m4b_file))
                 return str(final_m4b_file)
 
             # Download AAX file to temp directory if not already downloaded
@@ -1052,6 +1258,9 @@ class AudiobookDownloader:
 
             # Add to library state (persisted to library.json for duplicate detection)
             self.add_to_library(asin, title, str(final_m4b_file))
+            
+            # Update queue manager state to CONVERTED (important for UI progress tracking)
+            self.set_download_state(asin, DownloadState.CONVERTED, title=title, file_path=str(final_m4b_file))
 
             # Cleanup temporary files if requested
             if cleanup_aax:
