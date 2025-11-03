@@ -20,7 +20,7 @@
     <!-- Search and Controls Bar -->
     <div class="filter-bar mb-3">
         <div class="row g-3 align-items-center">
-            <div class="col-md-5">
+            <div class="col-lg-4 col-md-5">
                 <div class="input-group">
                     <span class="input-group-text bg-white border-end-0">
                         <i class="fas fa-search text-muted"></i>
@@ -29,7 +29,18 @@
                            placeholder="Search books by title or author...">
                 </div>
             </div>
-            <div class="col-md-7 text-end">
+            <div class="col-lg-3 col-md-4">
+                <!-- Download Library Selector -->
+                <div class="d-flex align-items-center gap-2" id="downloadLibrarySelector" style="display: none !important;">
+                    <label class="text-muted small mb-0 text-nowrap">
+                        <i class="fas fa-folder"></i> Download to:
+                    </label>
+                    <select class="form-select form-select-sm flex-grow-1" id="downloadLibrarySelect" required>
+                        <option value="">Select library...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-lg-5 col-md-3 text-end">
                 <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
                     <button id="selectAllVisibleBtn" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-check-double"></i> Select All
@@ -469,6 +480,7 @@
         const refreshBtn = document.getElementById('refreshLibraryBtn');
         const generateInviteBtn = document.getElementById('generateAccountInviteBtn');
         const statusIndicator = document.getElementById('authStatusIndicator');
+        const downloadLibrarySelector = document.getElementById('downloadLibrarySelector');
 
         if (isAuthenticated) {
             statusDiv.className = 'alert alert-success mb-3';
@@ -476,7 +488,13 @@
             authBtn.style.display = 'none';
             refreshBtn.style.display = 'inline-block';
             if (generateInviteBtn) generateInviteBtn.style.display = 'none';
-            document.getElementById('downloadControls').style.display = 'block';
+            
+            // Show download library selector on main page
+            if (downloadLibrarySelector) {
+                downloadLibrarySelector.style.display = 'flex !important';
+                downloadLibrarySelector.classList.remove('d-none');
+                downloadLibrarySelector.removeAttribute('style');
+            }
             
             // Update navbar status indicator
             if (statusIndicator) {
@@ -490,7 +508,11 @@
             authBtn.style.display = 'inline-block';
             refreshBtn.style.display = 'none';
             if (generateInviteBtn) generateInviteBtn.style.display = 'block';
-            document.getElementById('downloadControls').style.display = 'none';
+            
+            // Hide download library selector on main page
+            if (downloadLibrarySelector) {
+                downloadLibrarySelector.style.display = 'none';
+            }
             
             // Update navbar status indicator
             if (statusIndicator) {
@@ -1521,11 +1543,17 @@
         const select = document.getElementById('downloadLibrarySelect');
         const libraryKeys = Object.keys(libraries);
         const syncSection = document.getElementById('syncLibrarySection');
+        const downloadLibrarySelector = document.getElementById('downloadLibrarySelector');
 
         if (libraryKeys.length === 0) {
             select.innerHTML = '<option value="">No libraries configured</option>';
             select.disabled = true;
             syncSection.style.display = 'none';
+            
+            // Hide download library selector if no libraries
+            if (downloadLibrarySelector) {
+                downloadLibrarySelector.style.display = 'none';
+            }
         } else {
             select.innerHTML = '<option value="">Select a library...</option>';
             select.disabled = false;
@@ -1544,6 +1572,11 @@
 
             // Show sync button when libraries are configured
             syncSection.style.display = 'block';
+            
+            // Show download library selector on main page if authenticated
+            if (currentAccount && downloadLibrarySelector) {
+                downloadLibrarySelector.style.display = 'flex';
+            }
         }
     }
 
