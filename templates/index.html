@@ -29,18 +29,23 @@
                            placeholder="Search books by title or author...">
                 </div>
             </div>
-            <div class="col-lg-3 col-md-4">
+            <div class="col-lg-4 col-md-5">
                 <!-- Download Library Selector -->
                 <div class="d-flex align-items-center gap-2" id="downloadLibrarySelector" style="display: none !important;">
                     <label class="text-muted small mb-0 text-nowrap">
                         <i class="fas fa-folder"></i> Download to:
                     </label>
-                    <select class="form-select form-select-sm flex-grow-1" id="downloadLibrarySelect" required>
-                        <option value="">Select library...</option>
-                    </select>
+                    <div class="input-group input-group-sm flex-grow-1">
+                        <select class="form-select form-select-sm" id="downloadLibrarySelect" required>
+                            <option value="">Select library...</option>
+                        </select>
+                        <button class="btn btn-outline-primary btn-sm" type="button" id="syncLibraryBtn" title="Sync Library">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div class="col-lg-5 col-md-3 text-end">
+            <div class="col-lg-4 col-md-2 text-end">
                 <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
                     <button id="selectAllVisibleBtn" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-check-double"></i> Select All
@@ -301,11 +306,14 @@
             addLibrary();
         });
 
-        // Sync library button
-        document.getElementById('syncLibraryBtn').addEventListener('click', function(e) {
-            e.preventDefault();
-            syncLibrary();
-        });
+        // Sync library button (now on main screen)
+        const syncBtn = document.getElementById('syncLibraryBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                syncLibrary();
+            });
+        }
 
         // Book filters
         document.getElementById('languageFilter').addEventListener('change', applyFilters);
@@ -1542,13 +1550,16 @@
     function updateLibrarySelector(libraries) {
         const select = document.getElementById('downloadLibrarySelect');
         const libraryKeys = Object.keys(libraries);
-        const syncSection = document.getElementById('syncLibrarySection');
         const downloadLibrarySelector = document.getElementById('downloadLibrarySelector');
+        const syncBtn = document.getElementById('syncLibraryBtn');
+        
+        // Store current selection
+        const currentSelection = select.value;
 
         if (libraryKeys.length === 0) {
             select.innerHTML = '<option value="">No libraries configured</option>';
             select.disabled = true;
-            syncSection.style.display = 'none';
+            if (syncBtn) syncBtn.disabled = true;
             
             // Hide download library selector if no libraries
             if (downloadLibrarySelector) {
@@ -1557,6 +1568,7 @@
         } else {
             select.innerHTML = '<option value="">Select a library...</option>';
             select.disabled = false;
+            if (syncBtn) syncBtn.disabled = false;
 
             for (const name of libraryKeys) {
                 const option = document.createElement('option');
@@ -1565,13 +1577,12 @@
                 select.appendChild(option);
             }
 
-            // Auto-select if only one library exists
-            if (libraryKeys.length === 1) {
+            // Restore previous selection if it still exists, otherwise auto-select if only one library
+            if (currentSelection && libraryKeys.includes(currentSelection)) {
+                select.value = currentSelection;
+            } else if (libraryKeys.length === 1) {
                 select.value = libraryKeys[0];
             }
-
-            // Show sync button when libraries are configured
-            syncSection.style.display = 'block';
             
             // Show download library selector on main page if authenticated
             if (currentAccount && downloadLibrarySelector) {
@@ -1600,7 +1611,9 @@
 
             showAlert('Library added successfully!', 'success');
             document.getElementById('addLibraryForm').reset();
-            loadLibraries();
+            
+            // Reload libraries to update both settings panel and main screen
+            await loadLibraries();
 
         } catch (error) {
             showAlert('Failed to add library: ' + error.message, 'danger');
@@ -1618,7 +1631,9 @@
             });
 
             showAlert('Library removed successfully', 'success');
-            loadLibraries();
+            
+            // Reload libraries to update both settings panel and main screen
+            await loadLibraries();
 
         } catch (error) {
             showAlert('Failed to remove library: ' + error.message, 'danger');
@@ -1635,12 +1650,18 @@
         }
 
         const syncBtn = document.getElementById('syncLibraryBtn');
-        const originalText = syncBtn.innerHTML;
+        const originalHTML = syncBtn.innerHTML;
+        const originalTitle = syncBtn.title;
 
         try {
-            // Show loading state
+            // Show loading state with animation
             syncBtn.disabled = true;
-            syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+            syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            syncBtn.title = 'Syncing...';
+            
+            // Add visual feedback
+            syncBtn.classList.add('btn-primary');
+            syncBtn.classList.remove('btn-outline-primary');
 
             const result = await apiCall('/api/library/sync', {
                 method: 'POST',
@@ -1651,9 +1672,17 @@
 
             if (result.success) {
                 const stats = result.stats;
+                
+                // Show success feedback on button temporarily
+                syncBtn.innerHTML = '<i class="fas fa-check"></i>';
+                syncBtn.classList.remove('btn-primary');
+                syncBtn.classList.add('btn-success');
+                
                 showAlert(
-                    `Library sync complete! Scanned ${stats.files_scanned} files, found ${stats.asins_found} books with ASINs. ` +
-                    `Added ${stats.entries_added}, updated ${stats.entries_updated}.`,
+                    `<strong>Library sync complete!</strong><br>` +
+                    `📁 Scanned ${stats.files_scanned} files<br>` +
+                    `📚 Found ${stats.asins_found} books with ASINs<br>` +
+                    `✅ Added ${stats.entries_added}, updated ${stats.entries_updated}`,
                     'success'
                 );
 
@@ -1667,11 +1696,21 @@
             }
 
         } catch (error) {
+            // Show error feedback on button temporarily
+            syncBtn.innerHTML = '<i class="fas fa-times"></i>';
+            syncBtn.classList.remove('btn-primary');
+            syncBtn.classList.add('btn-danger');
+            
             showAlert('Failed to sync library: ' + error.message, 'danger');
         } finally {
-            // Restore button state
-            syncBtn.disabled = false;
-            syncBtn.innerHTML = originalText;
+            // Restore button state after a short delay
+            setTimeout(() => {
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = originalHTML;
+                syncBtn.title = originalTitle;
+                syncBtn.classList.remove('btn-primary', 'btn-success', 'btn-danger');
+                syncBtn.classList.add('btn-outline-primary');
+            }, 2000);
         }
     }
 
