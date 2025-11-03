@@ -1,0 +1,1134 @@
+{% extends "base.html" %}
+
+{% block title %}Import M4B Books - Audible Book Downloader{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-1">
+                <i class="fas fa-file-import"></i> Import M4B Books
+            </h2>
+            <p class="text-muted">Import and organize existing M4B audiobook files with Audible metadata enrichment</p>
+        </div>
+    </div>
+
+    <!-- Step Progress Indicator -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between mb-3">
+                <div class="step-indicator" id="step1Indicator">
+                    <div class="step-number active">1</div>
+                    <div class="step-label">Select Source</div>
+                </div>
+                <div class="step-line" id="line1"></div>
+                <div class="step-indicator" id="step2Indicator">
+                    <div class="step-number">2</div>
+                    <div class="step-label">Review Matches</div>
+                </div>
+                <div class="step-line" id="line2"></div>
+                <div class="step-indicator" id="step3Indicator">
+                    <div class="step-number">3</div>
+                    <div class="step-label">Import</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: Select Source Directory -->
+    <div id="step1" class="import-step">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-folder-open"></i> Step 1: Select Source Directory</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Source Directory</label>
+                        <input type="text" class="form-control" id="sourcePath" 
+                               placeholder="/path/to/m4b/files">
+                        <small class="form-text text-muted">
+                            Directory containing M4B files to import (will scan recursively)
+                        </small>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Target Library</label>
+                        <select class="form-select" id="targetLibrary">
+                            <option value="">Select library...</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Library where books will be imported
+                        </small>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <button class="btn btn-primary" id="scanDirectoryBtn">
+                            <i class="fas fa-search"></i> Scan Directory
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Scan Results -->
+                <div id="scanResults" style="display: none;">
+                    <hr>
+                    <h6>Scan Results</h6>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Found <strong id="fileCount">0</strong> M4B file(s) 
+                        (<strong id="totalSize">0</strong> total)
+                    </div>
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>File Name</th>
+                                    <th>Title</th>
+                                    <th>Author</th>
+                                    <th>Size</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scannedFilesTable">
+                            </tbody>
+                        </table>
+                    </div>
+                    <button class="btn btn-success" id="matchFilesBtn">
+                        <i class="fas fa-arrow-right"></i> Next: Match with Audible
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Review Matches -->
+    <div id="step2" class="import-step" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-sync-alt"></i> Step 2: Review Matches</h5>
+                <button class="btn btn-sm btn-light" id="backToStep1Btn">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+            </div>
+            <div class="card-body">
+                <!-- Matching Progress -->
+                <div id="matchingProgress" style="display: none;">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">Matching...</span>
+                        </div>
+                        <p>Matching files with Audible metadata...</p>
+                        <p class="text-muted small" id="matchingStatus">Processed 0 of 0 files</p>
+                    </div>
+                </div>
+
+                <!-- Match Results -->
+                <div id="matchResults" style="display: none;">
+                    <!-- Stats Summary -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <div class="card bg-success bg-opacity-10 border-success">
+                                <div class="card-body text-center py-2">
+                                    <h4 class="mb-0 text-success" id="matchedCount">0</h4>
+                                    <small class="text-muted">Matched</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-warning bg-opacity-10 border-warning">
+                                <div class="card-body text-center py-2">
+                                    <h4 class="mb-0 text-warning" id="uncertainCount">0</h4>
+                                    <small class="text-muted">Uncertain</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-danger bg-opacity-10 border-danger">
+                                <div class="card-body text-center py-2">
+                                    <h4 class="mb-0 text-danger" id="duplicatesCount">0</h4>
+                                    <small class="text-muted">Duplicates</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-secondary bg-opacity-10 border-secondary">
+                                <div class="card-body text-center py-2">
+                                    <h4 class="mb-0 text-secondary" id="notFoundCount">0</h4>
+                                    <small class="text-muted">Not Found</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Matched Files List -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Select Books to Import</h6>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary" id="selectAllMatchedBtn">
+                                    <i class="fas fa-check-square"></i> Select All
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="deselectAllBtn">
+                                    <i class="fas fa-square"></i> Deselect All
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Files Grid -->
+                    <div id="matchedFilesContainer" style="max-height: 500px; overflow-y: auto;">
+                        <!-- Matched files will be inserted here -->
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="mt-4">
+                        <button class="btn btn-success" id="executeImportBtn">
+                            <i class="fas fa-download"></i> Import Selected Books (<span id="selectedCount">0</span>)
+                        </button>
+                        <button class="btn btn-outline-secondary" id="cancelImportBtn">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Import Progress -->
+    <div id="step3" class="import-step" style="display: none;">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-download"></i> Step 3: Import Progress</h5>
+            </div>
+            <div class="card-body">
+                <!-- Overall Progress -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Overall Progress</span>
+                        <span id="overallProgress">0 / 0</span>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" id="overallProgressBar" style="width: 0%">
+                            <span id="overallPercentage">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Import Status Summary -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-info bg-opacity-10 border-info">
+                            <div class="card-body text-center py-2">
+                                <h4 class="mb-0 text-info" id="importActiveCount">0</h4>
+                                <small class="text-muted">Active</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-success bg-opacity-10 border-success">
+                            <div class="card-body text-center py-2">
+                                <h4 class="mb-0 text-success" id="importCompletedCount">0</h4>
+                                <small class="text-muted">Completed</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-danger bg-opacity-10 border-danger">
+                            <div class="card-body text-center py-2">
+                                <h4 class="mb-0 text-danger" id="importFailedCount">0</h4>
+                                <small class="text-muted">Failed</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Import Log -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Import Log</h6>
+                        <button class="btn btn-sm btn-outline-secondary" id="clearLogBtn">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="importLog" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;" class="p-3">
+                            <!-- Log entries will appear here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Complete Actions -->
+                <div class="mt-4" id="importCompleteActions" style="display: none;">
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> Import complete! 
+                        <span id="importSummary"></span>
+                    </div>
+                    <button class="btn btn-primary" id="startNewImportBtn">
+                        <i class="fas fa-plus"></i> Start New Import
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Manual Search Modal -->
+<div class="modal fade" id="manualSearchModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-search"></i> Search Audible Manually
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">File: <span id="searchFileName" class="text-muted"></span></label>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Search Query</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="manualSearchQuery" 
+                               placeholder="Enter book title and/or author">
+                        <button class="btn btn-primary" id="performSearchBtn">
+                            <i class="fas fa-search"></i> Search
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search Results -->
+                <div id="searchResults" style="display: none;">
+                    <h6>Search Results</h6>
+                    <div class="list-group" id="searchResultsList">
+                        <!-- Results will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Loading -->
+                <div id="searchLoading" class="text-center py-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Searching...</span>
+                    </div>
+                    <p class="mt-2">Searching Audible...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Step Indicator Styles */
+    .step-indicator {
+        text-align: center;
+        flex: 0 0 auto;
+    }
+
+    .step-number {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background-color: #e9ecef;
+        color: #6c757d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 1.2rem;
+        margin: 0 auto 0.5rem;
+        transition: all 0.3s ease;
+    }
+
+    .step-number.active {
+        background: var(--primary-gradient);
+        color: white;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .step-number.completed {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .step-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    .step-indicator .step-number.active + .step-label {
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+
+    .step-line {
+        flex: 1 1 auto;
+        height: 2px;
+        background-color: #e9ecef;
+        align-self: center;
+        margin: 0 1rem;
+        margin-bottom: 30px;
+        transition: all 0.3s ease;
+    }
+
+    .step-line.active {
+        background-color: var(--primary-color);
+    }
+
+    /* Import Step Styles */
+    .import-step {
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Match Card Styles */
+    .match-card {
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .match-card.selected {
+        border-color: #28a745;
+        background-color: #f0fff4;
+    }
+
+    .match-card.duplicate {
+        border-color: #dc3545;
+        background-color: #fff5f5;
+        opacity: 0.7;
+    }
+
+    .match-card .checkbox-wrapper {
+        cursor: pointer;
+    }
+
+    .confidence-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+    }
+
+    .confidence-high {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .confidence-medium {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .confidence-low {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    /* Log Styles */
+    .log-entry {
+        padding: 0.5rem;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .log-entry:last-child {
+        border-bottom: none;
+    }
+
+    .log-entry.success {
+        color: #28a745;
+    }
+
+    .log-entry.error {
+        color: #dc3545;
+    }
+
+    .log-entry.info {
+        color: #17a2b8;
+    }
+</style>
+
+<script>
+// Global state
+let importState = {
+    currentStep: 1,
+    scannedFiles: [],
+    matchedFiles: [],
+    selectedFiles: new Set(),
+    sourcePath: '',
+    targetLibrary: '',
+    accountName: '',
+    region: 'us',
+    currentSearchFile: null
+};
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadLibraries();
+    setupEventListeners();
+    loadAccountInfo();
+});
+
+// Load account info from session
+function loadAccountInfo() {
+    fetch('/api/auth/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.authenticated && data.account) {
+            importState.accountName = data.account.name;
+            importState.region = data.account.region || 'us';
+        }
+    })
+    .catch(error => console.error('Error loading account info:', error));
+}
+
+// Load available libraries
+function loadLibraries() {
+    fetch('/api/importer/libraries')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const select = document.getElementById('targetLibrary');
+                select.innerHTML = '<option value="">Select library...</option>';
+                
+                data.libraries.forEach(lib => {
+                    const option = document.createElement('option');
+                    option.value = JSON.stringify(lib);
+                    option.textContent = lib.name || lib.path;
+                    select.appendChild(option);
+                });
+            }
+        })
+        .catch(error => console.error('Error loading libraries:', error));
+}
+
+// Setup event listeners
+function setupEventListeners() {
+    // Step 1: Scan Directory
+    document.getElementById('scanDirectoryBtn').addEventListener('click', scanDirectory);
+    document.getElementById('matchFilesBtn').addEventListener('click', () => goToStep(2));
+    
+    // Step 2: Review Matches
+    document.getElementById('backToStep1Btn').addEventListener('click', () => goToStep(1));
+    document.getElementById('selectAllMatchedBtn').addEventListener('click', selectAllMatched);
+    document.getElementById('deselectAllBtn').addEventListener('click', deselectAll);
+    document.getElementById('executeImportBtn').addEventListener('click', executeImport);
+    document.getElementById('cancelImportBtn').addEventListener('click', () => goToStep(1));
+    
+    // Step 3: Progress
+    document.getElementById('startNewImportBtn').addEventListener('click', resetImport);
+    document.getElementById('clearLogBtn').addEventListener('click', clearLog);
+    
+    // Manual Search Modal
+    document.getElementById('performSearchBtn').addEventListener('click', performManualSearch);
+}
+
+// Step navigation
+function goToStep(step) {
+    // Hide all steps
+    document.querySelectorAll('.import-step').forEach(el => el.style.display = 'none');
+    
+    // Show target step
+    document.getElementById(`step${step}`).style.display = 'block';
+    
+    // Update step indicators
+    for (let i = 1; i <= 3; i++) {
+        const indicator = document.getElementById(`step${i}Indicator`).querySelector('.step-number');
+        const line = document.getElementById(`line${i}`);
+        
+        if (i < step) {
+            indicator.classList.add('completed');
+            indicator.classList.remove('active');
+            if (line) line.classList.add('active');
+        } else if (i === step) {
+            indicator.classList.add('active');
+            indicator.classList.remove('completed');
+        } else {
+            indicator.classList.remove('active', 'completed');
+            if (line) line.classList.remove('active');
+        }
+    }
+    
+    importState.currentStep = step;
+    
+    // Start matching if moving to step 2
+    if (step === 2) {
+        matchFiles();
+    }
+    
+    // Start progress polling if moving to step 3
+    if (step === 3) {
+        startProgressPolling();
+    }
+}
+
+// Step 1: Scan Directory
+function scanDirectory() {
+    const sourcePath = document.getElementById('sourcePath').value;
+    const librarySelect = document.getElementById('targetLibrary');
+    const libraryValue = librarySelect.value;
+    
+    if (!sourcePath) {
+        alert('Please enter a source directory path');
+        return;
+    }
+    
+    if (!libraryValue) {
+        alert('Please select a target library');
+        return;
+    }
+    
+    const library = JSON.parse(libraryValue);
+    importState.sourcePath = sourcePath;
+    importState.targetLibrary = library.path;
+    
+    // Show loading
+    const btn = document.getElementById('scanDirectoryBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+    
+    fetch('/api/importer/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            source_path: sourcePath,
+            library_path: library.path,
+            account_name: importState.accountName,
+            region: importState.region
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            importState.scannedFiles = data.files;
+            displayScanResults(data);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error scanning directory:', error);
+        alert('Failed to scan directory: ' + error.message);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search"></i> Scan Directory';
+    });
+}
+
+function displayScanResults(data) {
+    document.getElementById('fileCount').textContent = data.count;
+    document.getElementById('totalSize').textContent = formatBytes(data.total_size);
+    
+    const tbody = document.getElementById('scannedFilesTable');
+    tbody.innerHTML = '';
+    
+    data.files.forEach(file => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${escapeHtml(file.file_name)}</td>
+            <td>${escapeHtml(file.title || '-')}</td>
+            <td>${escapeHtml(file.author || '-')}</td>
+            <td>${formatBytes(file.file_size)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+    
+    document.getElementById('scanResults').style.display = 'block';
+}
+
+// Step 2: Match Files
+function matchFiles() {
+    document.getElementById('matchingProgress').style.display = 'block';
+    document.getElementById('matchResults').style.display = 'none';
+    
+    fetch('/api/importer/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            files: importState.scannedFiles,
+            account_name: importState.accountName,
+            region: importState.region,
+            library_path: importState.targetLibrary
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            importState.matchedFiles = data.matched_files;
+            displayMatchResults(data);
+        } else {
+            alert('Error: ' + data.error);
+            goToStep(1);
+        }
+    })
+    .catch(error => {
+        console.error('Error matching files:', error);
+        alert('Failed to match files: ' + error.message);
+        goToStep(1);
+    });
+}
+
+function displayMatchResults(data) {
+    document.getElementById('matchingProgress').style.display = 'none';
+    document.getElementById('matchResults').style.display = 'block';
+    
+    // Update stats
+    document.getElementById('matchedCount').textContent = data.stats.matched;
+    document.getElementById('uncertainCount').textContent = data.stats.uncertain;
+    document.getElementById('duplicatesCount').textContent = data.stats.duplicates;
+    document.getElementById('notFoundCount').textContent = data.stats.not_found;
+    
+    // Display matched files
+    const container = document.getElementById('matchedFilesContainer');
+    container.innerHTML = '';
+    
+    importState.selectedFiles.clear();
+    
+    data.matched_files.forEach((item, index) => {
+        const card = createMatchCard(item, index);
+        container.appendChild(card);
+        
+        // Auto-select if selected flag is true
+        if (item.selected) {
+            importState.selectedFiles.add(index);
+        }
+    });
+    
+    updateSelectedCount();
+}
+
+function createMatchCard(item, index) {
+    const fileInfo = item.file_info;
+    const matchResult = item.match_result;
+    const duplicate = item.duplicate_status;
+    const selected = item.selected;
+    
+    const card = document.createElement('div');
+    card.className = `match-card ${selected ? 'selected' : ''} ${duplicate ? 'duplicate' : ''}`;
+    card.dataset.index = index;
+    
+    let statusBadge = '';
+    let confidenceBadge = '';
+    let matchInfo = '';
+    
+    if (duplicate) {
+        statusBadge = '<span class="badge bg-danger">Duplicate</span>';
+        matchInfo = `<p class="text-danger mb-0"><i class="fas fa-exclamation-triangle"></i> ${duplicate.reason}</p>`;
+    } else if (matchResult.status === 'matched') {
+        statusBadge = '<span class="badge bg-success">Matched</span>';
+        const confidence = matchResult.confidence;
+        const confidenceClass = confidence >= 0.85 ? 'confidence-high' : 'confidence-medium';
+        confidenceBadge = `<span class="confidence-badge ${confidenceClass}">${(confidence * 100).toFixed(0)}% match</span>`;
+        
+        const match = matchResult.selected_match;
+        matchInfo = `
+            <div class="d-flex align-items-start">
+                ${match.product_images?.['500'] ? 
+                    `<img src="${match.product_images['500']}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;" class="me-3">` 
+                    : ''}
+                <div>
+                    <strong>${escapeHtml(match.title)}</strong><br>
+                    <small class="text-muted">by ${escapeHtml(formatAuthors(match.authors))}</small><br>
+                    ${match.narrators ? `<small class="text-muted">Narrated by ${escapeHtml(formatNarrators(match.narrators))}</small>` : ''}
+                </div>
+            </div>
+        `;
+    } else if (matchResult.status === 'uncertain') {
+        statusBadge = '<span class="badge bg-warning">Uncertain</span>';
+        matchInfo = `<p class="text-warning mb-0"><i class="fas fa-question-circle"></i> ${matchResult.reason}</p>`;
+    } else {
+        statusBadge = '<span class="badge bg-secondary">Not Found</span>';
+        matchInfo = `<p class="text-muted mb-0"><i class="fas fa-times-circle"></i> ${matchResult.reason}</p>`;
+    }
+    
+    card.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-auto checkbox-wrapper" onclick="toggleSelect(${index})">
+                <input type="checkbox" class="form-check-input" ${selected ? 'checked' : ''} ${duplicate ? 'disabled' : ''}>
+            </div>
+            <div class="col">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="mb-1">${escapeHtml(fileInfo.file_name)}</h6>
+                        <small class="text-muted">
+                            ${fileInfo.title ? escapeHtml(fileInfo.title) : 'No title'} 
+                            ${fileInfo.author ? '• ' + escapeHtml(fileInfo.author) : ''}
+                        </small>
+                    </div>
+                    <div>
+                        ${statusBadge}
+                        ${confidenceBadge}
+                    </div>
+                </div>
+                ${matchInfo}
+                ${!duplicate && matchResult.status !== 'not_found' ? `
+                    <button class="btn btn-sm btn-outline-primary mt-2" onclick="openManualSearch(${index})">
+                        <i class="fas fa-search"></i> Search Different Match
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    return card;
+}
+
+function toggleSelect(index) {
+    const item = importState.matchedFiles[index];
+    if (item.duplicate_status) return; // Can't select duplicates
+    
+    const card = document.querySelector(`.match-card[data-index="${index}"]`);
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    
+    if (importState.selectedFiles.has(index)) {
+        importState.selectedFiles.delete(index);
+        card.classList.remove('selected');
+        checkbox.checked = false;
+    } else {
+        importState.selectedFiles.add(index);
+        card.classList.add('selected');
+        checkbox.checked = true;
+    }
+    
+    updateSelectedCount();
+}
+
+function selectAllMatched() {
+    importState.matchedFiles.forEach((item, index) => {
+        if (!item.duplicate_status && item.match_result.status === 'matched') {
+            importState.selectedFiles.add(index);
+            const card = document.querySelector(`.match-card[data-index="${index}"]`);
+            if (card) {
+                card.classList.add('selected');
+                card.querySelector('input[type="checkbox"]').checked = true;
+            }
+        }
+    });
+    updateSelectedCount();
+}
+
+function deselectAll() {
+    importState.selectedFiles.clear();
+    document.querySelectorAll('.match-card').forEach(card => {
+        card.classList.remove('selected');
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        if (checkbox) checkbox.checked = false;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    document.getElementById('selectedCount').textContent = importState.selectedFiles.size;
+}
+
+// Manual Search
+function openManualSearch(index) {
+    importState.currentSearchFile = index;
+    const fileInfo = importState.matchedFiles[index].file_info;
+    
+    document.getElementById('searchFileName').textContent = fileInfo.file_name;
+    document.getElementById('manualSearchQuery').value = `${fileInfo.title || ''} ${fileInfo.author || ''}`.trim();
+    document.getElementById('searchResults').style.display = 'none';
+    
+    const modal = new bootstrap.Modal(document.getElementById('manualSearchModal'));
+    modal.show();
+}
+
+function performManualSearch() {
+    const query = document.getElementById('manualSearchQuery').value;
+    
+    if (!query) {
+        alert('Please enter a search query');
+        return;
+    }
+    
+    document.getElementById('searchLoading').style.display = 'block';
+    document.getElementById('searchResults').style.display = 'none';
+    
+    fetch('/api/importer/search-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            search_query: query,
+            account_name: importState.accountName,
+            region: importState.region,
+            library_path: importState.targetLibrary
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displaySearchResults(data.results);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error searching:', error);
+        alert('Search failed: ' + error.message);
+    })
+    .finally(() => {
+        document.getElementById('searchLoading').style.display = 'none';
+    });
+}
+
+function displaySearchResults(results) {
+    const container = document.getElementById('searchResultsList');
+    container.innerHTML = '';
+    
+    if (results.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-3">No results found</p>';
+        document.getElementById('searchResults').style.display = 'block';
+        return;
+    }
+    
+    results.forEach(result => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action';
+        item.onclick = (e) => {
+            e.preventDefault();
+            selectManualMatch(result);
+        };
+        
+        item.innerHTML = `
+            <div class="d-flex align-items-start">
+                ${result.product_images?.['500'] ? 
+                    `<img src="${result.product_images['500']}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;" class="me-3">` 
+                    : ''}
+                <div class="flex-grow-1">
+                    <h6 class="mb-1">${escapeHtml(result.title)}</h6>
+                    <p class="mb-1 small text-muted">by ${escapeHtml(formatAuthors(result.authors))}</p>
+                    ${result.narrators ? `<p class="mb-0 small text-muted">Narrated by ${escapeHtml(formatNarrators(result.narrators))}</p>` : ''}
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(item);
+    });
+    
+    document.getElementById('searchResults').style.display = 'block';
+}
+
+function selectManualMatch(product) {
+    const index = importState.currentSearchFile;
+    if (index === null) return;
+    
+    // Update the matched file with the new selection
+    importState.matchedFiles[index].match_result.selected_match = product;
+    importState.matchedFiles[index].match_result.status = 'matched';
+    importState.matchedFiles[index].match_result.confidence = 1.0; // Manual selection
+    
+    // Re-render the match card
+    const container = document.getElementById('matchedFilesContainer');
+    const oldCard = container.querySelector(`.match-card[data-index="${index}"]`);
+    const newCard = createMatchCard(importState.matchedFiles[index], index);
+    container.replaceChild(newCard, oldCard);
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('manualSearchModal'));
+    modal.hide();
+}
+
+// Step 3: Execute Import
+function executeImport() {
+    if (importState.selectedFiles.size === 0) {
+        alert('Please select at least one book to import');
+        return;
+    }
+    
+    // Build imports array
+    const imports = [];
+    importState.selectedFiles.forEach(index => {
+        const item = importState.matchedFiles[index];
+        imports.push({
+            file_path: item.file_info.file_path,
+            audible_product: item.match_result.selected_match
+        });
+    });
+    
+    // Navigate to step 3
+    goToStep(3);
+    
+    // Start import
+    fetch('/api/importer/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            imports: imports,
+            library_path: importState.targetLibrary,
+            account_name: importState.accountName,
+            region: importState.region
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            addLogEntry('info', `Import started for ${data.count} file(s)`);
+        } else {
+            addLogEntry('error', 'Failed to start import: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error starting import:', error);
+        addLogEntry('error', 'Failed to start import: ' + error.message);
+    });
+}
+
+// Progress Polling
+let progressInterval = null;
+
+function startProgressPolling() {
+    // Clear any existing interval
+    if (progressInterval) {
+        clearInterval(progressInterval);
+    }
+    
+    // Poll every 1 second
+    progressInterval = setInterval(updateProgress, 1000);
+    
+    // Update immediately
+    updateProgress();
+}
+
+function updateProgress() {
+    fetch('/api/importer/progress')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const stats = data.statistics;
+                const imports = data.imports;
+                
+                // Update stats
+                document.getElementById('importActiveCount').textContent = stats.active;
+                document.getElementById('importCompletedCount').textContent = stats.completed;
+                document.getElementById('importFailedCount').textContent = stats.failed;
+                
+                // Update progress bar
+                const total = stats.total_imports;
+                const completed = stats.completed + stats.failed + stats.skipped;
+                const percentage = total > 0 ? (completed / total * 100) : 0;
+                
+                document.getElementById('overallProgress').textContent = `${completed} / ${total}`;
+                document.getElementById('overallProgressBar').style.width = percentage + '%';
+                document.getElementById('overallPercentage').textContent = Math.round(percentage) + '%';
+                
+                // Add log entries for new imports
+                Object.values(imports).forEach(imp => {
+                    const state = imp.state;
+                    const title = imp.title;
+                    
+                    // Log state changes (simple implementation - could be improved with state tracking)
+                    if (state === 'complete') {
+                        // Already logged
+                    } else if (state === 'error') {
+                        // Already logged
+                    }
+                });
+                
+                // Check if complete
+                if (stats.batch_complete) {
+                    clearInterval(progressInterval);
+                    progressInterval = null;
+                    
+                    document.getElementById('importCompleteActions').style.display = 'block';
+                    document.getElementById('importSummary').textContent = 
+                        `${stats.completed} successful, ${stats.failed} failed`;
+                    
+                    addLogEntry('success', 'Import batch complete!');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error updating progress:', error);
+        });
+}
+
+function addLogEntry(type, message) {
+    const log = document.getElementById('importLog');
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+    
+    entry.textContent = `[${timestamp}] ${icon} ${message}`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById('importLog').innerHTML = '';
+}
+
+function resetImport() {
+    importState = {
+        currentStep: 1,
+        scannedFiles: [],
+        matchedFiles: [],
+        selectedFiles: new Set(),
+        sourcePath: '',
+        targetLibrary: '',
+        accountName: importState.accountName,
+        region: importState.region,
+        currentSearchFile: null
+    };
+    
+    document.getElementById('scanResults').style.display = 'none';
+    document.getElementById('sourcePath').value = '';
+    document.getElementById('importLog').innerHTML = '';
+    document.getElementById('importCompleteActions').style.display = 'none';
+    
+    goToStep(1);
+}
+
+// Utility functions
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function formatAuthors(authors) {
+    if (!authors || authors.length === 0) return 'Unknown';
+    if (typeof authors === 'string') return authors;
+    if (authors.length === 1) return authors[0].name;
+    if (authors.length === 2) return authors[0].name + ' & ' + authors[1].name;
+    return authors.slice(0, 2).map(a => a.name).join(', ') + ' et al.';
+}
+
+function formatNarrators(narrators) {
+    if (!narrators || narrators.length === 0) return '';
+    if (typeof narrators === 'string') return narrators;
+    if (narrators.length === 1) return narrators[0].name;
+    if (narrators.length === 2) return narrators[0].name + ' & ' + narrators[1].name;
+    return narrators.slice(0, 2).map(n => n.name).join(', ') + ' et al.';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}
+
