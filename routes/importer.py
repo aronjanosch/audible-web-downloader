@@ -476,11 +476,20 @@ def get_libraries():
             })
         
         with open(libraries_file, 'r') as f:
-            libraries = json.load(f)
+            libraries_dict = json.load(f)
+        
+        # Convert dict format to array format
+        libraries_array = []
+        for name, config in libraries_dict.items():
+            libraries_array.append({
+                'name': name,
+                'path': config.get('path'),
+                'created_at': config.get('created_at')
+            })
         
         return jsonify({
             'success': True,
-            'libraries': libraries
+            'libraries': libraries_array
         })
         
     except Exception as e:

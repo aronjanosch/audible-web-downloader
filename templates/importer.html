@@ -7,10 +7,17 @@
     <!-- Page Header -->
     <div class="row mb-4">
         <div class="col-12">
-            <h2 class="mb-1">
-                <i class="fas fa-file-import"></i> Import M4B Books
-            </h2>
-            <p class="text-muted">Import and organize existing M4B audiobook files with Audible metadata enrichment</p>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-file-import"></i> Import M4B Books
+                    </h2>
+                    <p class="text-muted mb-0">Import and organize existing M4B audiobook files with Audible metadata enrichment</p>
+                </div>
+                <a href="/" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Library
+                </a>
+            </div>
         </div>
     </div>
 
@@ -476,25 +483,40 @@ let importState = {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Importer DOMContentLoaded fired');
     loadLibraries();
-    setupEventListeners();
-    loadAccountInfo();
+    setupImporterEventListeners();
+    
+    // Set up account selector listener to update import state
+    const accountSelect = document.getElementById('accountSelect');
+    if (accountSelect) {
+        // Update immediately if account is already selected
+        updateImportAccountState();
+        
+        // Listen for changes
+        accountSelect.addEventListener('change', updateImportAccountState);
+    }
 });
 
-// Load account info from session
-function loadAccountInfo() {
-    fetch('/api/auth/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.authenticated && data.account) {
-            importState.accountName = data.account.name;
-            importState.region = data.account.region || 'us';
-        }
-    })
-    .catch(error => console.error('Error loading account info:', error));
+// Also setup on window.load as a fallback
+window.addEventListener('load', function() {
+    console.log('Importer window.load fired - ensuring event listeners');
+    // Only setup if not already done (idempotent)
+    setupImporterEventListeners();
+});
+
+// Update import state from navbar account selector
+function updateImportAccountState() {
+    const accountSelect = document.getElementById('accountSelect');
+    if (accountSelect && accountSelect.value) {
+        importState.accountName = accountSelect.value;
+        const selectedOption = accountSelect.options[accountSelect.selectedIndex];
+        importState.region = selectedOption.dataset.region || 'us';
+        console.log('Import account set to:', importState.accountName, 'region:', importState.region);
+    } else {
+        importState.accountName = '';
+        importState.region = 'us';
+    }
 }
 
 // Load available libraries
@@ -517,25 +539,73 @@ function loadLibraries() {
         .catch(error => console.error('Error loading libraries:', error));
 }
 
-// Setup event listeners
-function setupEventListeners() {
+// Setup event listeners (renamed to avoid conflicts with base.html)
+let importerEventListenersAttached = false;
+function setupImporterEventListeners() {
+    // Prevent double-attachment
+    if (importerEventListenersAttached) {
+        console.log('Importer event listeners already attached, skipping');
+        return;
+    }
+    
+    console.log('Attaching importer event listeners');
+    
     // Step 1: Scan Directory
-    document.getElementById('scanDirectoryBtn').addEventListener('click', scanDirectory);
-    document.getElementById('matchFilesBtn').addEventListener('click', () => goToStep(2));
+    const scanBtn = document.getElementById('scanDirectoryBtn');
+    if (scanBtn) {
+        scanBtn.addEventListener('click', scanDirectory);
+    }
+    
+    const matchBtn = document.getElementById('matchFilesBtn');
+    if (matchBtn) {
+        matchBtn.addEventListener('click', () => goToStep(2));
+    }
     
     // Step 2: Review Matches
-    document.getElementById('backToStep1Btn').addEventListener('click', () => goToStep(1));
-    document.getElementById('selectAllMatchedBtn').addEventListener('click', selectAllMatched);
-    document.getElementById('deselectAllBtn').addEventListener('click', deselectAll);
-    document.getElementById('executeImportBtn').addEventListener('click', executeImport);
-    document.getElementById('cancelImportBtn').addEventListener('click', () => goToStep(1));
+    const backBtn = document.getElementById('backToStep1Btn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => goToStep(1));
+    }
+    
+    const selectAllBtn = document.getElementById('selectAllMatchedBtn');
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', selectAllMatched);
+    }
+    
+    const deselectBtn = document.getElementById('deselectAllBtn');
+    if (deselectBtn) {
+        deselectBtn.addEventListener('click', deselectAll);
+    }
+    
+    const executeBtn = document.getElementById('executeImportBtn');
+    if (executeBtn) {
+        executeBtn.addEventListener('click', executeImport);
+    }
+    
+    const cancelBtn = document.getElementById('cancelImportBtn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => goToStep(1));
+    }
     
     // Step 3: Progress
-    document.getElementById('startNewImportBtn').addEventListener('click', resetImport);
-    document.getElementById('clearLogBtn').addEventListener('click', clearLog);
+    const newImportBtn = document.getElementById('startNewImportBtn');
+    if (newImportBtn) {
+        newImportBtn.addEventListener('click', resetImport);
+    }
+    
+    const clearBtn = document.getElementById('clearLogBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearLog);
+    }
     
     // Manual Search Modal
-    document.getElementById('performSearchBtn').addEventListener('click', performManualSearch);
+    const searchBtn = document.getElementById('performSearchBtn');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', performManualSearch);
+    }
+    
+    importerEventListenersAttached = true;
+    console.log('Importer event listeners attached successfully');
 }
 
 // Step navigation
@@ -579,9 +649,23 @@ function goToStep(step) {
 
 // Step 1: Scan Directory
 function scanDirectory() {
+    // Update account state in case it changed
+    updateImportAccountState();
+    
     const sourcePath = document.getElementById('sourcePath').value;
     const librarySelect = document.getElementById('targetLibrary');
     const libraryValue = librarySelect.value;
+    
+    console.log('Scan directory clicked:', {
+        accountName: importState.accountName,
+        sourcePath: sourcePath,
+        libraryValue: libraryValue
+    });
+    
+    if (!importState.accountName) {
+        alert('Please select an Audible account from the top navigation bar');
+        return;
+    }
     
     if (!sourcePath) {
         alert('Please enter a source directory path');
