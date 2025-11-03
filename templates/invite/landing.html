@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Add Your Audible Account{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-users me-2"></i>Family Account Sharing</h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-headphones fa-4x text-primary mb-3"></i>
+                        <h5>Add Your Audible Account</h5>
+                        <p class="text-muted">You've been invited to share your Audible library. Add your account below to get started.</p>
+                    </div>
+
+                    <form id="accountForm">
+                        <div class="mb-3">
+                            <label for="accountName" class="form-label fw-bold">Account Name</label>
+                            <input type="text" class="form-control form-control-lg" id="accountName"
+                                   placeholder="e.g., john_audible" required
+                                   pattern="[a-zA-Z0-9_-]+"
+                                   title="Only letters, numbers, hyphens, and underscores are allowed">
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>Choose a unique name to identify your account (letters, numbers, hyphens, and underscores only)
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="region" class="form-label fw-bold">Audible Region</label>
+                            <select class="form-select form-select-lg" id="region" required>
+                                {% for region in regions %}
+                                <option value="{{ region.code }}" {% if region.code == 'us' %}selected{% endif %}>
+                                    {{ region.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>Select the region where your Audible account is registered
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-arrow-right me-2"></i>Continue to Login
+                            </button>
+                        </div>
+                    </form>
+
+                    <div id="status" class="mt-3">
+                        <div class="alert d-none" id="statusMessage" role="alert"></div>
+                        <div class="text-center">
+                            <div class="spinner-border text-primary d-none" id="loadingSpinner" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer text-muted text-center">
+                    <small><i class="fas fa-lock me-1"></i>Your login credentials are never shared and remain secure</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const token = '{{ token }}';
+
+document.getElementById('accountForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const accountName = document.getElementById('accountName').value.trim();
+    const region = document.getElementById('region').value;
+
+    if (!accountName) {
+        showStatus('Please enter an account name', 'danger');
+        return;
+    }
+
+    showStatus('Creating account...', 'info');
+    document.getElementById('loadingSpinner').classList.remove('d-none');
+
+    fetch(`/invite/${token}/add-account`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            account_name: accountName,
+            region: region
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loadingSpinner').classList.add('d-none');
+
+        if (data.success) {
+            showStatus('Account created! Redirecting to login...', 'success');
+            setTimeout(() => {
+                window.location.href = data.auth_url;
+            }, 1500);
+        } else {
+            showStatus(data.error || 'Failed to create account', 'danger');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loadingSpinner').classList.add('d-none');
+        showStatus('Network error: ' + error.message, 'danger');
+    });
+});
+
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('statusMessage');
+    statusDiv.className = `alert alert-${type}`;
+    statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
+    statusDiv.classList.remove('d-none');
+}
+</script>
+{% endblock %}

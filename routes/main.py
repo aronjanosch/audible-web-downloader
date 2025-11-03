@@ -103,6 +103,66 @@ def add_account():
     
     return jsonify({'success': True, 'account': accounts[account_name]})
 
+@main_bp.route('/api/accounts/<account_name>/generate-invite-link', methods=['POST'])
+def generate_account_invite_link(account_name):
+    """Generate a unique invitation link for a specific account"""
+    try:
+        accounts = load_accounts()
+
+        if account_name not in accounts:
+            return jsonify({'error': 'Account not found'}), 404
+
+        # Check if already authenticated
+        if accounts[account_name].get('authenticated'):
+            return jsonify({'error': 'Account is already authenticated'}), 400
+
+        # Generate unique token for this account
+        import secrets
+        token = secrets.token_urlsafe(32)
+
+        # Store token in account data
+        accounts[account_name]['pending_invitation_token'] = token
+        save_accounts(accounts)
+
+        # Build invitation URL
+        invitation_url = request.url_root.rstrip('/') + '/invite/account/' + token
+
+        return jsonify({
+            'success': True,
+            'invitation_url': invitation_url,
+            'token': token,
+            'account_name': account_name
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@main_bp.route('/api/accounts/<account_name>/revoke-invite-link', methods=['POST'])
+def revoke_account_invite_link(account_name):
+    """Revoke the invitation link for a specific account"""
+    try:
+        accounts = load_accounts()
+
+        if account_name not in accounts:
+            return jsonify({'error': 'Account not found'}), 404
+
+        # Remove pending invitation token
+        if 'pending_invitation_token' in accounts[account_name]:
+            accounts[account_name].pop('pending_invitation_token')
+            save_accounts(accounts)
+
+        return jsonify({
+            'success': True,
+            'message': 'Invitation link revoked'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @main_bp.route('/api/accounts/<account_name>/select', methods=['POST'])
 def select_account(account_name):
     """API endpoint to select an account"""
@@ -222,6 +282,84 @@ def update_naming_settings():
             'success': True,
             'pattern': pattern,
             'preset': preset
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@main_bp.route('/api/settings/invitation-link', methods=['GET'])
+def get_invitation_link():
+    """Get the invitation link for family sharing"""
+    try:
+        token = settings_manager.get_invitation_token()
+        # Build full URL
+        invitation_url = request.url_root.rstrip('/') + '/invite/' + token
+        return jsonify({
+            'success': True,
+            'invitation_url': invitation_url,
+            'token': token
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@main_bp.route('/api/settings/regenerate-invitation-token', methods=['POST'])
+def regenerate_invitation_token():
+    """Regenerate the invitation token (invalidates old link)"""
+    try:
+        new_token = settings_manager.regenerate_invitation_token()
+        invitation_url = request.url_root.rstrip('/') + '/invite/' + new_token
+        return jsonify({
+            'success': True,
+            'invitation_url': invitation_url,
+            'token': new_token
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@main_bp.route('/api/settings/set-invitation-token', methods=['POST'])
+def set_invitation_token():
+    """Set a custom invitation token"""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+
+        if not token:
+            return jsonify({
+                'success': False,
+                'error': 'Token is required'
+            }), 400
+
+        # Validate token format (alphanumeric, hyphens, underscores only)
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', token):
+            return jsonify({
+                'success': False,
+                'error': 'Token can only contain letters, numbers, hyphens, and underscores'
+            }), 400
+
+        # Minimum length check
+        if len(token) < 8:
+            return jsonify({
+                'success': False,
+                'error': 'Token must be at least 8 characters long'
+            }), 400
+
+        # Set the custom token
+        settings_manager.set_invitation_token(token)
+        invitation_url = request.url_root.rstrip('/') + '/invite/' + token
+
+        return jsonify({
+            'success': True,
+            'invitation_url': invitation_url,
+            'token': token
         })
     except Exception as e:
         return jsonify({

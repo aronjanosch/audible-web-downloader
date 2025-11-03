@@ -29,17 +29,20 @@ def create_app():
     from routes.auth import auth_bp
     from routes.download import download_bp
     from routes.library import library_bp
-    
+    from routes.invite import invite_bp
+
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(download_bp)
     app.register_blueprint(library_bp)
-    
+    app.register_blueprint(invite_bp)
+
     # Exempt API endpoints from CSRF protection (after blueprints are registered)
     csrf.exempt(app.blueprints.get('main'))
     csrf.exempt(app.blueprints.get('auth'))
     csrf.exempt(app.blueprints.get('download'))
     csrf.exempt(app.blueprints.get('library'))
+    csrf.exempt(app.blueprints.get('invite'))
     
     # Error handlers
     @app.errorhandler(404)

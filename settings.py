@@ -4,6 +4,7 @@ Handles naming patterns, presets, and configuration persistence.
 """
 
 import json
+import secrets
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -109,8 +110,13 @@ class SettingsManager:
         """Get default settings structure."""
         return {
             "naming_pattern": DEFAULT_NAMING_PATTERN,
-            "selected_preset": "audiobookshelf"
+            "selected_preset": "audiobookshelf",
+            "invitation_token": self._generate_token()
         }
+
+    def _generate_token(self) -> str:
+        """Generate a secure random token for invitations."""
+        return secrets.token_urlsafe(32)
 
     def _save_settings(self, settings: Dict[str, Any]) -> None:
         """Save settings to settings.json."""
@@ -178,6 +184,31 @@ class SettingsManager:
             return False, "Pattern must end with .m4b extension"
 
         return True, None
+
+    def get_invitation_token(self) -> str:
+        """Get the current invitation token, generating one if it doesn't exist."""
+        if 'invitation_token' not in self.settings:
+            self.settings['invitation_token'] = self._generate_token()
+            self._save_settings(self.settings)
+        return self.settings['invitation_token']
+
+    def regenerate_invitation_token(self) -> str:
+        """Generate a new invitation token, replacing the old one."""
+        new_token = self._generate_token()
+        self.settings['invitation_token'] = new_token
+        self._save_settings(self.settings)
+        return new_token
+
+    def validate_invitation_token(self, token: str) -> bool:
+        """Validate that the provided token matches the stored invitation token."""
+        stored_token = self.get_invitation_token()
+        return secrets.compare_digest(token, stored_token)
+
+    def set_invitation_token(self, token: str) -> str:
+        """Set a custom invitation token."""
+        self.settings['invitation_token'] = token
+        self._save_settings(self.settings)
+        return token
 
 
 # Global settings manager instance

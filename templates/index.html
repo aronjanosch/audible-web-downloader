@@ -385,18 +385,21 @@
         const statusDiv = document.getElementById('authStatus');
         const authBtn = document.getElementById('authenticateBtn');
         const refreshBtn = document.getElementById('refreshLibraryBtn');
-        
+        const generateInviteBtn = document.getElementById('generateAccountInviteBtn');
+
         if (isAuthenticated) {
             statusDiv.className = 'alert alert-success';
             statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Authenticated';
             authBtn.style.display = 'none';
             refreshBtn.style.display = 'block';
+            if (generateInviteBtn) generateInviteBtn.style.display = 'none';
             document.getElementById('downloadControls').style.display = 'block';
         } else {
             statusDiv.className = 'alert alert-warning';
             statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Not authenticated';
             authBtn.style.display = 'block';
             refreshBtn.style.display = 'none';
+            if (generateInviteBtn) generateInviteBtn.style.display = 'block';
             document.getElementById('downloadControls').style.display = 'none';
         }
     }
@@ -1691,6 +1694,278 @@
         if (saveBtn) {
             saveBtn.addEventListener('click', saveNamingPattern);
         }
+
+        // Family Sharing Modal
+        setupFamilySharingModal();
+
+        // Account Invite Modal
+        setupAccountInviteModal();
     });
+
+    function setupFamilySharingModal() {
+        const familySharingBtn = document.getElementById('familySharingBtn');
+        const familySharingModal = new bootstrap.Modal(document.getElementById('familySharingModal'));
+
+        // Open modal button
+        if (familySharingBtn) {
+            familySharingBtn.addEventListener('click', function() {
+                loadInvitationLinkToModal();
+                familySharingModal.show();
+            });
+        }
+
+        // Copy button in modal
+        const copyModalBtn = document.getElementById('copyInviteLinkModalBtn');
+        if (copyModalBtn) {
+            copyModalBtn.addEventListener('click', function() {
+                const linkInput = document.getElementById('invitationLinkDisplay');
+                linkInput.select();
+                linkInput.setSelectionRange(0, 99999);
+                navigator.clipboard.writeText(linkInput.value)
+                    .then(() => {
+                        const originalHTML = copyModalBtn.innerHTML;
+                        copyModalBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                        setTimeout(() => {
+                            copyModalBtn.innerHTML = originalHTML;
+                        }, 2000);
+                        showFamilySharingStatus('Invitation link copied to clipboard!', 'success');
+                    })
+                    .catch(err => {
+                        showFamilySharingStatus('Failed to copy link', 'danger');
+                    });
+            });
+        }
+
+        // Save custom token button
+        const saveCustomTokenBtn = document.getElementById('saveCustomTokenBtn');
+        if (saveCustomTokenBtn) {
+            saveCustomTokenBtn.addEventListener('click', async function() {
+                const tokenInput = document.getElementById('customInvitationToken');
+                const customToken = tokenInput.value.trim();
+
+                if (!customToken) {
+                    showFamilySharingStatus('Please enter a token or use "Generate New Random Token"', 'warning');
+                    return;
+                }
+
+                // Validate token format
+                if (!/^[a-zA-Z0-9_-]+$/.test(customToken)) {
+                    showFamilySharingStatus('Token can only contain letters, numbers, hyphens, and underscores', 'danger');
+                    return;
+                }
+
+                if (customToken.length < 8) {
+                    showFamilySharingStatus('Token must be at least 8 characters long', 'danger');
+                    return;
+                }
+
+                try {
+                    const data = await apiCall('/api/settings/set-invitation-token', {
+                        method: 'POST',
+                        body: JSON.stringify({ token: customToken })
+                    });
+                    if (data.success) {
+                        loadInvitationLinkToModal();
+                        tokenInput.value = '';
+                        showFamilySharingStatus('Custom token set successfully!', 'success');
+                    }
+                } catch (error) {
+                    showFamilySharingStatus('Failed to set token: ' + error.message, 'danger');
+                }
+            });
+        }
+
+        // Regenerate token button in modal
+        const regenModalBtn = document.getElementById('regenerateTokenModalBtn');
+        if (regenModalBtn) {
+            regenModalBtn.addEventListener('click', async function() {
+                if (!confirm('Generate a new random token? This will invalidate the current invitation link.')) {
+                    return;
+                }
+                try {
+                    const data = await apiCall('/api/settings/regenerate-invitation-token', {
+                        method: 'POST'
+                    });
+                    if (data.success) {
+                        loadInvitationLinkToModal();
+                        document.getElementById('customInvitationToken').value = '';
+                        showFamilySharingStatus('New random token generated successfully!', 'success');
+                    }
+                } catch (error) {
+                    showFamilySharingStatus('Failed to regenerate token: ' + error.message, 'danger');
+                }
+            });
+        }
+    }
+
+    async function loadInvitationLinkToModal() {
+        try {
+            const data = await apiCall('/api/settings/invitation-link');
+            const linkInput = document.getElementById('invitationLinkDisplay');
+            if (linkInput && data.invitation_url) {
+                linkInput.value = data.invitation_url;
+            }
+        } catch (error) {
+            console.error('Failed to load invitation link:', error);
+            const linkInput = document.getElementById('invitationLinkDisplay');
+            if (linkInput) {
+                linkInput.value = 'Error loading link';
+            }
+            showFamilySharingStatus('Failed to load invitation link', 'danger');
+        }
+    }
+
+    function showFamilySharingStatus(message, type) {
+        const statusDiv = document.getElementById('familySharingStatusMessage');
+        statusDiv.className = `alert alert-${type}`;
+        statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
+        statusDiv.classList.remove('d-none');
+
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            statusDiv.classList.add('d-none');
+        }, 5000);
+    }
+
+    // Global variable to track current account for invite modal
+    let currentAccountForInvite = null;
+
+    function setupAccountInviteModal() {
+        const generateAccountInviteBtn = document.getElementById('generateAccountInviteBtn');
+        const accountInviteModal = new bootstrap.Modal(document.getElementById('accountInviteModal'));
+
+        // Open modal when button clicked (in sidebar)
+        if (generateAccountInviteBtn) {
+            generateAccountInviteBtn.addEventListener('click', function() {
+                if (currentAccount) {
+                    openAccountInviteModal(currentAccount);
+                }
+            });
+        }
+
+        // Generate link button inside modal
+        const generateLinkBtn = document.getElementById('generateAccountInviteLinkBtn');
+        if (generateLinkBtn) {
+            generateLinkBtn.addEventListener('click', async function() {
+                if (!currentAccountForInvite) return;
+
+                try {
+                    const data = await apiCall(`/api/accounts/${currentAccountForInvite}/generate-invite-link`, {
+                        method: 'POST'
+                    });
+
+                    if (data.success) {
+                        displayAccountInviteLink(data.invitation_url);
+                        showAccountInviteStatus('Invitation link generated successfully!', 'success');
+                    }
+                } catch (error) {
+                    showAccountInviteStatus('Failed to generate link: ' + error.message, 'danger');
+                }
+            });
+        }
+
+        // Copy link button
+        const copyBtn = document.getElementById('copyAccountInviteLinkBtn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                const linkInput = document.getElementById('accountInviteLinkDisplay');
+                linkInput.select();
+                linkInput.setSelectionRange(0, 99999);
+                navigator.clipboard.writeText(linkInput.value)
+                    .then(() => {
+                        const originalHTML = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalHTML;
+                        }, 2000);
+                        showAccountInviteStatus('Link copied to clipboard!', 'success');
+                    })
+                    .catch(err => {
+                        showAccountInviteStatus('Failed to copy link', 'danger');
+                    });
+            });
+        }
+
+        // Revoke link button
+        const revokeBtn = document.getElementById('revokeAccountInviteBtn');
+        if (revokeBtn) {
+            revokeBtn.addEventListener('click', async function() {
+                if (!currentAccountForInvite) return;
+
+                if (!confirm('Revoke invitation link? This will invalidate the link.')) {
+                    return;
+                }
+
+                try {
+                    const data = await apiCall(`/api/accounts/${currentAccountForInvite}/revoke-invite-link`, {
+                        method: 'POST'
+                    });
+
+                    if (data.success) {
+                        hideAccountInviteLink();
+                        showAccountInviteStatus('Invitation link revoked', 'success');
+                    }
+                } catch (error) {
+                    showAccountInviteStatus('Failed to revoke link: ' + error.message, 'danger');
+                }
+            });
+        }
+    }
+
+    async function openAccountInviteModal(accountName) {
+        currentAccountForInvite = accountName;
+
+        try {
+            const accounts = await apiCall('/api/accounts');
+            const account = accounts[accountName];
+
+            if (!account) {
+                showAlert('Account not found', 'danger');
+                return;
+            }
+
+            // Update modal content
+            document.getElementById('accountInviteAccountName').textContent = accountName;
+            document.getElementById('accountInviteDisplayName').textContent = accountName;
+            document.getElementById('accountInviteRegion').textContent = account.region.toUpperCase();
+
+            // Check if account has pending invitation token
+            if (account.pending_invitation_token) {
+                const inviteUrl = window.location.origin + '/invite/account/' + account.pending_invitation_token;
+                displayAccountInviteLink(inviteUrl);
+            } else {
+                hideAccountInviteLink();
+            }
+
+            // Open the modal
+            const accountInviteModal = new bootstrap.Modal(document.getElementById('accountInviteModal'));
+            accountInviteModal.show();
+        } catch (error) {
+            showAlert('Failed to load account details: ' + error.message, 'danger');
+        }
+    }
+
+    function displayAccountInviteLink(url) {
+        document.getElementById('accountInviteLinkDisplay').value = url;
+        document.getElementById('accountInviteLinkSection').style.display = 'block';
+        document.getElementById('generateAccountInviteSection').style.display = 'none';
+    }
+
+    function hideAccountInviteLink() {
+        document.getElementById('accountInviteLinkSection').style.display = 'none';
+        document.getElementById('generateAccountInviteSection').style.display = 'block';
+    }
+
+    function showAccountInviteStatus(message, type) {
+        const statusDiv = document.getElementById('accountInviteStatusMessage');
+        statusDiv.className = `alert alert-${type}`;
+        statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
+        statusDiv.classList.remove('d-none');
+
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            statusDiv.classList.add('d-none');
+        }, 5000);
+    }
 </script>
 {% endblock %}

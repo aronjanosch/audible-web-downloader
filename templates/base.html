@@ -242,6 +242,9 @@
                         <button id="authenticateBtn" class="btn btn-warning btn-sm">
                             <i class="fas fa-sign-in-alt"></i> Login to Audible
                         </button>
+                        <button id="generateAccountInviteBtn" class="btn btn-outline-light btn-sm" style="display: none;">
+                            <i class="fas fa-link"></i> Generate Invite Link
+                        </button>
                         <button id="refreshLibraryBtn" class="btn btn-info btn-sm" style="display: none;">
                             <i class="fas fa-sync"></i> Refresh Library
                         </button>
@@ -320,11 +323,173 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Family Sharing Button -->
+                <div class="mb-4">
+                    <h5>Family Sharing</h5>
+                    <button type="button" class="btn btn-outline-light btn-sm w-100" id="familySharingBtn">
+                        <i class="fas fa-users"></i> Manage Invitation Link
+                    </button>
+                </div>
             </div>
-            
+
             <!-- Main Content -->
             <div class="col-md-9 col-lg-10 main-content p-4">
                 {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Family Sharing Modal -->
+    <div class="modal fade" id="familySharingModal" tabindex="-1" aria-labelledby="familySharingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="familySharingModalLabel">
+                        <i class="fas fa-users me-2"></i>Family Sharing - Invitation Link
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Information -->
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>How it works:</strong> Share this link with family members to let them add their Audible accounts to your app.
+                        They will complete the Audible login, and you'll have full control to download from their library.
+                    </div>
+
+                    <!-- Current Invitation Link -->
+                    <div class="mb-4">
+                        <label for="invitationLinkDisplay" class="form-label fw-bold">Current Invitation Link</label>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace" id="invitationLinkDisplay" readonly value="Loading...">
+                            <button class="btn btn-outline-primary" type="button" id="copyInviteLinkModalBtn" title="Copy to clipboard">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <small class="text-muted">
+                            <i class="fas fa-lock me-1"></i>Keep this link private within your family
+                        </small>
+                    </div>
+
+                    <hr>
+
+                    <!-- Custom Token Setting -->
+                    <div class="mb-4">
+                        <label for="customInvitationToken" class="form-label fw-bold">Custom Invitation Token</label>
+                        <p class="small text-muted mb-2">
+                            Set a custom token to create a memorable invitation link. Leave empty to auto-generate a secure random token.
+                        </p>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace" id="customInvitationToken"
+                                   placeholder="e.g., my-family-2024 (only letters, numbers, hyphens, underscores)"
+                                   pattern="[a-zA-Z0-9_-]+">
+                            <button class="btn btn-primary" type="button" id="saveCustomTokenBtn">
+                                <i class="fas fa-save"></i> Set Token
+                            </button>
+                        </div>
+                        <small class="text-muted">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            <strong>Security Note:</strong> Custom tokens should be at least 16 characters long and hard to guess.
+                            Auto-generated tokens are more secure.
+                        </small>
+                    </div>
+
+                    <hr>
+
+                    <!-- Regenerate Token -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Generate New Random Token</label>
+                        <p class="small text-muted mb-2">
+                            Generate a new secure random token. This will invalidate the current invitation link.
+                        </p>
+                        <button type="button" class="btn btn-warning w-100" id="regenerateTokenModalBtn">
+                            <i class="fas fa-sync"></i> Generate New Random Token
+                        </button>
+                    </div>
+
+                    <!-- Status Message -->
+                    <div id="familySharingStatus" class="mt-3">
+                        <div class="alert d-none" id="familySharingStatusMessage" role="alert"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Invite Link Modal -->
+    <div class="modal fade" id="accountInviteModal" tabindex="-1" aria-labelledby="accountInviteModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="accountInviteModalLabel">
+                        <i class="fas fa-user-plus me-2"></i>Account Invitation Link
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Information -->
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>How it works:</strong> Share this link with the person who should authenticate this specific account.
+                        They will complete the Audible login for account <strong id="accountInviteAccountName"></strong>.
+                    </div>
+
+                    <!-- Account Details -->
+                    <div class="mb-4">
+                        <h6 class="fw-bold">Account Details</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Account Name:</strong></td>
+                                <td><code id="accountInviteDisplayName"></code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Region:</strong></td>
+                                <td><span id="accountInviteRegion"></span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Status:</strong></td>
+                                <td><span class="badge bg-warning" id="accountInviteStatus">Pending Authentication</span></td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Invitation Link Display -->
+                    <div id="accountInviteLinkSection" style="display: none;">
+                        <label for="accountInviteLinkDisplay" class="form-label fw-bold">Invitation Link</label>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace" id="accountInviteLinkDisplay" readonly>
+                            <button class="btn btn-outline-primary" type="button" id="copyAccountInviteLinkBtn" title="Copy to clipboard">
+                                <i class="fas fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mb-3">
+                            <i class="fas fa-lock me-1"></i>This link is specific to this account only
+                        </small>
+
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100" id="revokeAccountInviteBtn">
+                            <i class="fas fa-times"></i> Revoke Invitation Link
+                        </button>
+                    </div>
+
+                    <!-- Generate Link Section -->
+                    <div id="generateAccountInviteSection">
+                        <button type="button" class="btn btn-primary w-100" id="generateAccountInviteLinkBtn">
+                            <i class="fas fa-link"></i> Generate Invitation Link
+                        </button>
+                    </div>
+
+                    <!-- Status Message -->
+                    <div id="accountInviteStatus" class="mt-3">
+                        <div class="alert d-none" id="accountInviteStatusMessage" role="alert"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
             </div>
         </div>
     </div>

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Authenticate Audible Account{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-user-check me-2"></i>Authenticate Your Audible Account</h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-headphones fa-4x text-primary mb-3"></i>
+                        <h5>Welcome!</h5>
+                        <p class="text-muted">You've been invited to authenticate your Audible account.</p>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <h6 class="alert-heading"><i class="fas fa-info-circle me-2"></i>Account Details</h6>
+                        <hr>
+                        <p class="mb-1"><strong>Account Name:</strong> <code>{{ account_name }}</code></p>
+                        <p class="mb-0"><strong>Region:</strong> {{ region|upper }}</p>
+                    </div>
+
+                    <div class="card bg-light mt-4 mb-4">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-shield-alt me-2"></i>What happens next?</h6>
+                            <ol class="mb-0 small">
+                                <li>Click the button below to start the authentication process</li>
+                                <li>You'll be redirected to Amazon/Audible to log in</li>
+                                <li>Complete the login (including 2FA if enabled)</li>
+                                <li>Copy the result URL and paste it back here</li>
+                                <li>Your account will be connected and ready to use</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <a href="/invite/account/{{ token }}/auth/login" class="btn btn-primary btn-lg">
+                            <i class="fas fa-arrow-right me-2"></i>Continue to Authentication
+                        </a>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <small class="text-muted">
+                            <i class="fas fa-lock me-1"></i>Your credentials are secure and never shared
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

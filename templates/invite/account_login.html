@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Audible Authentication - {{ account_name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-sign-in-alt me-2"></i>Audible Authentication</h4>
+                    <small>Account: <strong>{{ account_name }}</strong></small>
+                </div>
+                <div class="card-body p-4">
+                    <div id="step1" class="mb-4">
+                        <h5><span class="badge bg-primary">Step 1</span> Login to Amazon/Audible</h5>
+                        <p>Click the button below to open the Audible login page in a new tab:</p>
+                        <a href="{{ oauth_url }}" target="_blank" class="btn btn-primary btn-lg">
+                            <i class="fas fa-external-link-alt me-2"></i>Open Audible Login
+                        </a>
+                        <div class="alert alert-info mt-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <small>
+                                Log in with your Audible account credentials. Complete 2FA if prompted.
+                                The login page will open in a new tab.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div id="step2" class="mb-4">
+                        <h5><span class="badge bg-success">Step 2</span> Copy the Result URL</h5>
+                        <p>After logging in, you'll see an error page. <strong>This is normal!</strong> Copy the entire URL from the address bar and paste it below:</p>
+                        <div class="mb-3">
+                            <label for="responseUrl" class="form-label fw-bold">Response URL:</label>
+                            <input type="text" class="form-control form-control-lg" id="responseUrl"
+                                   placeholder="https://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=...">
+                            <div class="form-text">
+                                <i class="fas fa-key me-1"></i>The URL should contain "openid.oa2.authorization_code" parameter
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-success btn-lg" onclick="submitLogin()">
+                            <i class="fas fa-check me-2"></i>Complete Authentication
+                        </button>
+                    </div>
+
+                    <div id="status" class="mt-4">
+                        <div class="alert d-none" id="statusMessage" role="alert"></div>
+                        <div class="text-center">
+                            <div class="spinner-border text-primary d-none" id="loadingSpinner" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const token = '{{ token }}';
+const sessionId = '{{ session_id }}';
+let checkStatusInterval;
+
+function submitLogin() {
+    const responseUrl = document.getElementById('responseUrl').value.trim();
+
+    if (!responseUrl) {
+        showStatus('Please enter the response URL', 'danger');
+        return;
+    }
+
+    if (!responseUrl.includes('openid.oa2.authorization_code')) {
+        showStatus('Invalid URL. Make sure it contains the authorization code.', 'warning');
+        return;
+    }
+
+    showStatus('Processing authentication...', 'info');
+    document.getElementById('loadingSpinner').classList.remove('d-none');
+
+    fetch(`/invite/account/${token}/auth/callback/${sessionId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            response_url: responseUrl
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            startStatusCheck();
+        } else {
+            showStatus(data.error || 'Authentication failed', 'danger');
+            document.getElementById('loadingSpinner').classList.add('d-none');
+        }
+    })
+    .catch(error => {
+        showStatus('Network error: ' + error.message, 'danger');
+        document.getElementById('loadingSpinner').classList.add('d-none');
+    });
+}
+
+function startStatusCheck() {
+    checkStatusInterval = setInterval(checkStatus, 2000);
+}
+
+function checkStatus() {
+    fetch(`/invite/account/${token}/auth/status/${sessionId}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success !== undefined) {
+            clearInterval(checkStatusInterval);
+            document.getElementById('loadingSpinner').classList.add('d-none');
+
+            if (data.success) {
+                showStatus(data.message, 'success');
+                setTimeout(() => {
+                    window.location.href = data.redirect;
+                }, 2000);
+            } else {
+                showStatus(data.error, 'danger');
+            }
+        } else if (data.status === 'pending') {
+            // Still processing
+        }
+    })
+    .catch(error => {
+        console.error('Status check error:', error);
+    });
+}
+
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('statusMessage');
+    statusDiv.className = `alert alert-${type}`;
+    statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
+    statusDiv.classList.remove('d-none');
+}
+
+// Clean up interval when page unloads
+window.addEventListener('beforeunload', function() {
+    if (checkStatusInterval) {
+        clearInterval(checkStatusInterval);
+    }
+});
+</script>
+{% endblock %}
