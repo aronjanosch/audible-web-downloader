@@ -1,0 +1,784 @@
+{% extends "base.html" %}
+
+{% block title %}Download Progress - Audible Downloader{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        text-align: center;
+        transition: transform 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    
+    .stat-card .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        background: var(--primary-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .stat-card .stat-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 0.5rem;
+    }
+    
+    .download-item {
+        background: white;
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        transition: all 0.2s;
+    }
+    
+    .download-item:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    
+    .download-item.state-downloading {
+        border-left: 4px solid #007bff;
+    }
+    
+    .download-item.state-converting {
+        border-left: 4px solid #ffc107;
+    }
+    
+    .download-item.state-completed {
+        border-left: 4px solid #28a745;
+        opacity: 0.8;
+    }
+    
+    .download-item.state-error {
+        border-left: 4px solid #dc3545;
+    }
+    
+    .download-item.state-pending {
+        border-left: 4px solid #6c757d;
+    }
+    
+    .download-cover {
+        width: 60px;
+        height: 90px;
+        object-fit: cover;
+        border-radius: 6px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .download-cover-placeholder {
+        width: 60px;
+        height: 90px;
+        background: var(--primary-gradient);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+    }
+    
+    .download-info {
+        flex-grow: 1;
+        min-width: 0;
+    }
+    
+    .download-title {
+        font-weight: 600;
+        font-size: 1rem;
+        margin-bottom: 0.25rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .download-meta {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+    }
+    
+    .download-stats {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        font-size: 0.875rem;
+    }
+    
+    .download-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: #6c757d;
+    }
+    
+    .download-stat i {
+        width: 16px;
+        text-align: center;
+    }
+    
+    .progress {
+        height: 8px;
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+    }
+    
+    .progress-bar {
+        border-radius: 4px;
+        transition: width 0.3s ease;
+    }
+    
+    .state-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .state-badge.state-downloading {
+        background-color: #cce5ff;
+        color: #004085;
+    }
+    
+    .state-badge.state-converting {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .state-badge.state-completed {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .state-badge.state-error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .state-badge.state-pending {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+    
+    .connection-status {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        z-index: 1000;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        transition: all 0.3s;
+    }
+    
+    .connection-status.connected {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .connection-status.disconnected {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .connection-status.connecting {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .section-header {
+        background: white;
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .section-header:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    
+    .section-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    
+    .section-header .badge {
+        font-size: 0.875rem;
+    }
+    
+    .empty-state {
+        background: white;
+        border-radius: 12px;
+        padding: 3rem 2rem;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        color: #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    .empty-state h4 {
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-state p {
+        color: #adb5bd;
+        margin-bottom: 0;
+    }
+    
+    .error-details {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .error-details strong {
+        color: #721c24;
+    }
+    
+    .error-details code {
+        background-color: #f1b0b7;
+        padding: 0.125rem 0.25rem;
+        border-radius: 3px;
+        font-size: 0.8125rem;
+    }
+    
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+    }
+    
+    .loading-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: pulse-dot 1.4s infinite;
+    }
+    
+    .loading-dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    
+    .loading-dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Connection Status Indicator -->
+<div id="connectionStatus" class="connection-status connecting">
+    <i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i>
+    <span>Connecting...</span>
+</div>
+
+<!-- Back to Library Button -->
+<div class="mb-3">
+    <a href="/" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>Back to Library
+    </a>
+</div>
+
+<!-- Overall Progress Bar -->
+<div class="card mb-4" style="box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">
+                <i class="fas fa-tasks me-2"></i>Overall Progress
+            </h5>
+            <div class="d-flex gap-3 align-items-center">
+                <small class="text-muted">
+                    <i class="fas fa-tachometer-alt me-1"></i>
+                    <strong id="overallSpeed">0 MB/s</strong>
+                </small>
+                <small class="text-muted">
+                    <i class="fas fa-clock me-1"></i>
+                    ETA: <strong id="overallEta">-</strong>
+                </small>
+                <span class="badge bg-primary" id="overallProgress">0 / 0 (0%)</span>
+            </div>
+        </div>
+        <div class="progress" style="height: 24px;">
+            <div id="overallProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                 role="progressbar" 
+                 style="width: 0%; transition: width 0.5s ease;" 
+                 aria-valuenow="0" 
+                 aria-valuemin="0" 
+                 aria-valuemax="100">
+                <span id="overallProgressText" style="font-weight: 600;">0 / 0 books</span>
+            </div>
+        </div>
+        <div class="mt-2 small text-muted">
+            <i class="fas fa-info-circle me-1"></i>
+            Completed books only count after being fully imported to your library
+        </div>
+    </div>
+</div>
+
+<!-- Active Downloads Section -->
+<div class="section-header">
+    <div>
+        <h3><i class="fas fa-download me-2"></i> Active Downloads</h3>
+    </div>
+    <div>
+        <span class="badge bg-primary" id="activeCount">0</span>
+    </div>
+</div>
+
+<div id="activeDownloads" class="mb-4">
+    <!-- Active downloads will be inserted here -->
+</div>
+
+<!-- Queued Downloads Section -->
+<div class="section-header" data-bs-toggle="collapse" data-bs-target="#queuedSection">
+    <div>
+        <h3><i class="fas fa-clock me-2"></i> Queued Downloads</h3>
+    </div>
+    <div>
+        <span class="badge bg-secondary me-2" id="queuedCount">0</span>
+        <i class="fas fa-chevron-down"></i>
+    </div>
+</div>
+
+<div id="queuedSection" class="collapse mb-4">
+    <div id="queuedDownloads">
+        <!-- Queued downloads will be inserted here -->
+    </div>
+</div>
+
+<!-- Completed Downloads Section -->
+<div class="section-header" data-bs-toggle="collapse" data-bs-target="#completedSection">
+    <div>
+        <h3><i class="fas fa-check-circle me-2"></i> Completed Downloads</h3>
+    </div>
+    <div>
+        <span class="badge bg-success me-2" id="completedCount">0</span>
+        <i class="fas fa-chevron-down"></i>
+    </div>
+</div>
+
+<div id="completedSection" class="collapse mb-4">
+    <div id="completedDownloads">
+        <!-- Completed downloads will be inserted here -->
+    </div>
+</div>
+
+<!-- Failed Downloads Section -->
+<div class="section-header" data-bs-toggle="collapse" data-bs-target="#failedSection">
+    <div>
+        <h3><i class="fas fa-exclamation-triangle me-2"></i> Failed Downloads</h3>
+    </div>
+    <div>
+        <span class="badge bg-danger me-2" id="failedCount">0</span>
+        <i class="fas fa-chevron-down"></i>
+    </div>
+</div>
+
+<div id="failedSection" class="collapse show mb-4">
+    <div id="failedDownloads">
+        <!-- Failed downloads will be inserted here -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let eventSource = null;
+    let lastUpdate = null;
+    
+    // Format bytes to human-readable
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // Format time in seconds to human-readable
+    function formatTime(seconds) {
+        if (!seconds || seconds === 0) return '0s';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        
+        if (h > 0) return `${h}h ${m}m`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    }
+    
+    // Get state display information
+    function getStateInfo(state) {
+        const states = {
+            'pending': { label: 'Pending', icon: 'clock', class: 'state-pending' },
+            'retrying': { label: 'Retrying', icon: 'redo', class: 'state-pending' },
+            'license_requested': { label: 'Requesting License', icon: 'key', class: 'state-downloading' },
+            'license_granted': { label: 'License Granted', icon: 'check', class: 'state-downloading' },
+            'downloading': { label: 'Downloading', icon: 'download', class: 'state-downloading' },
+            'download_complete': { label: 'Download Complete', icon: 'check', class: 'state-downloading' },
+            'decrypting': { label: 'Converting', icon: 'sync', class: 'state-converting' },
+            'converted': { label: 'Completed', icon: 'check-circle', class: 'state-completed' },
+            'error': { label: 'Failed', icon: 'exclamation-circle', class: 'state-error' }
+        };
+        return states[state] || { label: 'Unknown', icon: 'question', class: 'state-pending' };
+    }
+    
+    // Create download item HTML
+    function createDownloadItem(asin, download) {
+        const stateInfo = getStateInfo(download.state);
+        const progressPercent = download.progress_percent || 0;
+        const speed = download.speed || 0;
+        const eta = download.eta || 0;
+        const elapsed = download.elapsed || 0;
+        
+        let html = `
+            <div class="download-item ${stateInfo.class}" data-asin="${asin}">
+                <div class="d-flex gap-3 align-items-start">
+                    <div class="download-cover-placeholder">
+                        <i class="fas fa-book"></i>
+                    </div>
+                    <div class="download-info">
+                        <div class="download-title" title="${download.title}">
+                            ${download.title}
+                        </div>
+                        <div class="download-meta">
+                            ${download.downloaded_by_account || 'Unknown Account'}
+                        </div>
+                        
+                        ${download.state !== 'error' ? `
+                        <div class="progress">
+                            <div class="progress-bar ${stateInfo.class === 'state-completed' ? 'bg-success' : ''}" 
+                                 role="progressbar" 
+                                 style="width: ${progressPercent}%"
+                                 aria-valuenow="${progressPercent}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="download-stats">
+                            <div class="download-stat">
+                                <i class="fas fa-${stateInfo.icon}"></i>
+                                <span class="state-badge ${stateInfo.class}">${stateInfo.label}</span>
+                            </div>
+                            
+                            ${download.state === 'downloading' && speed > 0 ? `
+                            <div class="download-stat">
+                                <i class="fas fa-tachometer-alt"></i>
+                                <span>${formatBytes(speed)}/s</span>
+                            </div>
+                            ` : ''}
+                            
+                            ${download.downloaded_bytes && download.total_bytes ? `
+                            <div class="download-stat">
+                                <i class="fas fa-database"></i>
+                                <span>${formatBytes(download.downloaded_bytes)} / ${formatBytes(download.total_bytes)}</span>
+                            </div>
+                            ` : ''}
+                            
+                            ${elapsed > 0 ? `
+                            <div class="download-stat">
+                                <i class="fas fa-hourglass-half"></i>
+                                <span>${formatTime(elapsed)}</span>
+                            </div>
+                            ` : ''}
+                            
+                            ${download.state === 'downloading' && eta > 0 ? `
+                            <div class="download-stat">
+                                <i class="fas fa-clock"></i>
+                                <span>ETA: ${formatTime(eta)}</span>
+                            </div>
+                            ` : ''}
+                            
+                            ${progressPercent > 0 && download.state !== 'error' ? `
+                            <div class="download-stat">
+                                <i class="fas fa-percentage"></i>
+                                <span>${progressPercent.toFixed(1)}%</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        
+                        ${download.error ? `
+                        <div class="error-details">
+                            <strong><i class="fas fa-exclamation-triangle me-1"></i> Error:</strong> ${download.error}
+                            ${download.error_type ? `<div class="mt-1"><code>${download.error_type}</code></div>` : ''}
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        return html;
+    }
+    
+    // Update the UI with new download data
+    function updateDownloads(data) {
+        if (!data) return;
+        
+        const downloads = data.downloads || {};
+        const stats = data.stats || { active: 0, queued: 0, completed: 0, failed: 0, total_speed: 0 };
+        
+        // Update section badges
+        document.getElementById('activeCount').textContent = stats.active;
+        document.getElementById('queuedCount').textContent = stats.queued;
+        document.getElementById('completedCount').textContent = stats.completed;
+        document.getElementById('failedCount').textContent = stats.failed;
+        
+        // Calculate overall progress
+        const totalBooks = stats.active + stats.queued + stats.completed + stats.failed;
+        const completedBooks = stats.completed;
+        const overallPercent = totalBooks > 0 ? (completedBooks / totalBooks) * 100 : 0;
+        const batchComplete = stats.batch_complete || false;
+        
+        // Update overall progress bar
+        const progressBar = document.getElementById('overallProgressBar');
+        document.getElementById('overallSpeed').textContent = formatBytes(stats.total_speed) + '/s';
+        document.getElementById('overallProgress').textContent = 
+            `${completedBooks} / ${totalBooks} (${overallPercent.toFixed(1)}%)`;
+        progressBar.style.width = overallPercent + '%';
+        progressBar.setAttribute('aria-valuenow', overallPercent);
+        
+        // Handle batch completion
+        if (batchComplete && totalBooks > 0) {
+            // Batch complete - turn green and stop animation
+            progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+            progressBar.classList.add('bg-success');
+            document.getElementById('overallProgressText').innerHTML = 
+                `<i class="fas fa-check-circle me-2"></i>${completedBooks} / ${totalBooks} books - Complete!`;
+            document.getElementById('overallEta').textContent = 'Complete';
+        } else {
+            // Batch in progress - keep blue and animated
+            progressBar.classList.add('progress-bar-animated', 'progress-bar-striped');
+            progressBar.classList.remove('bg-success');
+            document.getElementById('overallProgressText').textContent = 
+                `${completedBooks} / ${totalBooks} books`;
+            
+            // Calculate overall ETA based on active downloads
+            let totalEta = 0;
+            let activeWithEta = 0;
+            for (const [asin, download] of Object.entries(downloads)) {
+                if (download.state === 'downloading' && download.eta > 0) {
+                    totalEta += download.eta;
+                    activeWithEta++;
+                }
+            }
+            
+            const avgEta = activeWithEta > 0 ? totalEta / activeWithEta : 0;
+            const remainingBooks = stats.active + stats.queued;
+            const estimatedTotalEta = avgEta * remainingBooks;
+            
+            document.getElementById('overallEta').textContent = 
+                estimatedTotalEta > 0 ? formatTime(estimatedTotalEta) : '-';
+        }
+        
+        // Categorize downloads
+        const active = [];
+        const queued = [];
+        const completed = [];
+        const failed = [];
+        
+        for (const [asin, download] of Object.entries(downloads)) {
+            const state = download.state;
+            
+            if (state === 'error') {
+                failed.push([asin, download]);
+            } else if (state === 'converted') {
+                completed.push([asin, download]);
+            } else if (state === 'pending' || state === 'retrying') {
+                queued.push([asin, download]);
+            } else {
+                active.push([asin, download]);
+            }
+        }
+        
+        // Update active downloads
+        const activeContainer = document.getElementById('activeDownloads');
+        if (active.length === 0) {
+            activeContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-download"></i>
+                    <h4>No Active Downloads</h4>
+                    <p>Start downloading audiobooks from the main library page</p>
+                </div>
+            `;
+        } else {
+            activeContainer.innerHTML = active.map(([asin, download]) => 
+                createDownloadItem(asin, download)
+            ).join('');
+        }
+        
+        // Update queued downloads
+        const queuedContainer = document.getElementById('queuedDownloads');
+        if (queued.length === 0) {
+            queuedContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-clock"></i>
+                    <h4>No Queued Downloads</h4>
+                    <p>Items waiting to download will appear here</p>
+                </div>
+            `;
+        } else {
+            queuedContainer.innerHTML = queued.map(([asin, download]) => 
+                createDownloadItem(asin, download)
+            ).join('');
+        }
+        
+        // Update completed downloads (limit to 50 most recent)
+        const completedContainer = document.getElementById('completedDownloads');
+        if (completed.length === 0) {
+            completedContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-check-circle"></i>
+                    <h4>No Completed Downloads</h4>
+                    <p>Successfully downloaded audiobooks will appear here</p>
+                </div>
+            `;
+        } else {
+            // Sort by timestamp (most recent first) and limit to 50
+            completed.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+            const recentCompleted = completed.slice(0, 50);
+            
+            completedContainer.innerHTML = recentCompleted.map(([asin, download]) => 
+                createDownloadItem(asin, download)
+            ).join('');
+        }
+        
+        // Update failed downloads
+        const failedContainer = document.getElementById('failedDownloads');
+        if (failed.length === 0) {
+            failedContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-check-circle"></i>
+                    <h4>No Failed Downloads</h4>
+                    <p>All downloads completed successfully</p>
+                </div>
+            `;
+        } else {
+            // Sort by timestamp (most recent first)
+            failed.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+            
+            failedContainer.innerHTML = failed.map(([asin, download]) => 
+                createDownloadItem(asin, download)
+            ).join('');
+        }
+        
+        lastUpdate = Date.now();
+    }
+    
+    // Update connection status
+    function updateConnectionStatus(status, message) {
+        const statusEl = document.getElementById('connectionStatus');
+        statusEl.className = `connection-status ${status}`;
+        
+        let icon = 'circle';
+        if (status === 'connected') icon = 'check-circle';
+        else if (status === 'disconnected') icon = 'times-circle';
+        
+        statusEl.innerHTML = `
+            <i class="fas fa-${icon} me-1" style="font-size: 0.5rem;"></i>
+            <span>${message}</span>
+        `;
+    }
+    
+    // Connect to SSE stream
+    function connectToStream() {
+        if (eventSource) {
+            eventSource.close();
+        }
+        
+        updateConnectionStatus('connecting', 'Connecting...');
+        
+        eventSource = new EventSource('/api/download/progress-stream');
+        
+        eventSource.onopen = function() {
+            console.log('Connected to progress stream');
+            updateConnectionStatus('connected', 'Live');
+        };
+        
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.error) {
+                    console.error('Stream error:', data.error);
+                    updateConnectionStatus('disconnected', 'Error: ' + data.error);
+                    return;
+                }
+                
+                updateDownloads(data);
+                updateConnectionStatus('connected', 'Live');
+            } catch (error) {
+                console.error('Failed to parse progress data:', error);
+            }
+        };
+        
+        eventSource.onerror = function(event) {
+            console.error('EventSource error:', event);
+            updateConnectionStatus('disconnected', 'Disconnected - Reconnecting...');
+            
+            // Close and reconnect after a delay
+            eventSource.close();
+            setTimeout(connectToStream, 3000);
+        };
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        connectToStream();
+        
+        // Initial fetch to populate immediately
+        fetch('/api/download/progress')
+            .then(response => response.json())
+            .then(progress => {
+                // Format data to match SSE format
+                updateDownloads({
+                    downloads: progress,
+                    stats: { active: 0, queued: 0, completed: 0, failed: 0, total_speed: 0 }
+                });
+            })
+            .catch(error => {
+                console.error('Failed to fetch initial progress:', error);
+            });
+    });
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        if (eventSource) {
+            eventSource.close();
+        }
+    });
+</script>
+{% endblock %}
+

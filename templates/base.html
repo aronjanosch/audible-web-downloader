@@ -119,6 +119,11 @@
             border-radius: 50px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             animation: pulse 2s infinite;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        
+        .btn-floating-action:active {
+            transform: scale(0.95);
         }
         
         @keyframes pulse {
@@ -369,6 +374,14 @@
                     <button id="refreshLibraryBtn" class="btn btn-sm btn-info" style="display: none;">
                         <i class="fas fa-sync"></i> Refresh
                     </button>
+                    
+                    <!-- Downloads Button -->
+                    <a href="/downloads" class="btn btn-sm btn-outline-primary position-relative">
+                        <i class="fas fa-download"></i> Downloads
+                        <span id="activeDownloadBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: none;">
+                            0
+                        </span>
+                    </a>
                     
                     <!-- Settings Button -->
                     <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#settingsPanel">
@@ -890,10 +903,35 @@
             }
         }
         
+        // Update download badge
+        function updateDownloadBadge() {
+            fetch('/api/download/status')
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.getElementById('activeDownloadBadge');
+                    if (badge) {
+                        const activeCount = data.active_downloads || 0;
+                        if (activeCount > 0) {
+                            badge.textContent = activeCount;
+                            badge.style.display = 'inline';
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to fetch download status:', error);
+                });
+        }
+        
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
             loadAccounts();
             setupEventListeners();
+            
+            // Update download badge periodically
+            updateDownloadBadge();
+            setInterval(updateDownloadBadge, 3000); // Update every 3 seconds
         });
     </script>
     
