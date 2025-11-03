@@ -166,53 +166,62 @@ Owner creates account, generates unique link for one user to authenticate:
 
 ### Security Considerations
 
+**Authentik Integration (Recommended):**
+- **All routes protected**: Main admin panel AND invitation routes behind Authentik authentication
+- **Role-based access control**: Admin users get full access, family users restricted to `/invite/*` paths only
+- **Centralized access management**: Create users in Authentik, assign to groups
+- **Audit trail**: All access attempts logged in Authentik
+- **See `AUTHENTIK_SETUP.md`** for complete setup guide
+
 **Token Security:**
 - 256-bit entropy makes brute-force attacks computationally infeasible
 - Constant-time comparison prevents timing attacks
-- Link should be kept private within family
-
-**Traefik Configuration:**
-- Invitation routes MUST bypass authentication middleware
-- Configure separate router with higher priority for `/invite/*` paths
-- See `TRAEFIK.md` for detailed configuration examples
+- Tokens used to identify invitation links, not for authentication
 
 **Account Ownership:**
 - All accounts added via invitation belong to the application owner
-- No separate user authentication system
+- Family members authenticate to Authentik (not Audible) to access invitation pages
 - Owner has full control (select, authenticate, download, remove)
 
-**Rate Limiting Recommended:**
-- Consider adding rate limiting to invitation endpoints
-- Prevents abuse if link is leaked
-- Example: 10 requests/minute via Traefik middleware
+**User Groups:**
+- `audible-admins` - Full access to admin panel and invitation pages
+- `audible-family` - Limited access to `/invite/*` paths only
 
-### Traefik Integration
+### Traefik Integration with Authentik
 
-**IMPORTANT:** When deploying behind Traefik with authentication middleware (Authentik, Authelia, etc.), you MUST configure Traefik to bypass authentication for invitation routes.
+**RECOMMENDED CONFIGURATION:** Use Authentik's authorization policies for path-based access control.
 
-Example Docker Compose labels:
+**Simple Docker Compose labels (single router):**
 ```yaml
-# Main router with authentication
+# Single router with Authentik middleware for all routes
 - "traefik.http.routers.audible.rule=Host(`audible.yourdomain.com`)"
 - "traefik.http.routers.audible.middlewares=authentik@docker"
-
-# Invitation router WITHOUT authentication
-- "traefik.http.routers.audible-invite.rule=Host(`audible.yourdomain.com`) && PathPrefix(`/invite`)"
-- "traefik.http.routers.audible-invite.priority=100"
-# No middlewares = no authentication
+- "traefik.http.routers.audible.entrypoints=websecure"
+- "traefik.http.routers.audible.tls.certresolver=letsencrypt"
 ```
 
-See `TRAEFIK.md` for complete configuration examples and troubleshooting.
+**Authentik Policy** (configured in Authentik, not Traefik):
+- Admins: Access all paths
+- Family: Access only `/invite/*` paths
+- Authorization enforced by Authentik proxy provider
+
+See `AUTHENTIK_SETUP.md` for step-by-step Authentik configuration guide.
 
 ### Usage Notes
+
+**Setup (One-time per family member):**
+1. Create Authentik user for family member
+2. Add user to `audible-family` group
+3. Send family member their Authentik login credentials
 
 **General Invitation Link (Self-Service):**
 1. Click "Manage Invitation Link" button in sidebar "Family Sharing" section
 2. Generate or view invitation link (auto-generated on first use)
 3. Optional: Set custom token for memorable URL
 4. Copy and share link with family members via secure messaging
-5. Family members create account name, complete Audible OAuth
-6. New accounts appear in account dropdown
+5. Family member clicks link → redirected to Authentik login → logs in with their credentials
+6. Family member creates account name, completes Audible OAuth
+7. New accounts appear in your account dropdown
 
 **Single-Account Invitation (Admin-Controlled):**
 1. Add new account via "Add New Account" form (specify name and region)
@@ -220,13 +229,15 @@ See `TRAEFIK.md` for complete configuration examples and troubleshooting.
 3. Click "Generate Invite Link" button (appears for unauthenticated accounts)
 4. Copy account-specific link from modal
 5. Share link with specific family member
-6. Family member authenticates the pre-named account via Audible OAuth
-7. Account updates to authenticated status, invitation link auto-revoked
+6. Family member clicks link → redirected to Authentik login → logs in with their credentials
+7. Family member authenticates the pre-named account via Audible OAuth
+8. Account updates to authenticated status, invitation link auto-revoked
 
 **Account Management:**
 - All accounts (self-created, general invite, single-account invite) appear in dropdown
 - Switch between accounts to download from different libraries
 - Remove accounts as needed
+- Revoke family member access by removing from Authentik group or deleting user
 
 ## Download Architecture
 

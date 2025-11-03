@@ -167,12 +167,40 @@ def revoke_account_invite_link(account_name):
 def select_account(account_name):
     """API endpoint to select an account"""
     accounts = load_accounts()
-    
+
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
-    
+
     session['current_account'] = account_name
     return jsonify({'success': True})
+
+@main_bp.route('/api/accounts/<account_name>', methods=['DELETE'])
+def delete_account(account_name):
+    """API endpoint to delete an account"""
+    try:
+        accounts = load_accounts()
+
+        if account_name not in accounts:
+            return jsonify({'error': 'Account not found'}), 404
+
+        # Remove account from accounts.json
+        del accounts[account_name]
+        save_accounts(accounts)
+
+        # Clean up auth directory if it exists
+        auth_dir = Path("config") / "auth" / account_name
+        if auth_dir.exists():
+            import shutil
+            shutil.rmtree(auth_dir)
+
+        # Clear from session if this was the current account
+        if session.get('current_account') == account_name:
+            session.pop('current_account', None)
+            session.pop('library', None)
+
+        return jsonify({'success': True, 'message': 'Account deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @main_bp.route('/api/library/search')
 def search_library():

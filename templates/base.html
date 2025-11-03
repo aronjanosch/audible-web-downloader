@@ -196,9 +196,15 @@
                     <!-- Account Selector -->
                     <div class="mb-3">
                         <label for="accountSelect" class="form-label">Select Account:</label>
-                        <select class="form-select" id="accountSelect">
-                            <option value="">No accounts configured</option>
-                        </select>
+                        <div class="input-group">
+                            <select class="form-select" id="accountSelect">
+                                <option value="">No accounts configured</option>
+                            </select>
+                            <button class="btn btn-outline-danger btn-sm" id="deleteAccountBtn" 
+                                    style="display: none;" title="Delete Account">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Add New Account -->

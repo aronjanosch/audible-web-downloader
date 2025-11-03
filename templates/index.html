@@ -198,11 +198,20 @@
         // Account selection
         document.getElementById('accountSelect').addEventListener('change', function() {
             const accountName = this.value;
+            const deleteBtn = document.getElementById('deleteAccountBtn');
+            
             if (accountName) {
                 selectAccount(accountName);
+                deleteBtn.style.display = 'block';
             } else {
                 hideAccountInfo();
+                deleteBtn.style.display = 'none';
             }
+        });
+
+        // Delete account
+        document.getElementById('deleteAccountBtn').addEventListener('click', function() {
+            deleteAccount();
         });
 
         // Add account form
@@ -311,6 +320,38 @@
             
         } catch (error) {
             showAlert('Failed to add account: ' + error.message, 'danger');
+        }
+    }
+    
+    async function deleteAccount() {
+        const accountSelect = document.getElementById('accountSelect');
+        const accountName = accountSelect.value;
+        
+        if (!accountName) {
+            showAlert('Please select an account to delete', 'warning');
+            return;
+        }
+        
+        // Confirm deletion
+        if (!confirm(`Are you sure you want to delete the account "${accountName}"?\n\nThis will remove all authentication data for this account.`)) {
+            return;
+        }
+        
+        try {
+            await apiCall(`/api/accounts/${accountName}`, {
+                method: 'DELETE'
+            });
+            
+            showAlert(`Account "${accountName}" deleted successfully!`, 'success');
+            
+            // Reload accounts and hide account info
+            await loadAccounts();
+            accountSelect.value = '';
+            hideAccountInfo();
+            document.getElementById('deleteAccountBtn').style.display = 'none';
+            
+        } catch (error) {
+            showAlert('Failed to delete account: ' + error.message, 'danger');
         }
     }
     
