@@ -68,6 +68,22 @@ def index():
                          current_account_data=current_account_data,
                          library=library)
 
+@main_bp.route('/import')
+def importer():
+    """Import page for M4B audiobooks"""
+    accounts = load_accounts()
+    current_account = session.get('current_account')
+    
+    # Get current account data
+    current_account_data = None
+    if current_account and current_account in accounts:
+        current_account_data = accounts[current_account]
+    
+    return render_template('importer.html',
+                         accounts=accounts,
+                         current_account=current_account,
+                         current_account_data=current_account_data)
+
 @main_bp.route('/api/accounts', methods=['GET'])
 def get_accounts():
     """API endpoint to get all accounts"""

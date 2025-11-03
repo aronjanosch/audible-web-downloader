@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 # Default naming pattern (AudioBookshelf recommended structure)
-DEFAULT_NAMING_PATTERN = "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}]/{Title}.m4b"
+DEFAULT_NAMING_PATTERN = "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{Narrator}}]/{Title}.m4b"
 
 # Preset naming patterns
 NAMING_PRESETS = {
     "audiobookshelf": {
         "name": "AudioBookshelf (Recommended)",
-        "pattern": "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}]/{Title}.m4b",
+        "pattern": "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{´{Narrator}}]/{Title}.m4b",
         "description": "Author/[Series/][Vol. # - Year - Title {Narrator}]/Title.m4b (each book in its own folder)"
     },
     "flat": {
@@ -25,7 +25,7 @@ NAMING_PRESETS = {
     },
     "author_title": {
         "name": "Author/Title",
-        "pattern": "{Author}/{Year} - {Title}[ {{{Narrator}}}]/{Title}.m4b",
+        "pattern": "{Author}/{Year} - {Title}[ {{Narrator}}]/{Title}.m4b",
         "description": "Author/[Year - Title {Narrator}]/Title.m4b (organized by author)"
     },
     "series_focused": {
@@ -41,7 +41,7 @@ AVAILABLE_PLACEHOLDERS = {
     "{Series}": "Book series name (optional, empty if no series)",
     "{Title}": "Book title only, without any metadata",
     "{Year}": "Release year (e.g., 2024)",
-    "{Narrator}": "Narrator name(s) - use {{{Narrator}}} for AudioBookshelf format",
+    "{Narrator}": "Narrator name(s) - use {{Narrator}} for AudioBookshelf format",
     "{Publisher}": "Publisher name",
     "{Language}": "Book language code",
     "{ASIN}": "Amazon Standard Identification Number",
@@ -59,10 +59,10 @@ the entire bracketed section (including surrounding text) is omitted.
 Examples:
   [Vol. {Volume} - ]  → "Vol. 1 - " when volume exists, "" when volume is empty
   [{Series}/]         → "Series Name/" when series exists, "" when series is empty
-  [ {{{Narrator}}}]   → " {Narrator}" when narrator exists, "" when narrator is empty
+  [ {{Narrator}}]   → " {Narrator}" when narrator exists, "" when narrator is empty
 
 Pattern Example:
-  {Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{{Narrator}}}]/{Title}.m4b
+  {Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{Narrator}}]/{Title}.m4b
 
 Results (folder structure):
   With series & volume:    "Author/Series/Vol. 1 - 2024 - Title {Narrator}/Title.m4b"

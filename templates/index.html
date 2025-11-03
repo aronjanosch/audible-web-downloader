@@ -186,38 +186,18 @@
     let downloadStatusInterval = null;
     let progressEventSource = null;
 
-    // Load accounts on page load
-    async function loadAccounts() {
+    // Check for welcome message on page load
+    // (loadAccounts and updateAccountSelector are now in base.html)
+    async function checkForWelcomeMessage() {
         try {
             const accounts = await apiCall('/api/accounts');
-            updateAccountSelector(accounts);
-            
-            // Auto-select if only one account exists
             const accountNames = Object.keys(accounts);
-            if (accountNames.length === 1) {
-                const accountName = accountNames[0];
-                document.getElementById('accountSelect').value = accountName;
-                selectAccount(accountName);
-            } else if (accountNames.length === 0) {
-                // Show welcome message if no accounts
+            if (accountNames.length === 0) {
                 document.getElementById('welcomeMessage').style.display = 'block';
             }
         } catch (error) {
-            showAlert('Failed to load accounts: ' + error.message, 'danger');
+            console.error('Failed to check accounts:', error);
         }
-    }
-    
-    function updateAccountSelector(accounts) {
-        const select = document.getElementById('accountSelect');
-        select.innerHTML = '<option value="">Select an account...</option>';
-        
-        Object.keys(accounts).forEach(accountName => {
-            const option = document.createElement('option');
-            option.value = accountName;
-            option.textContent = accountName;
-            option.dataset.region = accounts[accountName].region;
-            select.appendChild(option);
-        });
     }
     
     // Local library variables
@@ -1904,6 +1884,7 @@
     // Event listeners for naming pattern modal
     document.addEventListener('DOMContentLoaded', function() {
         loadNamingSettings();
+        checkForWelcomeMessage();
 
         // Configure Naming Button
         const configureBtn = document.getElementById('configureNamingBtn');
