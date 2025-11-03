@@ -15,7 +15,7 @@ DEFAULT_NAMING_PATTERN = "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}
 NAMING_PRESETS = {
     "audiobookshelf": {
         "name": "AudioBookshelf (Recommended)",
-        "pattern": "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{´{Narrator}}]/{Title}.m4b",
+        "pattern": "{Author}/[{Series}/][Vol. {Volume} - ]{Year} - {Title}[ {{Narrator}}]/{Title}.m4b",
         "description": "Author/[Series/][Vol. # - Year - Title {Narrator}]/Title.m4b (each book in its own folder)"
     },
     "flat": {
