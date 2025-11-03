@@ -405,6 +405,10 @@ def execute_import():
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
         
+        # Start a new batch with expected count to prevent race conditions
+        batch_id = queue_manager.start_new_batch(expected_count=len(imports))
+        logger.info(f"Started new import batch {batch_id} with {len(imports)} files")
+        
         # Add all imports to queue
         for import_item in imports:
             file_path = import_item['file_path']
@@ -432,10 +436,6 @@ def execute_import():
         import threading
         import_thread = threading.Thread(target=run_import, daemon=True)
         import_thread.start()
-        
-        # Get batch ID
-        stats = queue_manager.get_statistics()
-        batch_id = stats.get('batch_id', 'unknown')
         
         return jsonify({
             'success': True,

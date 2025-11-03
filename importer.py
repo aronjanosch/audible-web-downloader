@@ -103,17 +103,32 @@ class ImportQueueManager:
         self._queue[file_path]['last_updated'] = time.time()
         self._save_queue()
     
+    def start_new_batch(self, expected_count: int = 0):
+        """Start a new import batch with an expected file count."""
+        batch_id = f"import_batch_{int(time.time())}"
+        self._queue['_batch_info'] = {
+            'current_batch_id': batch_id,
+            'batch_complete': False,
+            'batch_start_time': time.time(),
+            'expected_count': expected_count,
+            'files_added': 0
+        }
+        self._save_queue()
+        return batch_id
+    
     def add_to_queue(self, file_path: str, title: str, **metadata):
         """Add a new file to the import queue."""
         batch_info = self._queue.get('_batch_info', {})
         
-        # Start a new batch if needed
+        # Start a new batch if needed (fallback for backward compatibility)
         if not batch_info.get('current_batch_id') or batch_info.get('batch_complete', False):
             batch_id = f"import_batch_{int(time.time())}"
             self._queue['_batch_info'] = {
                 'current_batch_id': batch_id,
                 'batch_complete': False,
-                'batch_start_time': time.time()
+                'batch_start_time': time.time(),
+                'expected_count': 0,
+                'files_added': 0
             }
         
         self._queue[file_path] = {
@@ -125,6 +140,9 @@ class ImportQueueManager:
             'batch_id': self._queue['_batch_info']['current_batch_id'],
             **metadata
         }
+        
+        # Increment files added counter
+        self._queue['_batch_info']['files_added'] = self._queue['_batch_info'].get('files_added', 0) + 1
         self._save_queue()
     
     def remove_from_queue(self, file_path: str):
@@ -149,11 +167,14 @@ class ImportQueueManager:
             'batch_id': current_batch_id
         }
         
+        # Count all imports in current batch
         for file_path, import_data in self._queue.items():
             if file_path.startswith('_'):
                 continue
             
-            if import_data.get('batch_id') != current_batch_id:
+            # Only count imports from the current batch
+            import_batch_id = import_data.get('batch_id')
+            if import_batch_id != current_batch_id:
                 continue
             
             stats['total_imports'] += 1
@@ -171,8 +192,17 @@ class ImportQueueManager:
                 stats['skipped'] += 1
         
         # Check if batch is complete
+        # Only mark complete if:
+        # 1. We have imports in this batch
+        # 2. No active or queued items remain
+        # 3. Expected count is met (if specified)
         if stats['total_imports'] > 0 and stats['active'] == 0 and stats['queued'] == 0:
-            if not batch_info.get('batch_complete', False):
+            expected_count = batch_info.get('expected_count', 0)
+            # If expected_count is set, verify we have that many files
+            # Otherwise fall back to checking if all are done
+            can_complete = (expected_count == 0 or stats['total_imports'] >= expected_count)
+            
+            if can_complete and not batch_info.get('batch_complete', False):
                 self._queue['_batch_info']['batch_complete'] = True
                 self._save_queue()
                 stats['batch_complete'] = True

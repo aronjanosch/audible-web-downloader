@@ -1204,6 +1204,11 @@ function updateProgress() {
                     clearInterval(progressInterval);
                     progressInterval = null;
                     
+                    // Turn progress bar green and stop animation
+                    const progressBar = document.getElementById('overallProgressBar');
+                    progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                    progressBar.classList.add('bg-success');
+                    
                     document.getElementById('importCompleteActions').style.display = 'block';
                     document.getElementById('importSummary').textContent = 
                         `${stats.completed} successful, ${stats.failed} failed`;
