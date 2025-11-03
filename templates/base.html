@@ -245,6 +245,70 @@
             font-size: 0.7rem !important;
         }
         
+        /* Bottom Notification Bar */
+        .bottom-notification-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1050;
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 0.875rem;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-in-out;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .bottom-notification-bar.show {
+            transform: translateY(0);
+        }
+        
+        .bottom-notification-bar.success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+        
+        .bottom-notification-bar.error {
+            background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+        }
+        
+        .bottom-notification-bar.warning {
+            background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+            color: #212529;
+        }
+        
+        .bottom-notification-bar .notification-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .bottom-notification-bar .notification-text {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .bottom-notification-bar .close-btn {
+            background: none;
+            border: none;
+            color: inherit;
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 1rem;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .bottom-notification-bar .close-btn:hover {
+            opacity: 1;
+        }
+        
         /* Responsive */
         @media (max-width: 768px) {
             .btn-floating-action {
@@ -256,6 +320,11 @@
             
             .account-selector {
                 min-width: 150px;
+            }
+            
+            .bottom-notification-bar {
+                font-size: 0.75rem;
+                padding: 0.4rem 0.75rem;
             }
         }
     </style>
@@ -410,6 +479,19 @@
     <button id="downloadBtn" class="btn btn-success btn-floating-action" style="display: none;">
         <i class="fas fa-download"></i> Download Selected
     </button>
+    
+    <!-- Bottom Notification Bar -->
+    <div id="bottomNotificationBar" class="bottom-notification-bar">
+        <div class="notification-content">
+            <div class="notification-text">
+                <i class="fas fa-info-circle"></i>
+                <span id="notificationMessage"></span>
+            </div>
+            <button type="button" class="close-btn" onclick="hideBottomNotification()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
 
     <!-- Family Sharing Modal -->
     <div class="modal fade" id="familySharingModal" tabindex="-1" aria-labelledby="familySharingModalLabel" aria-hidden="true">
@@ -751,6 +833,60 @@
             } catch (error) {
                 console.error('API Error:', error);
                 throw error;
+            }
+        }
+        
+        // Bottom notification bar functions
+        let notificationTimeout = null;
+        
+        function showBottomNotification(message, type = 'info', duration = 5000) {
+            const bar = document.getElementById('bottomNotificationBar');
+            const messageEl = document.getElementById('notificationMessage');
+            const icon = bar.querySelector('.notification-text i');
+            
+            // Clear any existing timeout
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+            
+            // Set message
+            messageEl.innerHTML = message;
+            
+            // Set icon and remove old classes
+            bar.classList.remove('success', 'error', 'warning', 'info');
+            
+            // Add appropriate class and icon
+            if (type === 'success') {
+                bar.classList.add('success');
+                icon.className = 'fas fa-check-circle';
+            } else if (type === 'error') {
+                bar.classList.add('error');
+                icon.className = 'fas fa-exclamation-circle';
+            } else if (type === 'warning') {
+                bar.classList.add('warning');
+                icon.className = 'fas fa-exclamation-triangle';
+            } else {
+                icon.className = 'fas fa-info-circle';
+            }
+            
+            // Show the bar
+            bar.classList.add('show');
+            
+            // Auto-hide after duration
+            if (duration > 0) {
+                notificationTimeout = setTimeout(() => {
+                    hideBottomNotification();
+                }, duration);
+            }
+        }
+        
+        function hideBottomNotification() {
+            const bar = document.getElementById('bottomNotificationBar');
+            bar.classList.remove('show');
+            
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+                notificationTimeout = null;
             }
         }
         

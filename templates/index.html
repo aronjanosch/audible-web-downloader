@@ -79,6 +79,11 @@
             <div class="col">
                 <div class="row g-2">
                     <div class="col-md col-sm-6">
+                        <select class="form-select form-select-sm" id="authorFilter">
+                            <option value="">All Authors</option>
+                        </select>
+                    </div>
+                    <div class="col-md col-sm-6">
                         <select class="form-select form-select-sm" id="languageFilter">
                             <option value="">All Languages</option>
                         </select>
@@ -108,6 +113,16 @@
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-2">
+            <div class="col-12">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="hideDownloadedFilter">
+                    <label class="form-check-label small text-muted" for="hideDownloadedFilter">
+                        <i class="fas fa-eye-slash"></i> Hide already downloaded books
+                    </label>
                 </div>
             </div>
         </div>
@@ -316,11 +331,13 @@
         }
 
         // Book filters
+        document.getElementById('authorFilter').addEventListener('change', applyFilters);
         document.getElementById('languageFilter').addEventListener('change', applyFilters);
         document.getElementById('narratorFilter').addEventListener('change', applyFilters);
         document.getElementById('seriesFilter').addEventListener('change', applyFilters);
         document.getElementById('publisherFilter').addEventListener('change', applyFilters);
         document.getElementById('releaseYearFilter').addEventListener('change', applyFilters);
+        document.getElementById('hideDownloadedFilter').addEventListener('change', applyFilters);
         document.getElementById('clearFiltersBtn').addEventListener('click', clearAllFilters);
 
         // Load libraries on startup
@@ -755,11 +772,24 @@
 
     function populateFilterDropdowns(books) {
         // Get unique values for each filter, excluding empty values
+        const authors = [...new Set(books.map(b => b.authors).filter(v => v))].sort();
         const languages = [...new Set(books.map(b => b.language).filter(v => v && v !== 'Unknown'))].sort();
         const narrators = [...new Set(books.map(b => b.narrator).filter(v => v))].sort();
         const series = [...new Set(books.map(b => b.series).filter(v => v))].sort();
         const publishers = [...new Set(books.map(b => b.publisher).filter(v => v))].sort();
         const years = [...new Set(books.map(b => b.release_year).filter(v => v))].sort().reverse(); // Most recent first
+
+        // Populate author filter
+        const authorSelect = document.getElementById('authorFilter');
+        const currentAuthor = authorSelect.value;
+        authorSelect.innerHTML = '<option value="">All Authors</option>';
+        authors.forEach(author => {
+            const option = document.createElement('option');
+            option.value = author;
+            option.textContent = author;
+            authorSelect.appendChild(option);
+        });
+        if (currentAuthor) authorSelect.value = currentAuthor;
 
         // Populate language filter
         const languageSelect = document.getElementById('languageFilter');
@@ -834,6 +864,12 @@
             );
         }
 
+        // Apply author filter
+        const author = document.getElementById('authorFilter').value;
+        if (author) {
+            filtered = filtered.filter(book => book.authors === author);
+        }
+
         // Apply language filter
         const language = document.getElementById('languageFilter').value;
         if (language) {
@@ -864,6 +900,12 @@
             filtered = filtered.filter(book => book.release_year === releaseYear);
         }
 
+        // Apply hide downloaded books filter
+        const hideDownloaded = document.getElementById('hideDownloadedFilter').checked;
+        if (hideDownloaded) {
+            filtered = filtered.filter(book => !libraryStateAsins.has(book.asin));
+        }
+
         // Apply library comparison filter if active
         if (currentFilter !== 'all' && libraryComparison) {
             if (currentFilter === 'missing') {
@@ -885,11 +927,13 @@
     function updateFilterStatus(filteredCount) {
         const activeFilters = [];
 
+        if (document.getElementById('authorFilter').value) activeFilters.push('Author');
         if (document.getElementById('languageFilter').value) activeFilters.push('Language');
         if (document.getElementById('narratorFilter').value) activeFilters.push('Narrator');
         if (document.getElementById('seriesFilter').value) activeFilters.push('Series');
         if (document.getElementById('publisherFilter').value) activeFilters.push('Publisher');
         if (document.getElementById('releaseYearFilter').value) activeFilters.push('Year');
+        if (document.getElementById('hideDownloadedFilter').checked) activeFilters.push('Hide Downloaded');
         if (document.getElementById('searchInput').value.trim()) activeFilters.push('Search');
 
         const statusRow = document.getElementById('filterStatusRow');
@@ -905,11 +949,13 @@
     }
 
     function clearAllFilters() {
+        document.getElementById('authorFilter').value = '';
         document.getElementById('languageFilter').value = '';
         document.getElementById('narratorFilter').value = '';
         document.getElementById('seriesFilter').value = '';
         document.getElementById('publisherFilter').value = '';
         document.getElementById('releaseYearFilter').value = '';
+        document.getElementById('hideDownloadedFilter').checked = false;
         document.getElementById('searchInput').value = '';
         applyFilters();
     }
@@ -1645,7 +1691,7 @@
         const libraryName = librarySelect.value;
 
         if (!libraryName) {
-            showAlert('Please select a library to sync', 'warning');
+            showBottomNotification('Please select a library to sync', 'warning');
             return;
         }
 
@@ -1678,12 +1724,13 @@
                 syncBtn.classList.remove('btn-primary');
                 syncBtn.classList.add('btn-success');
                 
-                showAlert(
-                    `<strong>Library sync complete!</strong><br>` +
-                    `📁 Scanned ${stats.files_scanned} files<br>` +
-                    `📚 Found ${stats.asins_found} books with ASINs<br>` +
-                    `✅ Added ${stats.entries_added}, updated ${stats.entries_updated}`,
-                    'success'
+                // Show bottom notification bar with results
+                showBottomNotification(
+                    `<strong>Library "${libraryName}" synced successfully!</strong> ` +
+                    `Scanned ${stats.files_scanned} files, found ${stats.asins_found} books with ASINs. ` +
+                    `Added ${stats.entries_added}, updated ${stats.entries_updated}.`,
+                    'success',
+                    8000  // Show for 8 seconds
                 );
 
                 // Refresh library state and re-display library with updated indicators
@@ -1692,7 +1739,7 @@
                     displayLibrary(library);
                 }
             } else {
-                showAlert('Sync completed with warnings', 'warning');
+                showBottomNotification('Sync completed with warnings', 'warning', 6000);
             }
 
         } catch (error) {
@@ -1701,7 +1748,12 @@
             syncBtn.classList.remove('btn-primary');
             syncBtn.classList.add('btn-danger');
             
-            showAlert('Failed to sync library: ' + error.message, 'danger');
+            // Show error in bottom notification bar
+            showBottomNotification(
+                `<strong>Failed to sync library:</strong> ${error.message}`,
+                'error',
+                8000
+            );
         } finally {
             // Restore button state after a short delay
             setTimeout(() => {
