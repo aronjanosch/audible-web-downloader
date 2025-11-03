@@ -6,22 +6,9 @@ from threading import Event, Thread
 from auth import authenticate_account, fetch_library, AudibleAuth
 from audible.login import external_login
 from audible.localization import Locale, search_template
+from utils.account_manager import load_accounts, save_accounts
 
 auth_bp = Blueprint('auth', __name__)
-
-def load_accounts():
-    """Load saved Audible accounts from JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    if os.path.exists(accounts_file):
-        with open(accounts_file, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_accounts(accounts):
-    """Save Audible accounts to JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    with open(accounts_file, 'w') as f:
-        json.dump(accounts, f, indent=2)
 
 @auth_bp.route('/api/auth/authenticate', methods=['POST'])
 def authenticate():

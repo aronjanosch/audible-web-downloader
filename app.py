@@ -10,9 +10,15 @@ from downloader import download_books
 def create_app():
     """Application factory pattern for Flask"""
     app = Flask(__name__)
-    
+
     # Configuration
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+    secret_key = os.environ.get('SECRET_KEY')
+    if not secret_key:
+        import secrets
+        secret_key = secrets.token_hex(32)
+        print("⚠️  WARNING: No SECRET_KEY environment variable set. Using generated key.")
+        print("⚠️  Set SECRET_KEY environment variable for production use.")
+    app.config['SECRET_KEY'] = secret_key
     app.config['ACCOUNTS_FILE'] = "config/accounts.json"
     app.config['DOWNLOADS_DIR'] = "downloads"
     app.config['LOCAL_LIBRARY_PATH'] = os.environ.get('LOCAL_LIBRARY_PATH', '')
@@ -60,4 +66,5 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5505) 
+    port = int(os.environ.get('PORT', 5505))
+    app.run(debug=True, host='0.0.0.0', port=port) 

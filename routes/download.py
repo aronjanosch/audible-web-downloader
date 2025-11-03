@@ -4,6 +4,7 @@ import json
 import os
 import time
 from downloader import download_books, AudiobookDownloader, DownloadQueueManager
+from utils.account_manager import load_accounts, load_libraries
 
 download_bp = Blueprint('download', __name__)
 
@@ -11,23 +12,6 @@ download_bp = Blueprint('download', __name__)
 def downloads_page():
     """Download progress monitoring page"""
     return render_template('downloads.html')
-
-def load_accounts():
-    """Load saved Audible accounts from JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    if os.path.exists(accounts_file):
-        with open(accounts_file, 'r') as f:
-            return json.load(f)
-    return {}
-
-def load_libraries():
-    """Load libraries configuration from JSON file"""
-    from pathlib import Path
-    libraries_file = Path("config/libraries.json")
-    if libraries_file.exists():
-        with open(libraries_file, 'r') as f:
-            return json.load(f)
-    return {}
 
 @download_bp.route('/api/download/books', methods=['POST'])
 def download_selected_books():

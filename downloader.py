@@ -18,6 +18,7 @@ import unicodedata
 from typing import Optional, Dict, List, Tuple
 from settings import get_naming_pattern
 from datetime import datetime
+from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
 
 class DownloadState(Enum):
     PENDING = "pending"
@@ -480,69 +481,6 @@ class AudiobookDownloader:
             return series_name, volume
         return None, None
 
-    def _normalize_for_matching(self, text: str) -> str:
-        """Normalize text for fuzzy matching (used for duplicate detection)."""
-        if not text:
-            return ""
-
-        # Convert to lowercase
-        text = text.lower()
-
-        # Remove diacritics
-        text = unicodedata.normalize('NFD', text)
-        text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
-
-        # Replace common separators and punctuation with spaces
-        text = re.sub(r'[:\-_,.;!?()[\]{}"\']', ' ', text)
-
-        # Remove common volume/part indicators
-        replacements = ['band', 'teil', 'buch', 'volume', 'vol', 'part', 'pt']
-        for word in replacements:
-            text = re.sub(r'\b' + word + r'\b', '', text)
-
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
-
-        return text
-
-    def _calculate_similarity(self, text1: str, text2: str) -> float:
-        """Calculate word-based similarity between two texts (Jaccard similarity)."""
-        if not text1 or not text2:
-            return 0.0
-
-        # Simple exact match after normalization
-        if text1 == text2:
-            return 1.0
-
-        # Word-based similarity
-        words1 = set(text1.split())
-        words2 = set(text2.split())
-
-        if not words1 or not words2:
-            return 0.0
-
-        # Calculate Jaccard similarity
-        intersection = len(words1.intersection(words2))
-        union = len(words1.union(words2))
-        jaccard = intersection / union if union > 0 else 0.0
-
-        # Bonus for substring containment
-        substring_bonus = 0.0
-        if text1 in text2 or text2 in text1:
-            substring_bonus = 0.2
-
-        # Check for number/volume matching
-        numbers1 = set(re.findall(r'\d+', text1))
-        numbers2 = set(re.findall(r'\d+', text2))
-
-        number_bonus = 0.0
-        if numbers1 and numbers2:
-            number_match = len(numbers1.intersection(numbers2)) / max(len(numbers1), len(numbers2))
-            number_bonus = number_match * 0.3
-
-        final_score = min(1.0, jaccard + substring_bonus + number_bonus)
-
-        return final_score
 
     def _check_fuzzy_duplicate(self, book_title: str, book_authors: str, target_library_path: str, threshold: float = 0.85) -> Optional[Tuple[str, str, float]]:
         """
@@ -557,8 +495,8 @@ class AudiobookDownloader:
 
         Returns: (asin, file_path, similarity_score) of matching book, or None
         """
-        normalized_title = self._normalize_for_matching(book_title)
-        normalized_author = self._normalize_for_matching(book_authors)
+        normalized_title = normalize_for_matching(book_title)
+        normalized_author = normalize_for_matching(book_authors)
 
         # Normalize library path for comparison
         target_lib = str(Path(target_library_path).resolve())
@@ -584,12 +522,12 @@ class AudiobookDownloader:
                 continue  # Skip if path resolution fails
 
             # Compare title and author
-            stored_title = self._normalize_for_matching(entry.get('title', ''))
+            stored_title = normalize_for_matching(entry.get('title', ''))
             # Note: authors might not be in entry, we'd need to extract from file metadata
             # For now, focus on title similarity
 
-            author_similarity = self._calculate_similarity(normalized_author, normalized_author)  # Will enhance this
-            title_similarity = self._calculate_similarity(normalized_title, stored_title)
+            author_similarity = calculate_similarity(normalized_author, normalized_author)  # Will enhance this
+            title_similarity = calculate_similarity(normalized_title, stored_title)
 
             # If title is very similar, flag as potential duplicate
             if title_similarity >= threshold:

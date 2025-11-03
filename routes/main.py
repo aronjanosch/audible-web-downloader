@@ -3,50 +3,9 @@ import json
 import os
 from pathlib import Path
 from settings import settings_manager
+from utils.account_manager import load_accounts, save_accounts, load_libraries, save_libraries
 
 main_bp = Blueprint('main', __name__)
-
-def load_accounts():
-    """Load saved Audible accounts from JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    if os.path.exists(accounts_file):
-        with open(accounts_file, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_accounts(accounts):
-    """Save Audible accounts to JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    with open(accounts_file, 'w') as f:
-        json.dump(accounts, f, indent=2)
-
-def load_libraries():
-    """Load libraries configuration from JSON file"""
-    libraries_file = Path("config/libraries.json")
-    if libraries_file.exists():
-        with open(libraries_file, 'r') as f:
-            libraries = json.load(f)
-
-            # Migrate: Remove deprecated use_audiobookshelf_structure field
-            migrated = False
-            for library_name, library_config in libraries.items():
-                if 'use_audiobookshelf_structure' in library_config:
-                    del library_config['use_audiobookshelf_structure']
-                    migrated = True
-
-            # Save migrated configuration
-            if migrated:
-                save_libraries(libraries)
-                print("✓ Migrated libraries.json to remove deprecated use_audiobookshelf_structure field")
-
-            return libraries
-    return {}
-
-def save_libraries(libraries):
-    """Save libraries configuration to JSON file"""
-    libraries_file = Path("config/libraries.json")
-    with open(libraries_file, 'w') as f:
-        json.dump(libraries, f, indent=2)
 
 @main_bp.route('/')
 def index():

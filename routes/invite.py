@@ -16,27 +16,12 @@ from audible.login import external_login
 from audible.localization import Locale, search_template
 import audible
 from settings import settings_manager
+from utils.account_manager import load_accounts, save_accounts
 
 invite_bp = Blueprint('invite', __name__)
 
 # Store for active login sessions (shared with auth module concept)
 invite_login_sessions = {}
-
-
-def load_accounts():
-    """Load saved Audible accounts from JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    if os.path.exists(accounts_file):
-        with open(accounts_file, 'r') as f:
-            return json.load(f)
-    return {}
-
-
-def save_accounts(accounts):
-    """Save Audible accounts to JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    with open(accounts_file, 'w') as f:
-        json.dump(accounts, f, indent=2)
 
 
 def validate_token(f):

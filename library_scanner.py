@@ -14,6 +14,8 @@ from mutagen.mp4 import MP4
 from mutagen.id3 import ID3NoHeaderError
 import logging
 from library_storage import LibraryStorage
+from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
+from utils.audio_metadata import get_mp4_tag
 
 logger = logging.getLogger(__name__)
 
@@ -219,12 +221,12 @@ class LocalLibraryScanner:
             if file_path.suffix.lower() in {'.m4b', '.m4a'}:
                 audio_file = MP4(str(file_path))
                 metadata = {
-                    'title': self._get_mp4_tag(audio_file, '©nam'),
-                    'author': self._get_mp4_tag(audio_file, '©ART') or self._get_mp4_tag(audio_file, 'aART'),
-                    'album': self._get_mp4_tag(audio_file, '©alb'),
+                    'title': get_mp4_tag(audio_file, '©nam'),
+                    'author': get_mp4_tag(audio_file, '©ART') or get_mp4_tag(audio_file, 'aART'),
+                    'album': get_mp4_tag(audio_file, '©alb'),
                     'duration': getattr(audio_file.info, 'length', 0),
-                    'isbn': self._get_mp4_tag(audio_file, '----:com.apple.iTunes:ISBN'),
-                    'asin': self._get_mp4_tag(audio_file, '----:com.apple.iTunes:ASIN')
+                    'isbn': get_mp4_tag(audio_file, '----:com.apple.iTunes:ISBN'),
+                    'asin': get_mp4_tag(audio_file, '----:com.apple.iTunes:ASIN')
                 }
             # Add MP3 support if needed
             
@@ -232,18 +234,6 @@ class LocalLibraryScanner:
             logger.debug(f"Could not read metadata from {file_path}: {e}")
             
         return {k: v for k, v in metadata.items() if v}
-    
-    def _get_mp4_tag(self, audio_file, tag_name: str) -> Optional[str]:
-        """Get MP4 tag value safely."""
-        try:
-            tag_value = audio_file.get(tag_name)
-            if tag_value:
-                if isinstance(tag_value[0], bytes):
-                    return tag_value[0].decode('utf-8')
-                return str(tag_value[0])
-        except (IndexError, AttributeError, UnicodeDecodeError):
-            pass
-        return None
     
     def _extract_title_from_filename(self, filename: str) -> str:
         """Extract clean title from filename."""
@@ -359,19 +349,19 @@ class LibraryComparator:
     
     def _fuzzy_match_book(self, audible_book: Dict, local_books: List[Dict]) -> bool:
         """Perform fuzzy matching to find similar books."""
-        audible_title = self._normalize_for_matching(audible_book.get('title', ''))
-        audible_author = self._normalize_for_matching(audible_book.get('authors', ''))
-        
+        audible_title = normalize_for_matching(audible_book.get('title', ''))
+        audible_author = normalize_for_matching(audible_book.get('authors', ''))
+
         for local_book in local_books:
-            local_title = self._normalize_for_matching(local_book.get('title', ''))
-            local_author = self._normalize_for_matching(local_book.get('authors', ''))
-            
+            local_title = normalize_for_matching(local_book.get('title', ''))
+            local_author = normalize_for_matching(local_book.get('authors', ''))
+
             # First check if authors match (more reliable)
             author_similarity = self._calculate_word_similarity(audible_author, local_author)
-            
+
             if author_similarity >= 0.7:  # Authors should match well
                 # More flexible title matching
-                title_similarity = self._calculate_advanced_similarity(audible_title, local_title)
+                title_similarity = calculate_similarity(audible_title, local_title)
                 
                 if title_similarity >= self.match_threshold:
                     logger.debug(f"Match found: '{audible_book.get('title')}' -> '{local_book.get('title')}' "
@@ -395,79 +385,6 @@ class LibraryComparator:
         union = len(words1.union(words2))
         
         return intersection / union if union > 0 else 0.0
-    
-    def _normalize_for_matching(self, text: str) -> str:
-        """Advanced normalization for better matching."""
-        if not text:
-            return ""
-        
-        # Convert to lowercase
-        text = text.lower()
-        
-        # Remove diacritics
-        text = unicodedata.normalize('NFD', text)
-        text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
-        
-        # Replace common separators and punctuation with spaces
-        text = re.sub(r'[:\-_,.;!?()[\]{}"\']', ' ', text)
-        
-        # Replace German/English equivalents
-        replacements = {
-            'band': '',  # Remove "Band" as it's just "Volume"
-            'teil': '',  # Remove "Teil" (Part)
-            'buch': '',  # Remove "Buch" (Book)  
-            'volume': '',
-            'vol': '',
-            'part': '',
-            'pt': '',
-        }
-        
-        for old, new in replacements.items():
-            text = re.sub(r'\b' + old + r'\b', new, text)
-        
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        return text
-    
-    def _calculate_advanced_similarity(self, text1: str, text2: str) -> float:
-        """Calculate advanced similarity with better handling of variations."""
-        if not text1 or not text2:
-            return 0.0
-        
-        # Simple exact match after normalization
-        if text1 == text2:
-            return 1.0
-        
-        # Word-based similarity
-        words1 = set(text1.split())
-        words2 = set(text2.split())
-        
-        if not words1 or not words2:
-            return 0.0
-        
-        # Calculate Jaccard similarity
-        intersection = len(words1.intersection(words2))
-        union = len(words1.union(words2))
-        jaccard = intersection / union if union > 0 else 0.0
-        
-        # Bonus for substring containment
-        substring_bonus = 0.0
-        if text1 in text2 or text2 in text1:
-            substring_bonus = 0.2
-        
-        # Check for number/volume matching (e.g., "c23" matches "23")
-        numbers1 = set(re.findall(r'\d+', text1))
-        numbers2 = set(re.findall(r'\d+', text2))
-        
-        number_bonus = 0.0
-        if numbers1 and numbers2:
-            number_match = len(numbers1.intersection(numbers2)) / max(len(numbers1), len(numbers2))
-            number_bonus = number_match * 0.3
-        
-        final_score = min(1.0, jaccard + substring_bonus + number_bonus)
-        
-        return final_score
     
     def _normalize_for_lookup(self, text: str) -> str:
         """Normalize text for lookup comparison."""
