@@ -11,51 +11,82 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <style>
-        .book-card {
-            transition: transform 0.2s;
-            height: 100%;
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --primary-color: #667eea;
+            --primary-dark: #5a6fd8;
         }
+        
+        body {
+            background-color: #f8f9fa;
+        }
+        
+        /* Top Navigation Bar */
+        .top-navbar {
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .account-selector-group {
+            min-width: 250px;
+        }
+        
+        .account-selector {
+            min-width: 200px;
+        }
+        
+        .auth-status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+        }
+        
+        /* Book Cards */
+        .book-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+            height: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+        
         .book-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
         }
+        
         .book-cover {
             height: 200px;
             object-fit: cover;
             width: 100%;
         }
-        .sidebar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: white;
-        }
-        .main-content {
-            background-color: #f8f9fa;
-            min-height: 100vh;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-        }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
-        }
-        .loading {
-            display: none;
-        }
-        .loading.show {
-            display: block;
-        }
+        
         .book-selected {
             border: 3px solid #28a745 !important;
+            box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2);
         }
+        
+        /* Status Overlay */
         .status-overlay {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
             color: white;
             display: none;
             align-items: center;
@@ -65,286 +96,400 @@
             text-align: center;
             z-index: 10;
         }
-        .book-card {
-            position: relative;
+        
+        /* Buttons */
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            font-weight: 600;
         }
-        .progress-container {
-            z-index: 11;
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            transform: translateY(-1px);
         }
-        .progress-text {
-            font-size: 0.7rem !important;
-        }
-        .progress-circle-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-            border-radius: 0.375rem 0.375rem 0 0;
-        }
-        .progress-circle {
-            transform: rotate(-90deg);
-        }
-        .progress-circle-text {
-            position: absolute;
-            color: white;
-            font-weight: bold;
+        
+        .btn-floating-action {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 999;
+            padding: 1rem 2rem;
             font-size: 1.1rem;
+            border-radius: 50px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            animation: pulse 2s infinite;
         }
-        .progress-circle-status {
-            color: white;
-            font-size: 0.8rem;
-            margin-top: 5px;
-            text-align: center;
+        
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            }
+            50% {
+                box-shadow: 0 4px 30px rgba(102, 126, 234, 0.6);
+            }
         }
+        
+        /* View Switcher */
         .view-switcher .btn {
             background-color: #e9ecef;
             border-color: #ced4da;
             color: #495057;
         }
+        
         .view-switcher .btn.active {
-            background-color: #007bff;
-            border-color: #007bff;
+            background: var(--primary-gradient);
+            border-color: var(--primary-color);
             color: white;
         }
+        
+        /* List View */
         .book-list-item {
             display: flex;
             align-items: center;
             padding: 1rem;
             border-bottom: 1px solid #dee2e6;
             transition: background-color 0.2s;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
         }
+        
         .book-list-item:hover {
             background-color: #f8f9fa;
         }
+        
         .book-list-item .book-cover {
             width: 50px;
             height: 75px;
             margin-right: 1rem;
+            border-radius: 4px;
         }
+        
         .book-list-item .book-info {
             flex-grow: 1;
             margin-right: 15px;
         }
+        
         .book-list-item .status-text {
             min-width: 150px;
             text-align: right;
             font-weight: bold;
             font-size: 0.9rem;
         }
-        .status-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            padding: 1rem;
-            font-size: 1.2rem;
-            display: none;
-        }
+        
+        /* Library Availability */
         .book-missing {
             border: 2px solid #dc3545 !important;
         }
+        
         .book-available {
             border: 2px solid #28a745 !important;
         }
-        .filter-tabs {
-            margin-bottom: 1rem;
-        }
+        
         .library-filter {
-            background: none;
-            border: 1px solid #dee2e6;
+            background: white;
+            border: 2px solid #dee2e6;
             color: #495057;
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            transition: all 0.2s;
         }
+        
+        .library-filter:hover {
+            border-color: var(--primary-color);
+        }
+        
         .library-filter.active {
-            background: #007bff;
-            border-color: #007bff;
+            background: var(--primary-gradient);
+            border-color: var(--primary-color);
             color: white;
+        }
+        
+        /* Settings Panel */
+        .settings-offcanvas .offcanvas-body {
+            padding: 0;
+        }
+        
+        .settings-section {
+            padding: 1.5rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .settings-section:last-child {
+            border-bottom: none;
+        }
+        
+        .settings-section h6 {
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #495057;
+        }
+        
+        /* Filter Bar */
+        .filter-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        /* Progress */
+        .progress-container {
+            z-index: 11;
+        }
+        
+        .progress-text {
+            font-size: 0.7rem !important;
+        }
+        
+        /* Bottom Notification Bar */
+        .bottom-notification-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1050;
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 0.875rem;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-in-out;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .bottom-notification-bar.show {
+            transform: translateY(0);
+        }
+        
+        .bottom-notification-bar.success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+        
+        .bottom-notification-bar.error {
+            background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
+        }
+        
+        .bottom-notification-bar.warning {
+            background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+            color: #212529;
+        }
+        
+        .bottom-notification-bar .notification-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .bottom-notification-bar .notification-text {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .bottom-notification-bar .close-btn {
+            background: none;
+            border: none;
+            color: inherit;
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 1rem;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .bottom-notification-bar .close-btn:hover {
+            opacity: 1;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .btn-floating-action {
+                bottom: 1rem;
+                right: 1rem;
+                padding: 0.8rem 1.5rem;
+                font-size: 1rem;
+            }
+            
+            .account-selector {
+                min-width: 150px;
+            }
+            
+            .bottom-notification-bar {
+                font-size: 0.75rem;
+                padding: 0.4rem 0.75rem;
+            }
         }
     </style>
     
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            {% if not hide_sidebar %}
-            <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar p-4">
-                <h3 class="mb-4">
-                    <i class="fas fa-book"></i> Audible Downloader
-                </h3>
+    {% if not hide_sidebar %}
+    <!-- Top Navigation Bar -->
+    <nav class="top-navbar">
+        <div class="container-fluid px-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <!-- Logo and Brand -->
+                <div class="d-flex align-items-center">
+                    <h1 class="navbar-brand mb-0">
+                        <i class="fas fa-headphones"></i> Audible Downloader
+                    </h1>
+                </div>
                 
-                <!-- Account Management -->
-                <div class="mb-4">
-                    <h5>Account Management</h5>
-                    
-                    <!-- Account Selector -->
-                    <div class="mb-3">
-                        <label for="accountSelect" class="form-label">Select Account:</label>
-                        <div class="input-group">
-                            <select class="form-select" id="accountSelect">
-                                <option value="">No accounts configured</option>
+                <!-- Account Selector and Actions -->
+                <div class="d-flex align-items-center gap-3">
+                    <!-- Account Selector with Add Button -->
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="input-group input-group-sm account-selector-group">
+                            <select class="form-select form-select-sm account-selector" id="accountSelect">
+                                <option value="">Select account...</option>
                             </select>
-                            <button class="btn btn-outline-danger btn-sm" id="deleteAccountBtn" 
-                                    style="display: none;" title="Delete Account">
-                                <i class="fas fa-trash"></i>
+                            <button class="btn btn-outline-primary" type="button" id="addAccountBtn" title="Add Account">
+                                <i class="fas fa-plus"></i>
                             </button>
                         </div>
+                        <span id="authStatusIndicator" class="badge auth-status-badge bg-secondary" style="display: none;">
+                            <i class="fas fa-circle"></i> No Account
+                        </span>
                     </div>
                     
-                    <!-- Add New Account -->
-                    <div class="card bg-light text-dark">
-                        <div class="card-body">
-                            <h6 class="card-title">Add New Account</h6>
-                            <form id="addAccountForm">
-                                <div class="mb-2">
-                                    <input type="text" class="form-control form-control-sm" 
-                                           id="accountName" placeholder="Account Name" required>
-                                </div>
-                                <div class="mb-2">
-                                    <select class="form-select form-select-sm" id="accountRegion">
-                                        <option value="us">United States</option>
-                                        <option value="uk">United Kingdom</option>
-                                        <option value="de">Germany</option>
-                                        <option value="fr">France</option>
-                                        <option value="ca">Canada</option>
-                                        <option value="it">Italy</option>
-                                        <option value="au">Australia</option>
-                                        <option value="in">India</option>
-                                        <option value="jp">Japan</option>
-                                        <option value="es">Spain</option>
-                                        <option value="br">Brazil</option>
-                                    </select>
-                                </div>
-                                <button type="submit" class="btn btn-light btn-sm w-100">
-                                    <i class="fas fa-plus"></i> Add Account
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Account Status -->
-                <div id="accountStatus" class="mb-4" style="display: none;">
-                    <h5>Account Status</h5>
-                    <div id="authStatus" class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle"></i> Not authenticated
-                    </div>
-                    <div class="d-grid gap-2">
-                        <button id="authenticateBtn" class="btn btn-warning btn-sm">
-                            <i class="fas fa-sign-in-alt"></i> Login to Audible
-                        </button>
-                        <button id="generateAccountInviteBtn" class="btn btn-outline-light btn-sm" style="display: none;">
-                            <i class="fas fa-link"></i> Generate Invite Link
-                        </button>
-                        <button id="refreshLibraryBtn" class="btn btn-info btn-sm" style="display: none;">
-                            <i class="fas fa-sync"></i> Refresh Library
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Libraries Management -->
-                <div id="librariesSection" class="mb-4">
-                    <h5>Download Libraries</h5>
-
-                    <!-- Add New Library -->
-                    <div class="card bg-light text-dark mb-3">
-                        <div class="card-body">
-                            <h6 class="card-title">Add Library</h6>
-                            <form id="addLibraryForm">
-                                <div class="mb-2">
-                                    <input type="text" class="form-control form-control-sm"
-                                           id="libraryName" placeholder="Library Name (e.g., English)" required>
-                                </div>
-                                <div class="mb-2">
-                                    <input type="text" class="form-control form-control-sm"
-                                           id="libraryPath" placeholder="Library Path" required>
-                                </div>
-                                <button type="submit" class="btn btn-light btn-sm w-100">
-                                    <i class="fas fa-plus"></i> Add Library
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Library List -->
-                    <div id="configuredLibraryList" class="mb-3">
-                        <small class="text-light">No libraries configured</small>
-                    </div>
-
-                    <!-- Sync Library Button -->
-                    <div id="syncLibrarySection" style="display: none;">
-                        <button type="button" class="btn btn-outline-light btn-sm w-100" id="syncLibraryBtn">
-                            <i class="fas fa-sync-alt"></i> Sync Library
-                        </button>
-                        <small class="form-text text-light d-block mt-1">
-                            Scan library and update download history
-                        </small>
-                    </div>
-                </div>
-                
-                <!-- Download Controls -->
-                <div id="downloadControls" class="mb-4" style="display: none;">
-                    <h5>Download Settings</h5>
-
-                    <!-- Library Selection -->
-                    <div class="mb-3">
-                        <label for="downloadLibrarySelect" class="form-label">Download to library: <span class="text-danger">*</span></label>
-                        <select class="form-select form-select-sm" id="downloadLibrarySelect" required>
-                            <option value="">Select a library...</option>
-                        </select>
-                        <small class="text-light">Configure a library above first</small>
-                    </div>
-
-                    <!-- Naming Pattern Configuration -->
-                    <div class="mb-3">
-                        <button type="button" class="btn btn-outline-light btn-sm w-100" id="configureNamingBtn">
-                            <i class="fas fa-cog"></i> Configure Naming Pattern
-                        </button>
-                    </div>
-
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="cleanupAax" checked>
-                        <label class="form-check-label" for="cleanupAax">
-                            Clean up AAX files after conversion
-                        </label>
-                    </div>
-                    <div class="d-grid gap-2 mt-3">
-                        <button id="downloadBtn" class="btn btn-success btn-sm">
-                            <i class="fas fa-download"></i> Download Selected
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Family Sharing Button -->
-                <div class="mb-4">
-                    <h5>Family Sharing</h5>
-                    <button type="button" class="btn btn-outline-light btn-sm w-100" id="familySharingBtn">
-                        <i class="fas fa-users"></i> Manage Invitation Link
+                    <!-- Action Buttons -->
+                    <button id="authenticateBtn" class="btn btn-sm btn-warning" style="display: none;">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                    
+                    <button id="refreshLibraryBtn" class="btn btn-sm btn-info" style="display: none;">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    
+                    <!-- Settings Button -->
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#settingsPanel">
+                        <i class="fas fa-cog"></i> Settings
                     </button>
                 </div>
             </div>
-            {% endif %}
-
-            <!-- Main Content -->
-            <div class="{% if hide_sidebar %}col-12{% else %}col-md-9 col-lg-10{% endif %} main-content p-4">
-                {% block content %}{% endblock %}
+        </div>
+    </nav>
+    
+    <!-- Settings Offcanvas Panel -->
+    <div class="offcanvas offcanvas-end settings-offcanvas" tabindex="-1" id="settingsPanel" style="width: 400px;">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title"><i class="fas fa-cog"></i> Settings</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body">
+            <!-- Account Management Section -->
+            <div class="settings-section">
+                <h6><i class="fas fa-user-circle"></i> Current Account</h6>
+                
+                <!-- Current Account Info -->
+                <div id="accountStatus" style="display: none;">
+                    <div id="authStatus" class="alert alert-warning mb-3">
+                        <i class="fas fa-exclamation-triangle"></i> Not authenticated
+                    </div>
+                    <button id="generateAccountInviteBtn" class="btn btn-sm btn-outline-primary w-100 mb-3" style="display: none;">
+                        <i class="fas fa-link"></i> Generate Invite Link
+                    </button>
+                    
+                    <!-- Delete Account Button -->
+                    <button class="btn btn-sm btn-outline-danger w-100" id="deleteAccountBtn">
+                        <i class="fas fa-trash"></i> Delete Current Account
+                    </button>
+                </div>
+                
+                <div id="noAccountSelected" class="text-muted small">
+                    <i class="fas fa-info-circle"></i> No account selected. Use the "+" button next to the account selector to add one.
+                </div>
             </div>
+            
+            <!-- Libraries Management Section -->
+            <div class="settings-section">
+                <h6><i class="fas fa-folder"></i> Download Libraries</h6>
+                
+                <!-- Add New Library -->
+                <form id="addLibraryForm" class="mb-3">
+                    <label class="form-label small fw-bold">Add Library</label>
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm"
+                               id="libraryName" placeholder="Library Name (e.g., English)" required>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm"
+                               id="libraryPath" placeholder="Library Path" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-plus"></i> Add Library
+                    </button>
+                </form>
+
+                <!-- Library List -->
+                <div id="configuredLibraryList" class="mb-3">
+                    <small class="text-muted">No libraries configured</small>
+                </div>
+                
+                <small class="text-muted d-block">
+                    <i class="fas fa-info-circle"></i> Use the <strong>sync button</strong> (next to library selector) to scan and update download history.
+                </small>
+            </div>
+            
+            <!-- Download Settings Section -->
+            <div class="settings-section" id="downloadSettings">
+                <h6><i class="fas fa-download"></i> Download Settings</h6>
+
+                <!-- Naming Pattern Configuration -->
+                <div class="mb-3">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="configureNamingBtn">
+                        <i class="fas fa-cog"></i> Configure Naming Pattern
+                    </button>
+                </div>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="cleanupAax" checked>
+                    <label class="form-check-label small" for="cleanupAax">
+                        Clean up AAX files after conversion
+                    </label>
+                </div>
+            </div>
+
+            <!-- Family Sharing Section -->
+            <div class="settings-section">
+                <h6><i class="fas fa-users"></i> Family Sharing</h6>
+                <button type="button" class="btn btn-sm btn-outline-primary w-100" id="familySharingBtn">
+                    <i class="fas fa-link"></i> Manage Invitation Link
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Main Content -->
+    <div class="container-fluid px-4 py-4">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <!-- Floating Download Button -->
+    <button id="downloadBtn" class="btn btn-success btn-floating-action" style="display: none;">
+        <i class="fas fa-download"></i> Download Selected
+    </button>
+    
+    <!-- Bottom Notification Bar -->
+    <div id="bottomNotificationBar" class="bottom-notification-bar">
+        <div class="notification-content">
+            <div class="notification-text">
+                <i class="fas fa-info-circle"></i>
+                <span id="notificationMessage"></span>
+            </div>
+            <button type="button" class="close-btn" onclick="hideBottomNotification()">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
     </div>
 
@@ -423,6 +568,53 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Account Modal -->
+    <div class="modal fade" id="addAccountModal" tabindex="-1" aria-labelledby="addAccountModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAccountModalLabel">
+                        <i class="fas fa-user-plus me-2"></i>Add Audible Account
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addAccountForm">
+                        <div class="mb-3">
+                            <label for="accountName" class="form-label">Account Name</label>
+                            <input type="text" class="form-control" id="accountName" 
+                                   placeholder="e.g., My Account, John's Account" required>
+                            <small class="text-muted">Choose a name to identify this account</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="accountRegion" class="form-label">Region</label>
+                            <select class="form-select" id="accountRegion" required>
+                                <option value="us">United States</option>
+                                <option value="uk">United Kingdom</option>
+                                <option value="de">Germany</option>
+                                <option value="fr">France</option>
+                                <option value="ca">Canada</option>
+                                <option value="it">Italy</option>
+                                <option value="au">Australia</option>
+                                <option value="in">India</option>
+                                <option value="jp">Japan</option>
+                                <option value="es">Spain</option>
+                                <option value="br">Brazil</option>
+                            </select>
+                            <small class="text-muted">Select your Audible marketplace region</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitAddAccount">
+                        <i class="fas fa-plus"></i> Add Account
+                    </button>
                 </div>
             </div>
         </div>
@@ -641,6 +833,60 @@
             } catch (error) {
                 console.error('API Error:', error);
                 throw error;
+            }
+        }
+        
+        // Bottom notification bar functions
+        let notificationTimeout = null;
+        
+        function showBottomNotification(message, type = 'info', duration = 5000) {
+            const bar = document.getElementById('bottomNotificationBar');
+            const messageEl = document.getElementById('notificationMessage');
+            const icon = bar.querySelector('.notification-text i');
+            
+            // Clear any existing timeout
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+            }
+            
+            // Set message
+            messageEl.innerHTML = message;
+            
+            // Set icon and remove old classes
+            bar.classList.remove('success', 'error', 'warning', 'info');
+            
+            // Add appropriate class and icon
+            if (type === 'success') {
+                bar.classList.add('success');
+                icon.className = 'fas fa-check-circle';
+            } else if (type === 'error') {
+                bar.classList.add('error');
+                icon.className = 'fas fa-exclamation-circle';
+            } else if (type === 'warning') {
+                bar.classList.add('warning');
+                icon.className = 'fas fa-exclamation-triangle';
+            } else {
+                icon.className = 'fas fa-info-circle';
+            }
+            
+            // Show the bar
+            bar.classList.add('show');
+            
+            // Auto-hide after duration
+            if (duration > 0) {
+                notificationTimeout = setTimeout(() => {
+                    hideBottomNotification();
+                }, duration);
+            }
+        }
+        
+        function hideBottomNotification() {
+            const bar = document.getElementById('bottomNotificationBar');
+            bar.classList.remove('show');
+            
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+                notificationTimeout = null;
             }
         }
         
