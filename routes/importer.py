@@ -529,19 +529,13 @@ def get_libraries():
         }
     """
     try:
-        # Load libraries from config
-        libraries_file = Path("config") / "libraries.json"
+        # Use the same config manager as the main libraries endpoint for consistency
+        from utils.config_manager import get_config_manager
+
+        config_manager = get_config_manager()
+        libraries_dict = config_manager.get_libraries()
         
-        if not libraries_file.exists():
-            return jsonify({
-                'success': True,
-                'libraries': []
-            })
-        
-        with open(libraries_file, 'r') as f:
-            libraries_dict = json.load(f)
-        
-        # Convert dict format to array format
+        # Convert dict format to array format for importer UI
         libraries_array = []
         for name, config in libraries_dict.items():
             libraries_array.append({
@@ -549,6 +543,8 @@ def get_libraries():
                 'path': config.get('path'),
                 'created_at': config.get('created_at')
             })
+        
+        logger.info(f"Importer libraries endpoint: Found {len(libraries_array)} libraries")
         
         return jsonify({
             'success': True,

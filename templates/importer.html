@@ -4,20 +4,20 @@
 
 {% block content %}
 <div class="container-fluid">
+    <!-- Back to Library Button -->
+    <div class="mb-3">
+        <a href="/" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Library
+        </a>
+    </div>
+
     <!-- Page Header -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="mb-1">
-                        <i class="fas fa-file-import"></i> Import M4B Books
-                    </h2>
-                    <p class="text-muted mb-0">Import and organize existing M4B audiobook files with Audible metadata enrichment</p>
-                </div>
-                <a href="/" class="btn btn-outline-secondary">
-                    <i class="fas fa-arrow-left"></i> Back to Library
-                </a>
-            </div>
+            <h2 class="mb-1">
+                <i class="fas fa-file-import"></i> Import M4B Books
+            </h2>
+            <p class="text-muted mb-0">Import and organize existing M4B audiobook files with Audible metadata enrichment</p>
         </div>
     </div>
 
@@ -553,26 +553,26 @@ function getHeadersWithCSRF() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Importer DOMContentLoaded fired');
-    loadLibraries();
+    loadImporterLibraries();
     setupImporterEventListeners();
-    
+
     // Set up account selector listener to update import state
     const accountSelect = document.getElementById('accountSelect');
     if (accountSelect) {
         // Update immediately if account is already selected
         updateImportAccountState();
-        
+
         // Listen for changes
         accountSelect.addEventListener('change', updateImportAccountState);
     }
-});
 
-// Also setup on window.load as a fallback
-window.addEventListener('load', function() {
-    console.log('Importer window.load fired - ensuring event listeners');
-    // Only setup if not already done (idempotent)
-    setupImporterEventListeners();
+    // Listen for library updates from settings panel (in base.html) - only attach once
+    if (!window.importerLibrariesListenerAttached) {
+        window.addEventListener('librariesUpdated', function(event) {
+            loadImporterLibraries();
+        });
+        window.importerLibrariesListenerAttached = true;
+    }
 });
 
 // Update import state from navbar account selector
@@ -582,7 +582,6 @@ function updateImportAccountState() {
         importState.accountName = accountSelect.value;
         const selectedOption = accountSelect.options[accountSelect.selectedIndex];
         importState.region = selectedOption.dataset.region || 'us';
-        console.log('Import account set to:', importState.accountName, 'region:', importState.region);
     } else {
         importState.accountName = '';
         importState.region = 'us';
@@ -590,14 +589,21 @@ function updateImportAccountState() {
 }
 
 // Load available libraries
-function loadLibraries() {
+function loadImporterLibraries() {
     fetch('/api/importer/libraries')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 const select = document.getElementById('targetLibrary');
+                if (!select) return;
+
                 select.innerHTML = '<option value="">Select library...</option>';
-                
+
+                if (data.libraries.length === 0) {
+                    select.innerHTML = '<option value="">No libraries configured</option>';
+                    return;
+                }
+
                 data.libraries.forEach(lib => {
                     const option = document.createElement('option');
                     option.value = JSON.stringify(lib);
@@ -606,25 +612,17 @@ function loadLibraries() {
                 });
             }
         })
-        .catch(error => console.error('Error loading libraries:', error));
+        .catch(error => {
+            console.error('Error loading libraries:', error);
+            const select = document.getElementById('targetLibrary');
+            if (select) {
+                select.innerHTML = '<option value="">Error loading libraries</option>';
+            }
+        });
 }
 
-// Listen for library updates from settings panel (in base.html)
-window.addEventListener('librariesUpdated', function(event) {
-    // Reload libraries when settings panel updates them
-    loadLibraries();
-});
-
-// Setup event listeners (renamed to avoid conflicts with base.html)
-let importerEventListenersAttached = false;
+// Setup event listeners
 function setupImporterEventListeners() {
-    // Prevent double-attachment
-    if (importerEventListenersAttached) {
-        console.log('Importer event listeners already attached, skipping');
-        return;
-    }
-    
-    console.log('Attaching importer event listeners');
     
     // Step 1: Scan Directory
     const scanBtn = document.getElementById('scanDirectoryBtn');
@@ -690,9 +688,6 @@ function setupImporterEventListeners() {
     if (searchBtn) {
         searchBtn.addEventListener('click', performManualSearch);
     }
-    
-    importerEventListenersAttached = true;
-    console.log('Importer event listeners attached successfully');
 }
 
 // Step navigation
@@ -738,17 +733,11 @@ function goToStep(step) {
 function scanDirectory() {
     // Update account state in case it changed
     updateImportAccountState();
-    
+
     const sourcePath = document.getElementById('sourcePath').value;
     const librarySelect = document.getElementById('targetLibrary');
     const libraryValue = librarySelect.value;
-    
-    console.log('Scan directory clicked:', {
-        accountName: importState.accountName,
-        sourcePath: sourcePath,
-        libraryValue: libraryValue
-    });
-    
+
     if (!importState.accountName) {
         alert('Please select an Audible account from the top navigation bar');
         return;
