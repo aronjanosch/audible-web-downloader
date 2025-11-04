@@ -17,9 +17,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from mutagen.mp4 import MP4
 from enum import Enum
+from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
+from utils.audio_metadata import get_mp4_tag
 
 from downloader import AudiobookDownloader
 from library_scanner import LocalLibraryScanner
+from utils.queue_base import BaseQueueManager
+from utils.constants import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -36,76 +40,44 @@ class ImportState(Enum):
     SKIPPED = "skipped"
 
 
-class ImportQueueManager:
+class ImportQueueManager(BaseQueueManager):
     """
     Singleton manager for import queue and progress tracking.
     Similar to DownloadQueueManager but for import operations.
     """
-    _instance = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
     
     def __init__(self):
-        if self._initialized:
-            return
-        
-        self._initialized = True
-        self._queue_file = Path("config") / "import_queue.json"
-        self._queue_file.parent.mkdir(parents=True, exist_ok=True)
-        self._load_queue()
-        
-        # Initialize batch tracking
-        if '_batch_info' not in self._queue:
-            self._queue['_batch_info'] = {
-                'current_batch_id': None,
-                'batch_complete': False,
-                'batch_start_time': None
-            }
+        # Initialize base class with queue file path
+        super().__init__(CONFIG_DIR / "import_queue.json")
     
-    def _load_queue(self):
-        """Load import queue from disk."""
-        if self._queue_file.exists():
-            try:
-                with open(self._queue_file, 'r') as f:
-                    self._queue = json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Could not load import queue: {e}")
-                self._queue = {}
-        else:
-            self._queue = {}
+    def _generate_batch_id(self) -> str:
+        """Generate a unique batch ID for imports"""
+        return f"import_batch_{int(time.time())}"
     
-    def _save_queue(self):
-        """Persist import queue to disk."""
-        try:
-            with open(self._queue_file, 'w') as f:
-                json.dump(self._queue, f, indent=2)
-        except IOError as e:
-            logger.warning(f"Could not save import queue: {e}")
+    def _get_item_id_key(self) -> str:
+        """Get the key name for import items"""
+        return 'file_path'
     
+    def _log_warning(self, message: str):
+        """Log warning message"""
+        logger.warning(message)
+    
+    # Import-specific convenience methods
     def get_all_imports(self) -> Dict:
-        """Get all imports in the queue (excluding batch info)."""
-        return {k: v for k, v in self._queue.items() if not k.startswith('_')}
+        """Get all imports in the queue (excluding batch info)"""
+        return self.get_all_items()
     
     def get_import(self, file_path: str) -> Optional[Dict]:
-        """Get a specific import by file path."""
-        return self._queue.get(file_path)
+        """Get a specific import by file path"""
+        return self.get_item(file_path)
     
     def update_import(self, file_path: str, updates: Dict):
-        """Update import state."""
-        if file_path not in self._queue:
-            self._queue[file_path] = {}
-        
-        self._queue[file_path].update(updates)
-        self._queue[file_path]['last_updated'] = time.time()
-        self._save_queue()
+        """Update import state"""
+        self.update_item(file_path, updates)
     
     def start_new_batch(self, expected_count: int = 0):
         """Start a new import batch with an expected file count."""
-        batch_id = f"import_batch_{int(time.time())}"
+        batch_id = self._generate_batch_id()
         self._queue['_batch_info'] = {
             'current_batch_id': batch_id,
             'batch_complete': False,
@@ -116,44 +88,19 @@ class ImportQueueManager:
         self._save_queue()
         return batch_id
     
-    def add_to_queue(self, file_path: str, title: str, **metadata):
+    def add_import_to_queue(self, file_path: str, title: str, **metadata):
         """Add a new file to the import queue."""
-        batch_info = self._queue.get('_batch_info', {})
-        
-        # Start a new batch if needed (fallback for backward compatibility)
-        if not batch_info.get('current_batch_id') or batch_info.get('batch_complete', False):
-            batch_id = f"import_batch_{int(time.time())}"
-            self._queue['_batch_info'] = {
-                'current_batch_id': batch_id,
-                'batch_complete': False,
-                'batch_start_time': time.time(),
-                'expected_count': 0,
-                'files_added': 0
-            }
-        
-        self._queue[file_path] = {
-            'file_path': file_path,
-            'title': title,
-            'state': ImportState.PENDING.value,
-            'added_at': time.time(),
-            'last_updated': time.time(),
-            'batch_id': self._queue['_batch_info']['current_batch_id'],
-            **metadata
-        }
+        # Use base class method
+        self.add_to_queue(file_path, title, ImportState.PENDING.value, **metadata)
         
         # Increment files added counter
-        self._queue['_batch_info']['files_added'] = self._queue['_batch_info'].get('files_added', 0) + 1
-        self._save_queue()
-    
-    def remove_from_queue(self, file_path: str):
-        """Remove an import from the queue."""
-        if file_path in self._queue:
-            del self._queue[file_path]
+        if '_batch_info' in self._queue:
+            self._queue['_batch_info']['files_added'] = self._queue['_batch_info'].get('files_added', 0) + 1
             self._save_queue()
     
     def get_statistics(self) -> Dict:
         """Get import statistics."""
-        batch_info = self._queue.get('_batch_info', {})
+        batch_info = self.get_batch_info()
         current_batch_id = batch_info.get('current_batch_id')
         
         stats = {
@@ -203,33 +150,14 @@ class ImportQueueManager:
             can_complete = (expected_count == 0 or stats['total_imports'] >= expected_count)
             
             if can_complete and not batch_info.get('batch_complete', False):
-                self._queue['_batch_info']['batch_complete'] = True
-                self._save_queue()
+                self.mark_batch_complete()
                 stats['batch_complete'] = True
         
         return stats
     
     def clear_completed(self, older_than_hours: int = 24):
         """Remove completed imports older than specified hours."""
-        current_time = time.time()
-        cutoff_time = current_time - (older_than_hours * 3600)
-        
-        paths_to_remove = []
-        for file_path, import_data in self._queue.items():
-            if file_path.startswith('_'):
-                continue
-            if import_data.get('state') in ['complete', 'skipped']:
-                last_updated = import_data.get('last_updated', 0)
-                if last_updated < cutoff_time:
-                    paths_to_remove.append(file_path)
-        
-        for path in paths_to_remove:
-            del self._queue[path]
-        
-        if paths_to_remove:
-            self._save_queue()
-        
-        return len(paths_to_remove)
+        return self.clear_old_items(older_than_hours)
 
 
 class AudiobookImporter:
@@ -319,20 +247,20 @@ class AudiobookImporter:
             audio_file = MP4(str(file_path))
             
             # Extract basic metadata
-            title = self._get_mp4_tag(audio_file, '©nam') or file_path.stem
-            author = self._get_mp4_tag(audio_file, '©ART') or self._get_mp4_tag(audio_file, 'aART')
-            narrator = self._get_mp4_tag(audio_file, '----:com.apple.iTunes:NARRATOR')
-            
+            title = get_mp4_tag(audio_file, '©nam') or file_path.stem
+            author = get_mp4_tag(audio_file, '©ART') or get_mp4_tag(audio_file, 'aART')
+            narrator = get_mp4_tag(audio_file, '----:com.apple.iTunes:NARRATOR')
+
             # Check for existing ASIN
             asin = None
-            comment = self._get_mp4_tag(audio_file, '©cmt')
+            comment = get_mp4_tag(audio_file, '©cmt')
             if comment:
                 asin_match = re.search(r'ASIN:\s*([A-Z0-9]{10})', comment)
                 if asin_match:
                     asin = asin_match.group(1)
-            
+
             if not asin:
-                asin = self._get_mp4_tag(audio_file, '----:com.apple.iTunes:ASIN')
+                asin = get_mp4_tag(audio_file, '----:com.apple.iTunes:ASIN')
             
             # Get file stats
             file_stat = file_path.stat()
@@ -362,18 +290,6 @@ class AudiobookImporter:
                 'duration': 0,
                 'error': str(e)
             }
-    
-    def _get_mp4_tag(self, audio_file, tag_name: str) -> Optional[str]:
-        """Get MP4 tag value safely."""
-        try:
-            tag_value = audio_file.get(tag_name)
-            if tag_value:
-                if isinstance(tag_value[0], bytes):
-                    return tag_value[0].decode('utf-8')
-                return str(tag_value[0])
-        except (IndexError, AttributeError, UnicodeDecodeError):
-            pass
-        return None
     
     async def search_audible_catalog(self, title: str, author: str = None, num_results: int = 5) -> List[Dict]:
         """
@@ -487,97 +403,37 @@ class AudiobookImporter:
             Confidence score between 0 and 1
         """
         # Normalize titles
-        file_title = self._normalize_for_matching(file_metadata.get('title', ''))
-        audible_title = self._normalize_for_matching(audible_product.get('title', ''))
-        
+        file_title = normalize_for_matching(file_metadata.get('title', ''))
+        audible_title = normalize_for_matching(audible_product.get('title', ''))
+
         # Calculate title similarity
-        title_sim = self._calculate_similarity(file_title, audible_title)
-        
+        title_sim = calculate_similarity(file_title, audible_title)
+
         # Normalize authors
-        file_author = self._normalize_for_matching(file_metadata.get('author', ''))
+        file_author = normalize_for_matching(file_metadata.get('author', ''))
         audible_authors = audible_product.get('authors', [])
         audible_author_str = self.downloader._format_author(audible_authors)
-        audible_author = self._normalize_for_matching(audible_author_str)
-        
+        audible_author = normalize_for_matching(audible_author_str)
+
         # Calculate author similarity
-        author_sim = self._calculate_similarity(file_author, audible_author) if file_author else 0.5
-        
+        author_sim = calculate_similarity(file_author, audible_author) if file_author else 0.5
+
         # Weighted combination (title is more important)
         confidence = (title_sim * 0.6) + (author_sim * 0.4)
-        
+
         # Bonus if narrator matches
         file_narrator = file_metadata.get('narrator')
         audible_narrators = audible_product.get('narrators', [])
-        
+
         if file_narrator and audible_narrators:
-            file_narrator_norm = self._normalize_for_matching(file_narrator)
+            file_narrator_norm = normalize_for_matching(file_narrator)
             audible_narrator_str = self.downloader._format_narrator(audible_narrators)
-            audible_narrator_norm = self._normalize_for_matching(audible_narrator_str)
-            
-            narrator_sim = self._calculate_similarity(file_narrator_norm, audible_narrator_norm)
+            audible_narrator_norm = normalize_for_matching(audible_narrator_str)
+
+            narrator_sim = calculate_similarity(file_narrator_norm, audible_narrator_norm)
             confidence = min(1.0, confidence + narrator_sim * 0.1)
         
         return confidence
-    
-    def _normalize_for_matching(self, text: str) -> str:
-        """Normalize text for fuzzy matching."""
-        if not text:
-            return ""
-        
-        # Convert to lowercase
-        text = text.lower()
-        
-        # Remove diacritics
-        text = unicodedata.normalize('NFD', text)
-        text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
-        
-        # Replace common separators and punctuation with spaces
-        text = re.sub(r'[:\-_,.;!?()[\]{}"\']', ' ', text)
-        
-        # Remove common volume/part indicators
-        replacements = ['band', 'teil', 'buch', 'volume', 'vol', 'part', 'pt']
-        for word in replacements:
-            text = re.sub(r'\b' + word + r'\b', '', text)
-        
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        return text
-    
-    def _calculate_similarity(self, text1: str, text2: str) -> float:
-        """Calculate word-based similarity between two texts (Jaccard similarity)."""
-        if not text1 or not text2:
-            return 0.0
-        
-        if text1 == text2:
-            return 1.0
-        
-        words1 = set(text1.split())
-        words2 = set(text2.split())
-        
-        if not words1 or not words2:
-            return 0.0
-        
-        intersection = len(words1.intersection(words2))
-        union = len(words1.union(words2))
-        jaccard = intersection / union if union > 0 else 0.0
-        
-        # Bonus for substring containment
-        substring_bonus = 0.0
-        if text1 in text2 or text2 in text1:
-            substring_bonus = 0.2
-        
-        # Check for number matching
-        numbers1 = set(re.findall(r'\d+', text1))
-        numbers2 = set(re.findall(r'\d+', text2))
-        
-        number_bonus = 0.0
-        if numbers1 and numbers2:
-            number_match = len(numbers1.intersection(numbers2)) / max(len(numbers1), len(numbers2))
-            number_bonus = number_match * 0.3
-        
-        final_score = min(1.0, jaccard + substring_bonus + number_bonus)
-        return final_score
     
     def check_duplicate(self, file_info: Dict, audible_match: Optional[Dict] = None) -> Optional[Dict]:
         """

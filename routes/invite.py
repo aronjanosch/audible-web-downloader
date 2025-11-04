@@ -8,35 +8,22 @@ import asyncio
 import json
 import os
 import secrets
-from threading import Event, Thread
 from pathlib import Path
 from functools import wraps
 from auth import AudibleAuth
-from audible.login import external_login
 from audible.localization import Locale, search_template
 import audible
 from settings import settings_manager
+from utils.config_manager import get_config_manager, ConfigurationError
+from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
 
 invite_bp = Blueprint('invite', __name__)
 
+# Get ConfigManager singleton
+config_manager = get_config_manager()
+
 # Store for active login sessions (shared with auth module concept)
 invite_login_sessions = {}
-
-
-def load_accounts():
-    """Load saved Audible accounts from JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    if os.path.exists(accounts_file):
-        with open(accounts_file, 'r') as f:
-            return json.load(f)
-    return {}
-
-
-def save_accounts(accounts):
-    """Save Audible accounts to JSON file"""
-    accounts_file = current_app.config['ACCOUNTS_FILE']
-    with open(accounts_file, 'w') as f:
-        json.dump(accounts, f, indent=2)
 
 
 def validate_token(f):
@@ -90,7 +77,7 @@ def add_account(token):
     if not account_name.replace('_', '').replace('-', '').isalnum():
         return jsonify({'error': 'Account name can only contain letters, numbers, hyphens, and underscores'}), 400
 
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
 
     if account_name in accounts:
         return jsonify({'error': 'Account name already exists. Please choose a different name.'}), 400
@@ -106,7 +93,7 @@ def add_account(token):
         "authenticated": False
     }
 
-    save_accounts(accounts)
+    config_manager.save_accounts(accounts)
 
     return jsonify({
         'success': True,
@@ -119,7 +106,7 @@ def add_account(token):
 @validate_token
 def start_login(token, account_name):
     """Start the Audible login process for invitation"""
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
 
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
@@ -133,52 +120,14 @@ def start_login(token, account_name):
         return jsonify({'error': f'Unsupported region: {region}'}), 400
     loc = Locale(**template)
 
-    # Create login session with invitation prefix
-    session_id = f"invite_{account_name}_{len(invite_login_sessions)}"
-    login_event = Event()
-    login_result = {}
-
-    def web_login_callback(oauth_url):
-        """Custom callback that stores the URL and waits for user input"""
-        invite_login_sessions[session_id] = {
-            'oauth_url': oauth_url,
-            'event': login_event,
-            'result': login_result,
-            'account_name': account_name,
-            'token': token
-        }
-
-        # Wait for user to complete login
-        login_event.wait(timeout=300)  # 5 minute timeout
-
-        if 'response_url' in login_result:
-            return login_result['response_url']
-        else:
-            raise Exception("Login timeout or cancelled")
-
-    def login_thread():
-        try:
-            # Use audible's built-in external login method directly
-            auth = audible.Authenticator.from_login_external(
-                locale=loc,
-                with_username=False,
-                login_url_callback=web_login_callback
-            )
-
-            # Save authenticator to expected location
-            config_dir = Path("config") / "auth" / account_name
-            config_dir.mkdir(parents=True, exist_ok=True)
-            auth_file = config_dir / "auth.json"
-            auth.to_file(auth_file, encryption=False)
-
-            login_result['success'] = True
-
-        except Exception as e:
-            login_result['error'] = str(e)
-            login_result['success'] = False
-
-    # Start login in background thread
-    Thread(target=login_thread, daemon=True).start()
+    # Start OAuth login using shared utility
+    session_id = start_oauth_login(
+        account_name=account_name,
+        locale=loc,
+        sessions_storage=invite_login_sessions,
+        session_id_prefix='invite_',
+        additional_data={'token': token}
+    )
 
     # Redirect to login page
     return redirect(url_for('invite.login_page', token=token, session_id=session_id))
@@ -212,72 +161,49 @@ def login_page(token, session_id):
 @validate_token
 def login_callback(token, session_id):
     """Handle the OAuth callback URL from user"""
-    if session_id not in invite_login_sessions:
-        return jsonify({'error': 'Login session not found'}), 404
-
-    session_data = invite_login_sessions[session_id]
-
-    # Verify token matches
-    if session_data.get('token') != token:
-        return jsonify({'error': 'Invalid token'}), 403
-
     data = request.get_json()
     response_url = data.get('response_url')
 
-    if not response_url:
-        return jsonify({'error': 'Response URL is required'}), 400
+    success, error, code = handle_oauth_callback(
+        session_id=session_id,
+        response_url=response_url,
+        sessions_storage=invite_login_sessions,
+        token=token
+    )
 
-    session_data['result']['response_url'] = response_url
-    session_data['event'].set()
+    if not success:
+        return jsonify({'error': error}), code
 
-    return jsonify({'success': True, 'message': 'Processing login...'})
+    return jsonify({'success': True, 'message': 'Processing login...'}), code
 
 
 @invite_bp.route('/invite/<token>/auth/status/<session_id>')
 @validate_token
 def login_status(token, session_id):
     """Check login status"""
-    if session_id not in invite_login_sessions:
-        return jsonify({'error': 'Login session not found'}), 404
+    # Get account_name from session for the redirect URL
+    if session_id in invite_login_sessions:
+        account_name = invite_login_sessions[session_id]['account_name']
+        success_redirect = url_for('invite.success_page', token=token, account_name=account_name)
+    else:
+        # If session not found, check_oauth_status will handle the error
+        success_redirect = url_for('invite.success_page', token=token, account_name='unknown')
 
-    session_data = invite_login_sessions[session_id]
+    response, code = check_oauth_status(
+        session_id=session_id,
+        sessions_storage=invite_login_sessions,
+        success_redirect=success_redirect,
+        token=token
+    )
 
-    # Verify token matches
-    if session_data.get('token') != token:
-        return jsonify({'error': 'Invalid token'}), 403
-
-    result = session_data['result']
-
-    if 'success' in result:
-        # Clean up session
-        del invite_login_sessions[session_id]
-
-        if result['success']:
-            # Mark account as authenticated
-            accounts = load_accounts()
-            account_name = session_data['account_name']
-            accounts[account_name]['authenticated'] = True
-            save_accounts(accounts)
-
-            return jsonify({
-                'success': True,
-                'message': 'Login successful!',
-                'redirect': url_for('invite.success_page', token=token, account_name=account_name)
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Unknown error')
-            })
-
-    return jsonify({'status': 'pending'})
+    return jsonify(response), code
 
 
 @invite_bp.route('/invite/<token>/success/<account_name>')
 @validate_token
 def success_page(token, account_name):
     """Display success page after account is added"""
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
 
     if account_name not in accounts:
         return "Account not found", 404
@@ -299,7 +225,7 @@ def validate_account_token(f):
     """Decorator to validate account-specific invitation token"""
     @wraps(f)
     def decorated_function(token, *args, **kwargs):
-        accounts = load_accounts()
+        accounts = config_manager.get_accounts()
 
         # Find account with matching pending_invitation_token
         matching_account = None
@@ -320,7 +246,7 @@ def validate_account_token(f):
 @validate_account_token
 def account_landing_page(token, account_name):
     """Display landing page for single-account invitation"""
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     account_data = accounts[account_name]
 
     # Check if already authenticated
@@ -338,7 +264,7 @@ def account_landing_page(token, account_name):
 @validate_account_token
 def account_start_login(token, account_name):
     """Start the Audible login process for single-account invitation"""
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     account_data = accounts[account_name]
     region = account_data['region']
 
@@ -348,53 +274,14 @@ def account_start_login(token, account_name):
         return jsonify({'error': f'Unsupported region: {region}'}), 400
     loc = Locale(**template)
 
-    # Create login session with account prefix
-    session_id = f"account_{account_name}_{len(invite_login_sessions)}"
-    login_event = Event()
-    login_result = {}
-
-    def web_login_callback(oauth_url):
-        """Custom callback that stores the URL and waits for user input"""
-        invite_login_sessions[session_id] = {
-            'oauth_url': oauth_url,
-            'event': login_event,
-            'result': login_result,
-            'account_name': account_name,
-            'token': token,
-            'is_account_invite': True
-        }
-
-        # Wait for user to complete login
-        login_event.wait(timeout=300)  # 5 minute timeout
-
-        if 'response_url' in login_result:
-            return login_result['response_url']
-        else:
-            raise Exception("Login timeout or cancelled")
-
-    def login_thread():
-        try:
-            # Use audible's built-in external login method directly
-            auth = audible.Authenticator.from_login_external(
-                locale=loc,
-                with_username=False,
-                login_url_callback=web_login_callback
-            )
-
-            # Save authenticator to expected location
-            config_dir = Path("config") / "auth" / account_name
-            config_dir.mkdir(parents=True, exist_ok=True)
-            auth_file = config_dir / "auth.json"
-            auth.to_file(auth_file, encryption=False)
-
-            login_result['success'] = True
-
-        except Exception as e:
-            login_result['error'] = str(e)
-            login_result['success'] = False
-
-    # Start login in background thread
-    Thread(target=login_thread, daemon=True).start()
+    # Start OAuth login using shared utility
+    session_id = start_oauth_login(
+        account_name=account_name,
+        locale=loc,
+        sessions_storage=invite_login_sessions,
+        session_id_prefix='account_',
+        additional_data={'token': token, 'is_account_invite': True}
+    )
 
     # Redirect to login page
     return redirect(url_for('invite.account_login_page', token=token, session_id=session_id))
@@ -428,72 +315,62 @@ def account_login_page(token, account_name, session_id):
 @validate_account_token
 def account_login_callback(token, account_name, session_id):
     """Handle the OAuth callback URL from user for single-account invitation"""
-    if session_id not in invite_login_sessions:
-        return jsonify({'error': 'Login session not found'}), 404
-
-    session_data = invite_login_sessions[session_id]
-
-    # Verify token matches and is account invite
-    if session_data.get('token') != token or not session_data.get('is_account_invite'):
-        return jsonify({'error': 'Invalid token'}), 403
+    # Additional validation for account-specific invite
+    if session_id in invite_login_sessions:
+        session_data = invite_login_sessions[session_id]
+        if not session_data.get('is_account_invite'):
+            return jsonify({'error': 'Invalid token'}), 403
 
     data = request.get_json()
     response_url = data.get('response_url')
 
-    if not response_url:
-        return jsonify({'error': 'Response URL is required'}), 400
+    success, error, code = handle_oauth_callback(
+        session_id=session_id,
+        response_url=response_url,
+        sessions_storage=invite_login_sessions,
+        token=token
+    )
 
-    session_data['result']['response_url'] = response_url
-    session_data['event'].set()
+    if not success:
+        return jsonify({'error': error}), code
 
-    return jsonify({'success': True, 'message': 'Processing login...'})
+    return jsonify({'success': True, 'message': 'Processing login...'}), code
 
 
 @invite_bp.route('/invite/account/<token>/auth/status/<session_id>')
 @validate_account_token
 def account_login_status(token, account_name, session_id):
     """Check login status for single-account invitation"""
-    if session_id not in invite_login_sessions:
-        return jsonify({'error': 'Login session not found'}), 404
+    # Additional validation for account-specific invite
+    if session_id in invite_login_sessions:
+        session_data = invite_login_sessions[session_id]
+        if not session_data.get('is_account_invite'):
+            return jsonify({'error': 'Invalid token'}), 403
 
-    session_data = invite_login_sessions[session_id]
+    success_redirect = url_for('invite.account_success_page', token=token, account_name=account_name)
 
-    # Verify token matches and is account invite
-    if session_data.get('token') != token or not session_data.get('is_account_invite'):
-        return jsonify({'error': 'Invalid token'}), 403
+    response, code = check_oauth_status(
+        session_id=session_id,
+        sessions_storage=invite_login_sessions,
+        success_redirect=success_redirect,
+        token=token
+    )
 
-    result = session_data['result']
-
-    if 'success' in result:
-        # Clean up session
-        del invite_login_sessions[session_id]
-
-        if result['success']:
-            # Mark account as authenticated and remove pending invitation
-            accounts = load_accounts()
-            accounts[account_name]['authenticated'] = True
+    # If authentication successful, remove pending_invitation_token
+    if response.get('success'):
+        accounts = config_manager.get_accounts()
+        if account_name in accounts:
             accounts[account_name].pop('pending_invitation_token', None)
-            save_accounts(accounts)
+            config_manager.save_accounts(accounts)
 
-            return jsonify({
-                'success': True,
-                'message': 'Login successful!',
-                'redirect': url_for('invite.account_success_page', token=token, account_name=account_name)
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Unknown error')
-            })
-
-    return jsonify({'status': 'pending'})
+    return jsonify(response), code
 
 
 @invite_bp.route('/invite/account/<token>/success/<account_name>')
 @validate_account_token
 def account_success_page(token, account_name):
     """Display success page after account authentication for single-account invitation"""
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     account_data = accounts[account_name]
 
     return render_template('invite/account_success.html',

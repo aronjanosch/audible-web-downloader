@@ -71,12 +71,19 @@ function submitLogin() {
     
     showStatus('Processing login...', 'info');
     document.getElementById('loadingSpinner').classList.remove('d-none');
-    
+
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+    }
+
     fetch(`/auth/callback/${sessionId}`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
+        headers: headers,
         body: JSON.stringify({
             response_url: responseUrl
         })
