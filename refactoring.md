@@ -3,7 +3,7 @@
 This document outlines refactoring opportunities to improve code quality, reduce complexity, and enhance maintainability. Items are prioritized by impact and organized into actionable tasks.
 
 **Last Updated**: 2025-11-04
-**Status**: Phase 1 Complete (3/4 tasks done)
+**Status**: Phase 1 Complete ✅ (4/4 tasks done)
 
 ---
 
@@ -101,36 +101,43 @@ This document outlines refactoring opportunities to improve code quality, reduce
 
 ---
 
-### 4. Split AudiobookDownloader God Class
+### 4. Split AudiobookDownloader God Class ✅ COMPLETE
 **Impact**: Major architecture improvement
 **Effort**: High
-**Files**: `downloader.py` (1600+ lines)
+**Files**: `downloader.py`, `app/services/*`, `app/models.py`
+**Completed**: 2025-11-04
 
-**Current Issue**:
-- Single massive class handling everything:
+**Previous Issue**:
+- Single massive class (1421 lines) handling everything:
   - Downloading, decryption, conversion
   - Metadata extraction and embedding
   - Path building with naming patterns
   - Library state tracking
   - Queue management
+- Circular import between downloader.py and service modules
+- Naming conflict between app.py file and app/ directory
 
 **Action Items**:
-- [ ] Create `AudioConverter` class for AAX to M4B conversion
-- [ ] Create `MetadataEnricher` class for metadata operations
-- [ ] Create `PathBuilder` class for naming pattern logic
-- [ ] Create `LibraryManager` class for library state tracking
-- [ ] Refactor `AudiobookDownloader` to orchestrate these components
-- [ ] Update tests if they exist
+- [x] Create `AudioConverter` class for AAX to M4B conversion
+- [x] Create `MetadataEnricher` class for metadata operations
+- [x] Create `PathBuilder` class for naming pattern logic
+- [x] Create `LibraryManager` class for library state tracking
+- [x] Extract `DownloadState` enum to shared models module
+- [x] Refactor `AudiobookDownloader` to orchestrate these components
+- [x] Fix circular import issues
+- [x] Migrate Flask app factory to app/ package structure
 
-**Suggested Structure**:
-```
-app/services/
-├── audio_converter.py      # FFmpeg conversion logic
-├── metadata_enricher.py    # Metadata extraction and embedding
-├── path_builder.py         # Naming pattern and path logic
-├── library_manager.py      # Library state tracking
-└── download_orchestrator.py # Coordinates download process
-```
+**Results**:
+- Created `app/services/` directory structure:
+  - `audio_converter.py` - FFmpeg conversion and quality validation
+  - `metadata_enricher.py` - Metadata extraction and embedding logic
+  - `path_builder.py` - Naming pattern processing and path building
+  - `library_manager.py` - Library state tracking and duplicate detection
+- Created `app/models.py` with `DownloadState` enum (resolved circular imports)
+- Reduced `downloader.py` from 1421 to 769 lines (46% reduction)
+- Moved Flask app factory from `app.py` to `app/__init__.py`
+- All 650+ lines of extracted code now properly modularized
+- Successfully tested: imports, path building, service integration, Flask app startup
 
 ---
 
@@ -538,15 +545,15 @@ GET  /api/downloads/status
 
 ## Implementation Strategy
 
-### Phase 1: Foundation (High Priority Items 1-4) - 75% COMPLETE ✅
+### Phase 1: Foundation (High Priority Items 1-4) - 100% COMPLETE ✅
 **Timeline**: 2-3 weeks
 **Goal**: Address security and major architecture issues
-**Status**: 3 of 4 tasks complete (2025-11-04)
+**Status**: All 4 tasks complete (2025-11-04)
 
 1. ✅ CSRF Protection - COMPLETE
 2. ✅ Configuration Management - COMPLETE
 3. ✅ OAuth Consolidation - COMPLETE
-4. ⏳ Split AudiobookDownloader - PENDING (next task)
+4. ✅ Split AudiobookDownloader - COMPLETE
 
 ### Phase 2: Quality Improvements (Medium Priority Items 5-12)
 **Timeline**: 3-4 weeks
