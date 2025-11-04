@@ -86,10 +86,27 @@
                         Found <strong id="fileCount">0</strong> M4B file(s) 
                         (<strong id="totalSize">0</strong> total)
                     </div>
-                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    
+                    <!-- Selection Controls -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Select Files to Match with Audible</h6>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary" id="selectAllScannedBtn">
+                                    <i class="fas fa-check-square"></i> Select All
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="deselectAllScannedBtn">
+                                    <i class="fas fa-square"></i> Deselect All
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                         <table class="table table-sm table-hover">
-                            <thead>
+                            <thead class="table-light sticky-top">
                                 <tr>
+                                    <th style="width: 40px;"></th>
                                     <th>File Name</th>
                                     <th>Title</th>
                                     <th>Author</th>
@@ -100,9 +117,11 @@
                             </tbody>
                         </table>
                     </div>
-                    <button class="btn btn-success" id="matchFilesBtn">
-                        <i class="fas fa-arrow-right"></i> Next: Match with Audible
-                    </button>
+                    <div class="mt-3">
+                        <button class="btn btn-success" id="matchFilesBtn">
+                            <i class="fas fa-arrow-right"></i> Next: Match Selected with Audible (<span id="selectedForMatchCount">0</span>)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -486,6 +505,25 @@
         border-color: #28a745;
         background-color: #f0fff4;
     }
+    
+    /* Scanned Files Table Styles */
+    #scannedFilesTable tr {
+        transition: background-color 0.2s ease;
+    }
+    
+    #scannedFilesTable tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    #scannedFilesTable tr.selected-row {
+        background-color: #e7f3ff;
+    }
+    
+    .sticky-top {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
 </style>
 
 <script>
@@ -493,8 +531,9 @@
 let importState = {
     currentStep: 1,
     scannedFiles: [],
+    selectedScannedFiles: new Set(), // Files selected for matching in step 1
     matchedFiles: [],
-    selectedFiles: new Set(),
+    selectedFiles: new Set(), // Files selected for import in step 2
     sourcePath: '',
     targetLibrary: '',
     accountName: '',
@@ -570,6 +609,12 @@ function loadLibraries() {
         .catch(error => console.error('Error loading libraries:', error));
 }
 
+// Listen for library updates from settings panel (in base.html)
+window.addEventListener('librariesUpdated', function(event) {
+    // Reload libraries when settings panel updates them
+    loadLibraries();
+});
+
 // Setup event listeners (renamed to avoid conflicts with base.html)
 let importerEventListenersAttached = false;
 function setupImporterEventListeners() {
@@ -589,7 +634,18 @@ function setupImporterEventListeners() {
     
     const matchBtn = document.getElementById('matchFilesBtn');
     if (matchBtn) {
-        matchBtn.addEventListener('click', () => goToStep(2));
+        matchBtn.addEventListener('click', matchSelectedFiles);
+    }
+    
+    // Step 1: Selection controls
+    const selectAllScannedBtn = document.getElementById('selectAllScannedBtn');
+    if (selectAllScannedBtn) {
+        selectAllScannedBtn.addEventListener('click', selectAllScanned);
+    }
+    
+    const deselectAllScannedBtn = document.getElementById('deselectAllScannedBtn');
+    if (deselectAllScannedBtn) {
+        deselectAllScannedBtn.addEventListener('click', deselectAllScanned);
     }
     
     // Step 2: Review Matches
@@ -753,18 +809,89 @@ function displayScanResults(data) {
     const tbody = document.getElementById('scannedFilesTable');
     tbody.innerHTML = '';
     
-    data.files.forEach(file => {
+    // Reset selection
+    importState.selectedScannedFiles.clear();
+    
+    data.files.forEach((file, index) => {
         const row = document.createElement('tr');
+        row.style.cursor = 'pointer';
+        row.dataset.index = index;
+        
+        // Auto-select all files by default
+        importState.selectedScannedFiles.add(index);
+        row.classList.add('selected-row');
+        
         row.innerHTML = `
+            <td onclick="toggleScannedSelect(${index}); event.stopPropagation();">
+                <input type="checkbox" class="form-check-input scanned-checkbox" checked data-index="${index}">
+            </td>
             <td>${escapeHtml(file.file_name)}</td>
             <td>${escapeHtml(file.title || '-')}</td>
             <td>${escapeHtml(file.author || '-')}</td>
             <td>${formatBytes(file.file_size)}</td>
         `;
+        
+        // Make entire row clickable
+        row.addEventListener('click', () => toggleScannedSelect(index));
+        
         tbody.appendChild(row);
     });
     
+    updateSelectedForMatchCount();
     document.getElementById('scanResults').style.display = 'block';
+}
+
+// Step 1: File selection functions
+function toggleScannedSelect(index) {
+    const checkbox = document.querySelector(`.scanned-checkbox[data-index="${index}"]`);
+    const row = document.querySelector(`#scannedFilesTable tr[data-index="${index}"]`);
+    
+    if (importState.selectedScannedFiles.has(index)) {
+        importState.selectedScannedFiles.delete(index);
+        if (checkbox) checkbox.checked = false;
+        if (row) row.classList.remove('selected-row');
+    } else {
+        importState.selectedScannedFiles.add(index);
+        if (checkbox) checkbox.checked = true;
+        if (row) row.classList.add('selected-row');
+    }
+    
+    updateSelectedForMatchCount();
+}
+
+function selectAllScanned() {
+    importState.scannedFiles.forEach((_, index) => {
+        importState.selectedScannedFiles.add(index);
+        const checkbox = document.querySelector(`.scanned-checkbox[data-index="${index}"]`);
+        const row = document.querySelector(`#scannedFilesTable tr[data-index="${index}"]`);
+        if (checkbox) checkbox.checked = true;
+        if (row) row.classList.add('selected-row');
+    });
+    updateSelectedForMatchCount();
+}
+
+function deselectAllScanned() {
+    importState.selectedScannedFiles.clear();
+    document.querySelectorAll('.scanned-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.querySelectorAll('#scannedFilesTable tr').forEach(row => {
+        row.classList.remove('selected-row');
+    });
+    updateSelectedForMatchCount();
+}
+
+function updateSelectedForMatchCount() {
+    document.getElementById('selectedForMatchCount').textContent = importState.selectedScannedFiles.size;
+}
+
+function matchSelectedFiles() {
+    if (importState.selectedScannedFiles.size === 0) {
+        alert('Please select at least one file to match with Audible');
+        return;
+    }
+    
+    goToStep(2);
 }
 
 // Step 2: Match Files
@@ -772,11 +899,16 @@ function matchFiles() {
     document.getElementById('matchingProgress').style.display = 'block';
     document.getElementById('matchResults').style.display = 'none';
     
+    // Get only selected files
+    const selectedFiles = Array.from(importState.selectedScannedFiles).map(index => 
+        importState.scannedFiles[index]
+    );
+    
     fetch('/api/importer/match', {
         method: 'POST',
         headers: getHeadersWithCSRF(),
         body: JSON.stringify({
-            files: importState.scannedFiles,
+            files: selectedFiles,
             account_name: importState.accountName,
             region: importState.region,
             library_path: importState.targetLibrary
@@ -1253,6 +1385,7 @@ function resetImport() {
     importState = {
         currentStep: 1,
         scannedFiles: [],
+        selectedScannedFiles: new Set(),
         matchedFiles: [],
         selectedFiles: new Set(),
         sourcePath: '',

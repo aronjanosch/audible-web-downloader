@@ -995,15 +995,613 @@
             // Pages can extend this function
         }
         
-        // Initialize the application
-        document.addEventListener('DOMContentLoaded', function() {
-            loadAccounts();
-            setupEventListeners();
-            
-            // Update download badge periodically
-            updateDownloadBadge();
-            setInterval(updateDownloadBadge, 3000); // Update every 3 seconds
+    // Settings Panel Functions - Works on all pages
+    async function loadLibraries() {
+        try {
+            const libraries = await apiCall('/api/libraries');
+            updateLibraryListInSettings(libraries);
+            // Dispatch custom event so pages can update their own library selectors
+            window.dispatchEvent(new CustomEvent('librariesUpdated', { detail: libraries }));
+        } catch (error) {
+            console.error('Failed to load libraries:', error);
+        }
+    }
+
+    function updateLibraryListInSettings(libraries) {
+        const listContainer = document.getElementById('configuredLibraryList');
+        if (!listContainer) return;
+
+        if (Object.keys(libraries).length === 0) {
+            listContainer.innerHTML = '<small class="text-muted">No libraries configured</small>';
+            return;
+        }
+
+        listContainer.innerHTML = '';
+
+        for (const [name, library] of Object.entries(libraries)) {
+            const libraryItem = document.createElement('div');
+            libraryItem.className = 'card mb-2';
+            libraryItem.innerHTML = `
+                <div class="card-body p-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="flex-grow-1 me-2">
+                            <strong class="d-block">${name}</strong>
+                            <small class="text-muted text-truncate d-block" style="max-width: 200px;" title="${library.path}">${library.path}</small>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger delete-library-btn" data-library-name="${name}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            listContainer.appendChild(libraryItem);
+        }
+
+        // Attach delete event listeners
+        listContainer.querySelectorAll('.delete-library-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                deleteLibraryFromSettings(this.dataset.libraryName);
+            });
         });
+    }
+
+    async function addLibraryFromSettings() {
+        const libraryName = document.getElementById('libraryName').value.trim();
+        const libraryPath = document.getElementById('libraryPath').value.trim();
+
+        if (!libraryName || !libraryPath) {
+            showBottomNotification('Please enter both library name and path', 'warning');
+            return;
+        }
+
+        try {
+            await apiCall('/api/libraries', {
+                method: 'POST',
+                body: JSON.stringify({
+                    library_name: libraryName,
+                    library_path: libraryPath
+                })
+            });
+
+            showBottomNotification('Library added successfully!', 'success');
+            document.getElementById('addLibraryForm').reset();
+            
+            // Reload libraries to update settings panel and trigger update event
+            await loadLibraries();
+
+        } catch (error) {
+            showBottomNotification('Failed to add library: ' + error.message, 'error');
+        }
+    }
+
+    async function deleteLibraryFromSettings(libraryName) {
+        if (!confirm(`Are you sure you want to remove the library "${libraryName}"?\n\nNote: This only removes it from the app, your files will not be deleted.`)) {
+            return;
+        }
+
+        try {
+            await apiCall(`/api/libraries/${libraryName}`, {
+                method: 'DELETE'
+            });
+
+            showBottomNotification('Library removed successfully', 'success');
+            
+            // Reload libraries to update settings panel and trigger update event
+            await loadLibraries();
+
+        } catch (error) {
+            showBottomNotification('Failed to remove library: ' + error.message, 'error');
+        }
+    }
+
+    // Naming Pattern Settings
+    let namingSettings = null;
+    let namingPatternModal = null;
+
+    async function loadNamingSettings() {
+        try {
+            const data = await apiCall('/api/settings/naming');
+            namingSettings = data.settings;
+            return namingSettings;
+        } catch (error) {
+            console.error('Failed to load naming settings:', error);
+            return null;
+        }
+    }
+
+    function updatePatternPreview(pattern) {
+        const previewEl = document.getElementById('patternPreview');
+        if (!previewEl) return;
+
+        // Sample book metadata for preview
+        const sampleData = {
+            '{Author}': 'Edgar Allan Poe',
+            '{Series}': 'Erzählungen',
+            '{Title}': 'Edgar Allan Poe: Erzählungen 1',
+            '{Year}': '2024',
+            '{Narrator}': 'Edgar Allan Poe',
+            '{Publisher}': 'Audible Studios',
+            '{Language}': 'de',
+            '{ASIN}': 'B08X123456',
+            '{Volume}': '1'
+        };
+
+        let preview = pattern;
+        for (const [placeholder, value] of Object.entries(sampleData)) {
+            preview = preview.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+        }
+
+        // Clean up empty segments
+        preview = preview.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+
+        previewEl.textContent = preview || 'Invalid pattern';
+    }
+
+    function showConfigureNamingModal() {
+        const modal = document.getElementById('namingPatternModal');
+        if (!modal) return;
+        
+        namingPatternModal = new bootstrap.Modal(modal);
+
+        // Load current settings
+        if (namingSettings) {
+            const presetSelect = document.getElementById('namingPreset');
+            const patternInput = document.getElementById('customPattern');
+
+            if (presetSelect) presetSelect.value = namingSettings.selected_preset || 'audiobookshelf';
+            if (patternInput) patternInput.value = namingSettings.naming_pattern;
+
+            updatePresetDescription(namingSettings.selected_preset);
+            updatePatternPreview(namingSettings.naming_pattern);
+        }
+
+        namingPatternModal.show();
+    }
+
+    function updatePresetDescription(presetKey) {
+        const descEl = document.getElementById('presetDescription');
+        if (!descEl) return;
+
+        const presets = namingSettings?.presets || {};
+        const preset = presets[presetKey];
+
+        if (preset) {
+            descEl.textContent = preset.description;
+        }
+    }
+
+    async function saveNamingPattern() {
+        const pattern = document.getElementById('customPattern').value.trim();
+        const preset = document.getElementById('namingPreset').value;
+
+        if (!pattern) {
+            showValidationError('Pattern cannot be empty');
+            return;
+        }
+
+        try {
+            const data = await apiCall('/api/settings/naming', {
+                method: 'POST',
+                body: JSON.stringify({
+                    pattern: pattern,
+                    preset: preset
+                })
+            });
+
+            if (data.success) {
+                showBottomNotification('Naming pattern saved successfully!', 'success');
+                if (namingPatternModal) namingPatternModal.hide();
+                await loadNamingSettings();
+            } else {
+                showValidationError(data.error || 'Failed to save pattern');
+            }
+        } catch (error) {
+            showValidationError(error.message || 'Failed to save pattern');
+        }
+    }
+
+    function showValidationError(message) {
+        const validationDiv = document.getElementById('patternValidation');
+        if (!validationDiv) return;
+
+        validationDiv.className = 'alert alert-danger';
+        validationDiv.textContent = message;
+        validationDiv.style.display = 'block';
+
+        setTimeout(() => {
+            validationDiv.style.display = 'none';
+        }, 5000);
+    }
+
+    // Family Sharing Functions
+    function setupFamilySharingModal() {
+        const familySharingBtn = document.getElementById('familySharingBtn');
+        if (!familySharingBtn) return;
+
+        familySharingBtn.addEventListener('click', function() {
+            loadInvitationLinkToModal();
+            const modal = new bootstrap.Modal(document.getElementById('familySharingModal'));
+            modal.show();
+        });
+
+        // Copy button in modal
+        const copyModalBtn = document.getElementById('copyInviteLinkModalBtn');
+        if (copyModalBtn) {
+            copyModalBtn.addEventListener('click', function() {
+                const linkInput = document.getElementById('invitationLinkDisplay');
+                linkInput.select();
+                linkInput.setSelectionRange(0, 99999);
+                navigator.clipboard.writeText(linkInput.value)
+                    .then(() => {
+                        const originalHTML = copyModalBtn.innerHTML;
+                        copyModalBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                        setTimeout(() => {
+                            copyModalBtn.innerHTML = originalHTML;
+                        }, 2000);
+                        showFamilySharingStatus('Invitation link copied to clipboard!', 'success');
+                    })
+                    .catch(err => {
+                        showFamilySharingStatus('Failed to copy link', 'danger');
+                    });
+            });
+        }
+
+        // Save custom token button
+        const saveCustomTokenBtn = document.getElementById('saveCustomTokenBtn');
+        if (saveCustomTokenBtn) {
+            saveCustomTokenBtn.addEventListener('click', async function() {
+                const tokenInput = document.getElementById('customInvitationToken');
+                const customToken = tokenInput.value.trim();
+
+                if (!customToken) {
+                    showFamilySharingStatus('Please enter a token or use "Generate New Random Token"', 'warning');
+                    return;
+                }
+
+                // Validate token format
+                if (!/^[a-zA-Z0-9_-]+$/.test(customToken)) {
+                    showFamilySharingStatus('Token can only contain letters, numbers, hyphens, and underscores', 'danger');
+                    return;
+                }
+
+                if (customToken.length < 8) {
+                    showFamilySharingStatus('Token must be at least 8 characters long', 'danger');
+                    return;
+                }
+
+                try {
+                    const data = await apiCall('/api/settings/set-invitation-token', {
+                        method: 'POST',
+                        body: JSON.stringify({ token: customToken })
+                    });
+                    if (data.success) {
+                        loadInvitationLinkToModal();
+                        tokenInput.value = '';
+                        showFamilySharingStatus('Custom token set successfully!', 'success');
+                    }
+                } catch (error) {
+                    showFamilySharingStatus('Failed to set token: ' + error.message, 'danger');
+                }
+            });
+        }
+
+        // Regenerate token button in modal
+        const regenModalBtn = document.getElementById('regenerateTokenModalBtn');
+        if (regenModalBtn) {
+            regenModalBtn.addEventListener('click', async function() {
+                if (!confirm('Generate a new random token? This will invalidate the current invitation link.')) {
+                    return;
+                }
+                try {
+                    const data = await apiCall('/api/settings/regenerate-invitation-token', {
+                        method: 'POST'
+                    });
+                    if (data.success) {
+                        loadInvitationLinkToModal();
+                        document.getElementById('customInvitationToken').value = '';
+                        showFamilySharingStatus('New random token generated successfully!', 'success');
+                    }
+                } catch (error) {
+                    showFamilySharingStatus('Failed to regenerate token: ' + error.message, 'danger');
+                }
+            });
+        }
+    }
+
+    async function loadInvitationLinkToModal() {
+        try {
+            const data = await apiCall('/api/settings/invitation-link');
+            const linkInput = document.getElementById('invitationLinkDisplay');
+            if (linkInput && data.invitation_url) {
+                linkInput.value = data.invitation_url;
+            }
+        } catch (error) {
+            console.error('Failed to load invitation link:', error);
+            const linkInput = document.getElementById('invitationLinkDisplay');
+            if (linkInput) {
+                linkInput.value = 'Error loading link';
+            }
+            showFamilySharingStatus('Failed to load invitation link', 'danger');
+        }
+    }
+
+    function showFamilySharingStatus(message, type) {
+        const statusDiv = document.getElementById('familySharingStatusMessage');
+        if (!statusDiv) return;
+
+        statusDiv.className = `alert alert-${type}`;
+        statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
+        statusDiv.classList.remove('d-none');
+
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            statusDiv.classList.add('d-none');
+        }, 5000);
+    }
+
+    // Account Invite Functions
+    let currentAccountForInvite = null;
+
+    function setupAccountInviteModal() {
+        const generateAccountInviteBtn = document.getElementById('generateAccountInviteBtn');
+        if (!generateAccountInviteBtn) return;
+
+        generateAccountInviteBtn.addEventListener('click', function() {
+            if (currentAccount) {
+                openAccountInviteModal(currentAccount);
+            }
+        });
+
+        // Generate link button inside modal
+        const generateLinkBtn = document.getElementById('generateAccountInviteLinkBtn');
+        if (generateLinkBtn) {
+            generateLinkBtn.addEventListener('click', async function() {
+                if (!currentAccountForInvite) return;
+
+                try {
+                    const data = await apiCall(`/api/accounts/${currentAccountForInvite}/generate-invite-link`, {
+                        method: 'POST'
+                    });
+
+                    if (data.success) {
+                        displayAccountInviteLink(data.invitation_url);
+                        showAccountInviteStatus('Invitation link generated successfully!', 'success');
+                    }
+                } catch (error) {
+                    showAccountInviteStatus('Failed to generate link: ' + error.message, 'danger');
+                }
+            });
+        }
+
+        // Copy link button
+        const copyBtn = document.getElementById('copyAccountInviteLinkBtn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                const linkInput = document.getElementById('accountInviteLinkDisplay');
+                linkInput.select();
+                linkInput.setSelectionRange(0, 99999);
+                navigator.clipboard.writeText(linkInput.value)
+                    .then(() => {
+                        const originalHTML = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalHTML;
+                        }, 2000);
+                        showAccountInviteStatus('Link copied to clipboard!', 'success');
+                    })
+                    .catch(err => {
+                        showAccountInviteStatus('Failed to copy link', 'danger');
+                    });
+            });
+        }
+
+        // Revoke link button
+        const revokeBtn = document.getElementById('revokeAccountInviteBtn');
+        if (revokeBtn) {
+            revokeBtn.addEventListener('click', async function() {
+                if (!currentAccountForInvite) return;
+
+                if (!confirm('Revoke invitation link? This will invalidate the link.')) {
+                    return;
+                }
+
+                try {
+                    const data = await apiCall(`/api/accounts/${currentAccountForInvite}/revoke-invite-link`, {
+                        method: 'POST'
+                    });
+
+                    if (data.success) {
+                        hideAccountInviteLink();
+                        showAccountInviteStatus('Invitation link revoked', 'success');
+                    }
+                } catch (error) {
+                    showAccountInviteStatus('Failed to revoke link: ' + error.message, 'danger');
+                }
+            });
+        }
+    }
+
+    async function openAccountInviteModal(accountName) {
+        currentAccountForInvite = accountName;
+
+        try {
+            const accounts = await apiCall('/api/accounts');
+            const account = accounts[accountName];
+
+            if (!account) {
+                showBottomNotification('Account not found', 'error');
+                return;
+            }
+
+            // Update modal content
+            document.getElementById('accountInviteAccountName').textContent = accountName;
+            document.getElementById('accountInviteDisplayName').textContent = accountName;
+            document.getElementById('accountInviteRegion').textContent = account.region.toUpperCase();
+
+            // Check if account has pending invitation token
+            if (account.pending_invitation_token) {
+                const inviteUrl = window.location.origin + '/invite/account/' + account.pending_invitation_token;
+                displayAccountInviteLink(inviteUrl);
+            } else {
+                hideAccountInviteLink();
+            }
+
+            // Open the modal
+            const accountInviteModal = new bootstrap.Modal(document.getElementById('accountInviteModal'));
+            accountInviteModal.show();
+        } catch (error) {
+            showBottomNotification('Failed to load account details: ' + error.message, 'error');
+        }
+    }
+
+    function displayAccountInviteLink(url) {
+        const linkDisplay = document.getElementById('accountInviteLinkDisplay');
+        const linkSection = document.getElementById('accountInviteLinkSection');
+        const generateSection = document.getElementById('generateAccountInviteSection');
+        
+        if (linkDisplay) linkDisplay.value = url;
+        if (linkSection) linkSection.style.display = 'block';
+        if (generateSection) generateSection.style.display = 'none';
+    }
+
+    function hideAccountInviteLink() {
+        const linkSection = document.getElementById('accountInviteLinkSection');
+        const generateSection = document.getElementById('generateAccountInviteSection');
+        
+        if (linkSection) linkSection.style.display = 'none';
+        if (generateSection) generateSection.style.display = 'block';
+    }
+
+    function showAccountInviteStatus(message, type) {
+        const statusDiv = document.getElementById('accountInviteStatusMessage');
+        if (!statusDiv) return;
+
+        statusDiv.className = `alert alert-${type}`;
+        statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
+        statusDiv.classList.remove('d-none');
+
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            statusDiv.classList.add('d-none');
+        }, 5000);
+    }
+
+    // Setup all settings panel event listeners
+    function setupSettingsPanel() {
+        // Add library form
+        const addLibraryForm = document.getElementById('addLibraryForm');
+        if (addLibraryForm) {
+            addLibraryForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                addLibraryFromSettings();
+            });
+        }
+
+        // Configure naming button
+        const configureNamingBtn = document.getElementById('configureNamingBtn');
+        if (configureNamingBtn) {
+            configureNamingBtn.addEventListener('click', showConfigureNamingModal);
+        }
+
+        // Preset selection change in naming modal
+        const presetSelect = document.getElementById('namingPreset');
+        if (presetSelect) {
+            presetSelect.addEventListener('change', function() {
+                const selectedPreset = this.value;
+                updatePresetDescription(selectedPreset);
+
+                if (selectedPreset !== 'custom' && namingSettings?.presets) {
+                    const preset = namingSettings.presets[selectedPreset];
+                    if (preset) {
+                        const patternInput = document.getElementById('customPattern');
+                        if (patternInput) {
+                            patternInput.value = preset.pattern;
+                            updatePatternPreview(preset.pattern);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Pattern input change
+        const patternInput = document.getElementById('customPattern');
+        if (patternInput) {
+            patternInput.addEventListener('input', function() {
+                updatePatternPreview(this.value);
+                const presetSelect = document.getElementById('namingPreset');
+                if (presetSelect) presetSelect.value = 'custom';
+            });
+        }
+
+        // Save button in naming modal
+        const saveBtn = document.getElementById('saveNamingPattern');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', saveNamingPattern);
+        }
+
+        // Delete account button
+        const deleteAccountBtn = document.getElementById('deleteAccountBtn');
+        if (deleteAccountBtn) {
+            deleteAccountBtn.addEventListener('click', async function() {
+                const accountSelect = document.getElementById('accountSelect');
+                const accountName = accountSelect?.value;
+                
+                if (!accountName) {
+                    showBottomNotification('Please select an account to delete', 'warning');
+                    return;
+                }
+                
+                // Confirm deletion
+                if (!confirm(`Are you sure you want to delete the account "${accountName}"?\n\nThis will remove all authentication data for this account.`)) {
+                    return;
+                }
+                
+                try {
+                    await apiCall(`/api/accounts/${accountName}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    showBottomNotification(`Account "${accountName}" deleted successfully!`, 'success');
+                    
+                    // Reload accounts and hide account info
+                    await loadAccounts();
+                    if (accountSelect) accountSelect.value = '';
+                    
+                    // Update account status in settings
+                    const accountStatus = document.getElementById('accountStatus');
+                    const noAccountSelected = document.getElementById('noAccountSelected');
+                    if (accountStatus) accountStatus.style.display = 'none';
+                    if (noAccountSelected) noAccountSelected.style.display = 'block';
+                    
+                } catch (error) {
+                    showBottomNotification('Failed to delete account: ' + error.message, 'error');
+                }
+            });
+        }
+
+        // Setup family sharing modal
+        setupFamilySharingModal();
+
+        // Setup account invite modal
+        setupAccountInviteModal();
+
+        // Load libraries for settings panel
+        loadLibraries();
+
+        // Load naming settings
+        loadNamingSettings();
+    }
+    
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', function() {
+        loadAccounts();
+        setupEventListeners();
+        setupSettingsPanel();
+        
+        // Update download badge periodically
+        updateDownloadBadge();
+        setInterval(updateDownloadBadge, 3000); // Update every 3 seconds
+    });
     </script>
     
     {% block extra_js %}{% endblock %}
