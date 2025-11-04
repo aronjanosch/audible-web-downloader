@@ -2,11 +2,10 @@ from flask import Blueprint, request, jsonify, session, current_app, render_temp
 import asyncio
 import json
 import os
-from threading import Event, Thread
 from auth import authenticate_account, fetch_library, AudibleAuth
-from audible.login import external_login
 from audible.localization import Locale, search_template
 from utils.account_manager import load_accounts, save_accounts
+from utils.oauth_flow import start_oauth_login
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -89,68 +88,26 @@ login_sessions = {}
 def start_login(account_name):
     """Start the Audible login process"""
     accounts = load_accounts()
-    
+
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
-    
+
     account_data = accounts[account_name]
     region = account_data['region']
-    
+
     # Get localization data
     template = search_template('country_code', region)
     if not template:
         return jsonify({'error': f'Unsupported region: {region}'}), 400
     loc = Locale(**template)
-    
-    # Create login session
-    session_id = f"{account_name}_{len(login_sessions)}"
-    login_event = Event()
-    login_result = {}
-    
-    def web_login_callback(oauth_url):
-        """Custom callback that stores the URL and waits for user input"""
-        login_sessions[session_id] = {
-            'oauth_url': oauth_url,
-            'event': login_event,
-            'result': login_result,
-            'account_name': account_name
-        }
-        
-        # Wait for user to complete login
-        login_event.wait(timeout=300)  # 5 minute timeout
-        
-        if 'response_url' in login_result:
-            return login_result['response_url']
-        else:
-            raise Exception("Login timeout or cancelled")
-    
-    def login_thread():
-        try:
-            # Use audible's built-in external login method directly
-            import audible
-            
-            auth = audible.Authenticator.from_login_external(
-                locale=loc,
-                with_username=False,
-                login_url_callback=web_login_callback
-            )
-            
-            # Save authenticator to expected location
-            from pathlib import Path
-            config_dir = Path("config") / "auth" / account_name
-            config_dir.mkdir(parents=True, exist_ok=True)
-            auth_file = config_dir / "auth.json"
-            auth.to_file(auth_file, encryption=False)
-            
-            login_result['success'] = True
-            
-        except Exception as e:
-            login_result['error'] = str(e)
-            login_result['success'] = False
-    
-    # Start login in background thread
-    Thread(target=login_thread, daemon=True).start()
-    
+
+    # Start OAuth login using shared utility
+    session_id = start_oauth_login(
+        account_name=account_name,
+        locale=loc,
+        sessions_storage=login_sessions
+    )
+
     # Redirect to login page
     return redirect(url_for('auth.login_page', session_id=session_id))
 
