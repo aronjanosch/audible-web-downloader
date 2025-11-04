@@ -24,6 +24,7 @@ from downloader import AudiobookDownloader
 from library_scanner import LocalLibraryScanner
 from utils.queue_base import BaseQueueManager
 from utils.constants import CONFIG_DIR
+from app.services import PathBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -412,7 +413,7 @@ class AudiobookImporter:
         # Normalize authors
         file_author = normalize_for_matching(file_metadata.get('author', ''))
         audible_authors = audible_product.get('authors', [])
-        audible_author_str = self.downloader._format_author(audible_authors)
+        audible_author_str = PathBuilder.format_author(audible_authors)
         audible_author = normalize_for_matching(audible_author_str)
 
         # Calculate author similarity
@@ -427,7 +428,7 @@ class AudiobookImporter:
 
         if file_narrator and audible_narrators:
             file_narrator_norm = normalize_for_matching(file_narrator)
-            audible_narrator_str = self.downloader._format_narrator(audible_narrators)
+            audible_narrator_str = PathBuilder.format_narrator(audible_narrators)
             audible_narrator_norm = normalize_for_matching(audible_narrator_str)
 
             narrator_sim = calculate_similarity(file_narrator_norm, audible_narrator_norm)
@@ -475,7 +476,7 @@ class AudiobookImporter:
             # Use Audible metadata for better matching
             title = audible_match.get('title', title)
             authors = audible_match.get('authors', [])
-            author = self.downloader._format_author(authors) if authors else author
+            author = PathBuilder.format_author(authors) if authors else author
         
         if title and author:
             fuzzy_match = self.downloader._check_fuzzy_duplicate(
