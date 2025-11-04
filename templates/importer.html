@@ -502,6 +502,16 @@ let importState = {
     currentSearchFile: null
 };
 
+// Helper function to get headers with CSRF token for POST requests
+function getHeadersWithCSRF() {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+    }
+    return headers;
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Importer DOMContentLoaded fired');
@@ -709,7 +719,7 @@ function scanDirectory() {
     
     fetch('/api/importer/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeadersWithCSRF(),
         body: JSON.stringify({
             source_path: sourcePath,
             library_path: library.path,
@@ -764,7 +774,7 @@ function matchFiles() {
     
     fetch('/api/importer/match', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeadersWithCSRF(),
         body: JSON.stringify({
             files: importState.scannedFiles,
             account_name: importState.accountName,
@@ -994,7 +1004,7 @@ function performManualSearch() {
     
     fetch('/api/importer/search-manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeadersWithCSRF(),
         body: JSON.stringify({
             search_query: query,
             account_name: importState.accountName,
@@ -1063,7 +1073,7 @@ function fetchPathPreview(index, audibleProduct) {
     
     fetch('/api/importer/preview-path', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeadersWithCSRF(),
         body: JSON.stringify({
             audible_product: audibleProduct,
             library_path: importState.targetLibrary
@@ -1126,7 +1136,7 @@ function executeImport() {
     // Start import
     fetch('/api/importer/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeadersWithCSRF(),
         body: JSON.stringify({
             imports: imports,
             library_path: importState.targetLibrary,

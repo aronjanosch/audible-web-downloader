@@ -25,6 +25,9 @@ def create_app():
     
     # Initialize extensions
     csrf = CSRFProtect(app)
+
+    # Store csrf instance in app config for use in blueprints
+    app.csrf = csrf
     
     # Ensure required directories exist
     Path(app.config['DOWNLOADS_DIR']).mkdir(exist_ok=True)
@@ -45,13 +48,12 @@ def create_app():
     app.register_blueprint(invite_bp)
     app.register_blueprint(importer_bp)
 
-    # Exempt API endpoints from CSRF protection (after blueprints are registered)
-    csrf.exempt(app.blueprints.get('main'))
-    csrf.exempt(app.blueprints.get('auth'))
-    csrf.exempt(app.blueprints.get('download'))
-    csrf.exempt(app.blueprints.get('library'))
-    csrf.exempt(app.blueprints.get('invite'))
-    csrf.exempt(app.blueprints.get('importer'))
+    # CSRF protection is now enabled for all routes by default
+    # Selectively exempt public invitation endpoints
+    from routes.invite import add_account, login_callback, account_login_callback
+    csrf.exempt(add_account)
+    csrf.exempt(login_callback)
+    csrf.exempt(account_login_callback)
     
     # Error handlers
     @app.errorhandler(404)

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Audible Book Downloader{% endblock %}</title>
     
     <!-- Bootstrap CSS -->
@@ -833,20 +834,30 @@
         // API functions
         async function apiCall(url, options = {}) {
             try {
+                // Get CSRF token from meta tag
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+                // Add CSRF token to headers for non-GET requests
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                };
+
+                if (csrfToken && (!options.method || options.method !== 'GET')) {
+                    headers['X-CSRFToken'] = csrfToken;
+                }
+
                 const response = await fetch(url, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    },
+                    headers: headers,
                     ...options
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok) {
                     throw new Error(data.error || 'API request failed');
                 }
-                
+
                 return data;
             } catch (error) {
                 console.error('API Error:', error);
