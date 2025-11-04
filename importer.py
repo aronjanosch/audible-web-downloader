@@ -22,6 +22,8 @@ from utils.audio_metadata import get_mp4_tag
 
 from downloader import AudiobookDownloader
 from library_scanner import LocalLibraryScanner
+from utils.queue_base import BaseQueueManager
+from utils.constants import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -38,76 +40,44 @@ class ImportState(Enum):
     SKIPPED = "skipped"
 
 
-class ImportQueueManager:
+class ImportQueueManager(BaseQueueManager):
     """
     Singleton manager for import queue and progress tracking.
     Similar to DownloadQueueManager but for import operations.
     """
-    _instance = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
     
     def __init__(self):
-        if self._initialized:
-            return
-        
-        self._initialized = True
-        self._queue_file = Path("config") / "import_queue.json"
-        self._queue_file.parent.mkdir(parents=True, exist_ok=True)
-        self._load_queue()
-        
-        # Initialize batch tracking
-        if '_batch_info' not in self._queue:
-            self._queue['_batch_info'] = {
-                'current_batch_id': None,
-                'batch_complete': False,
-                'batch_start_time': None
-            }
+        # Initialize base class with queue file path
+        super().__init__(CONFIG_DIR / "import_queue.json")
     
-    def _load_queue(self):
-        """Load import queue from disk."""
-        if self._queue_file.exists():
-            try:
-                with open(self._queue_file, 'r') as f:
-                    self._queue = json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Could not load import queue: {e}")
-                self._queue = {}
-        else:
-            self._queue = {}
+    def _generate_batch_id(self) -> str:
+        """Generate a unique batch ID for imports"""
+        return f"import_batch_{int(time.time())}"
     
-    def _save_queue(self):
-        """Persist import queue to disk."""
-        try:
-            with open(self._queue_file, 'w') as f:
-                json.dump(self._queue, f, indent=2)
-        except IOError as e:
-            logger.warning(f"Could not save import queue: {e}")
+    def _get_item_id_key(self) -> str:
+        """Get the key name for import items"""
+        return 'file_path'
     
+    def _log_warning(self, message: str):
+        """Log warning message"""
+        logger.warning(message)
+    
+    # Import-specific convenience methods
     def get_all_imports(self) -> Dict:
-        """Get all imports in the queue (excluding batch info)."""
-        return {k: v for k, v in self._queue.items() if not k.startswith('_')}
+        """Get all imports in the queue (excluding batch info)"""
+        return self.get_all_items()
     
     def get_import(self, file_path: str) -> Optional[Dict]:
-        """Get a specific import by file path."""
-        return self._queue.get(file_path)
+        """Get a specific import by file path"""
+        return self.get_item(file_path)
     
     def update_import(self, file_path: str, updates: Dict):
-        """Update import state."""
-        if file_path not in self._queue:
-            self._queue[file_path] = {}
-        
-        self._queue[file_path].update(updates)
-        self._queue[file_path]['last_updated'] = time.time()
-        self._save_queue()
+        """Update import state"""
+        self.update_item(file_path, updates)
     
     def start_new_batch(self, expected_count: int = 0):
         """Start a new import batch with an expected file count."""
-        batch_id = f"import_batch_{int(time.time())}"
+        batch_id = self._generate_batch_id()
         self._queue['_batch_info'] = {
             'current_batch_id': batch_id,
             'batch_complete': False,
@@ -118,44 +88,19 @@ class ImportQueueManager:
         self._save_queue()
         return batch_id
     
-    def add_to_queue(self, file_path: str, title: str, **metadata):
+    def add_import_to_queue(self, file_path: str, title: str, **metadata):
         """Add a new file to the import queue."""
-        batch_info = self._queue.get('_batch_info', {})
-        
-        # Start a new batch if needed (fallback for backward compatibility)
-        if not batch_info.get('current_batch_id') or batch_info.get('batch_complete', False):
-            batch_id = f"import_batch_{int(time.time())}"
-            self._queue['_batch_info'] = {
-                'current_batch_id': batch_id,
-                'batch_complete': False,
-                'batch_start_time': time.time(),
-                'expected_count': 0,
-                'files_added': 0
-            }
-        
-        self._queue[file_path] = {
-            'file_path': file_path,
-            'title': title,
-            'state': ImportState.PENDING.value,
-            'added_at': time.time(),
-            'last_updated': time.time(),
-            'batch_id': self._queue['_batch_info']['current_batch_id'],
-            **metadata
-        }
+        # Use base class method
+        self.add_to_queue(file_path, title, ImportState.PENDING.value, **metadata)
         
         # Increment files added counter
-        self._queue['_batch_info']['files_added'] = self._queue['_batch_info'].get('files_added', 0) + 1
-        self._save_queue()
-    
-    def remove_from_queue(self, file_path: str):
-        """Remove an import from the queue."""
-        if file_path in self._queue:
-            del self._queue[file_path]
+        if '_batch_info' in self._queue:
+            self._queue['_batch_info']['files_added'] = self._queue['_batch_info'].get('files_added', 0) + 1
             self._save_queue()
     
     def get_statistics(self) -> Dict:
         """Get import statistics."""
-        batch_info = self._queue.get('_batch_info', {})
+        batch_info = self.get_batch_info()
         current_batch_id = batch_info.get('current_batch_id')
         
         stats = {
@@ -205,33 +150,14 @@ class ImportQueueManager:
             can_complete = (expected_count == 0 or stats['total_imports'] >= expected_count)
             
             if can_complete and not batch_info.get('batch_complete', False):
-                self._queue['_batch_info']['batch_complete'] = True
-                self._save_queue()
+                self.mark_batch_complete()
                 stats['batch_complete'] = True
         
         return stats
     
     def clear_completed(self, older_than_hours: int = 24):
         """Remove completed imports older than specified hours."""
-        current_time = time.time()
-        cutoff_time = current_time - (older_than_hours * 3600)
-        
-        paths_to_remove = []
-        for file_path, import_data in self._queue.items():
-            if file_path.startswith('_'):
-                continue
-            if import_data.get('state') in ['complete', 'skipped']:
-                last_updated = import_data.get('last_updated', 0)
-                if last_updated < cutoff_time:
-                    paths_to_remove.append(file_path)
-        
-        for path in paths_to_remove:
-            del self._queue[path]
-        
-        if paths_to_remove:
-            self._save_queue()
-        
-        return len(paths_to_remove)
+        return self.clear_old_items(older_than_hours)
 
 
 class AudiobookImporter:

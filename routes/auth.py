@@ -9,6 +9,8 @@ from audible.localization import Locale, search_template
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.constants import get_account_auth_dir, get_auth_file_path
 from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
+from utils.errors import AccountNotFoundError, ValidationError, AuthenticationError, success_response, error_response
+from utils.account_manager import get_account_or_404
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -18,33 +20,30 @@ config_manager = get_config_manager()
 @auth_bp.route('/api/auth/authenticate', methods=['POST'])
 def authenticate():
     """API endpoint to authenticate an account with Audible"""
-    data = request.get_json()
-    account_name = data.get('account_name')
-    
-    if not account_name:
-        return jsonify({'error': 'Account name is required'}), 400
-    
-    accounts = config_manager.get_accounts()
-    
-    if account_name not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-    
-    account_data = accounts[account_name]
-    region = account_data['region']
-    
     try:
+        data = request.get_json()
+        account_name = data.get('account_name')
+        
+        if not account_name:
+            raise ValidationError('Account name is required')
+        
+        account_data, region = get_account_or_404(account_name)
+        accounts = config_manager.get_accounts()
+        
         # Run authentication asynchronously
         auth = asyncio.run(authenticate_account(account_name, region))
         
         if auth:
             accounts[account_name]['authenticated'] = True
             config_manager.save_accounts(accounts)
-            return jsonify({'success': True, 'message': 'Authentication successful'})
+            return success_response(message='Authentication successful')
         else:
-            return jsonify({'error': 'Authentication failed'}), 400
+            raise AuthenticationError('Authentication failed')
             
+    except (AccountNotFoundError, ValidationError, AuthenticationError):
+        raise
     except Exception as e:
-        return jsonify({'error': f'Authentication error: {str(e)}'}), 500
+        return error_response(f'Authentication error: {str(e)}', status_code=500)
 
 @auth_bp.route('/api/auth/check', methods=['POST'])
 def check_auth():
@@ -89,29 +88,26 @@ login_sessions = {}
 @auth_bp.route('/auth/login/<account_name>')
 def start_login(account_name):
     """Start the Audible login process"""
-    accounts = config_manager.get_accounts()
+    try:
+        account_data, region = get_account_or_404(account_name)
 
-    if account_name not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
+        # Get localization data
+        template = search_template('country_code', region)
+        if not template:
+            raise ValidationError(f'Unsupported region: {region}')
+        loc = Locale(**template)
 
-    account_data = accounts[account_name]
-    region = account_data['region']
+        # Start OAuth login using shared utility
+        session_id = start_oauth_login(
+            account_name=account_name,
+            locale=loc,
+            sessions_storage=login_sessions
+        )
 
-    # Get localization data
-    template = search_template('country_code', region)
-    if not template:
-        return jsonify({'error': f'Unsupported region: {region}'}), 400
-    loc = Locale(**template)
-
-    # Start OAuth login using shared utility
-    session_id = start_oauth_login(
-        account_name=account_name,
-        locale=loc,
-        sessions_storage=login_sessions
-    )
-
-    # Redirect to login page
-    return redirect(url_for('auth.login_page', session_id=session_id))
+        # Redirect to login page
+        return redirect(url_for('auth.login_page', session_id=session_id))
+    except (AccountNotFoundError, ValidationError):
+        raise
 
 @auth_bp.route('/auth/login-page/<session_id>')
 def login_page(session_id):
@@ -161,46 +157,41 @@ def login_status(session_id):
 @auth_bp.route('/api/library/fetch', methods=['POST'])
 def fetch_library_route():
     """API endpoint to fetch the user's Audible library"""
-    data = request.get_json()
-    account_name = data.get('account_name')
-    
-    if not account_name:
-        return jsonify({'error': 'Account name is required'}), 400
-    
-    accounts = config_manager.get_accounts()
-    
-    if account_name not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-    
-    account_data = accounts[account_name]
-    region = account_data['region']
-    
-    # Check if authenticated by trying to load the auth file
-    auth_file = get_auth_file_path(account_name)
-    
-    if not auth_file.exists():
-        return jsonify({'error': 'Account not authenticated'}), 401
-    
     try:
-        # Try to load the authenticator - if it fails, we're not authenticated
-        auth = audible.Authenticator.from_file(auth_file)
-    except Exception:
-        return jsonify({'error': 'Account not authenticated'}), 401
-    
-    try:
+        data = request.get_json()
+        account_name = data.get('account_name')
+        
+        if not account_name:
+            raise ValidationError('Account name is required')
+        
+        account_data, region = get_account_or_404(account_name)
+        
+        # Check if authenticated by trying to load the auth file
+        auth_file = get_auth_file_path(account_name)
+        
+        if not auth_file.exists():
+            raise AuthenticationError('Account not authenticated')
+        
+        try:
+            # Try to load the authenticator - if it fails, we're not authenticated
+            auth = audible.Authenticator.from_file(auth_file)
+        except Exception:
+            raise AuthenticationError('Account not authenticated')
+        
         # Simply fetch library using existing authentication file
         # The authenticator should already be saved during login
         library = asyncio.run(fetch_library(account_name, region))
         
         if library:
             # Don't store in session - too large for browser cookies
-            return jsonify({
-                'success': True, 
+            return success_response({
                 'message': f'Loaded {len(library)} books',
                 'library': library
             })
         else:
-            return jsonify({'error': 'Failed to load library'}), 500
+            raise ValidationError('Failed to load library')
             
+    except (AccountNotFoundError, ValidationError, AuthenticationError):
+        raise
     except Exception as e:
-        return jsonify({'error': f'Library fetch error: {str(e)}'}), 500 
+        return error_response(f'Library fetch error: {str(e)}', status_code=500) 

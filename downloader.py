@@ -22,120 +22,51 @@ from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
 from utils.constants import CONFIG_DIR, DOWNLOAD_QUEUE_FILE, get_auth_file_path
 from app.models import DownloadState
 from app.services import PathBuilder, AudioConverter, MetadataEnricher, LibraryManager
+from utils.queue_base import BaseQueueManager
 
-class DownloadQueueManager:
+
+class DownloadQueueManager(BaseQueueManager):
     """
     Singleton manager for download queue and progress tracking.
     Provides persistent state storage shared across all downloader instances.
     """
-    _instance = None
-    _lock = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
     
     def __init__(self):
-        # Only initialize once (singleton pattern)
-        if self._initialized:
-            return
-        
-        self._initialized = True
-        self._queue_file = DOWNLOAD_QUEUE_FILE
-        self._queue_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Load existing queue or create empty
-        self._load_queue()
-        
-        # Initialize batch tracking
-        if '_batch_info' not in self._queue:
-            self._queue['_batch_info'] = {
-                'current_batch_id': None,
-                'batch_complete': False,
-                'batch_start_time': None
-            }
+        # Initialize base class with queue file path
+        super().__init__(DOWNLOAD_QUEUE_FILE)
     
-    def _load_queue(self):
-        """Load download queue from disk"""
-        if self._queue_file.exists():
-            try:
-                with open(self._queue_file, 'r') as f:
-                    self._queue = json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load download queue: {e}")
-                self._queue = {}
-        else:
-            self._queue = {}
+    def _generate_batch_id(self) -> str:
+        """Generate a unique batch ID for downloads"""
+        return f"batch_{int(time.time())}"
     
-    def _save_queue(self):
-        """Persist download queue to disk"""
-        try:
-            with open(self._queue_file, 'w') as f:
-                json.dump(self._queue, f, indent=2)
-        except IOError as e:
-            print(f"Warning: Could not save download queue: {e}")
+    def _get_item_id_key(self) -> str:
+        """Get the key name for download items"""
+        return 'asin'
     
+    def _log_warning(self, message: str):
+        """Log warning message"""
+        print(f"Warning: {message}")
+    
+    # Download-specific convenience methods
     def get_all_downloads(self) -> Dict:
         """Get all downloads in the queue (excluding batch info)"""
-        # Return a copy without the batch metadata
-        downloads = {k: v for k, v in self._queue.items() if not k.startswith('_')}
-        return downloads
+        return self.get_all_items()
     
     def get_download(self, asin: str) -> Optional[Dict]:
         """Get a specific download by ASIN"""
-        return self._queue.get(asin)
+        return self.get_item(asin)
     
     def update_download(self, asin: str, updates: Dict):
         """Update download state"""
-        if asin not in self._queue:
-            self._queue[asin] = {}
-        
-        # Merge updates into existing entry
-        self._queue[asin].update(updates)
-        self._queue[asin]['last_updated'] = time.time()
-        
-        # Persist to disk
-        self._save_queue()
+        self.update_item(asin, updates)
     
-    def add_to_queue(self, asin: str, title: str, **metadata):
+    def add_download_to_queue(self, asin: str, title: str, **metadata):
         """Add a new download to the queue"""
-        # Check if we need to start a new batch
-        batch_info = self._queue.get('_batch_info', {})
-        
-        # Start a new batch if:
-        # 1. No current batch exists, OR
-        # 2. Current batch is marked complete
-        if not batch_info.get('current_batch_id') or batch_info.get('batch_complete', False):
-            # Start a new batch
-            batch_id = f"batch_{int(time.time())}"
-            self._queue['_batch_info'] = {
-                'current_batch_id': batch_id,
-                'batch_complete': False,
-                'batch_start_time': time.time()
-            }
-        
-        self._queue[asin] = {
-            'asin': asin,
-            'title': title,
-            'state': DownloadState.PENDING.value,
-            'added_at': time.time(),
-            'last_updated': time.time(),
-            'batch_id': self._queue['_batch_info']['current_batch_id'],
-            **metadata
-        }
-        self._save_queue()
-    
-    def remove_from_queue(self, asin: str):
-        """Remove a download from the queue"""
-        if asin in self._queue:
-            del self._queue[asin]
-            self._save_queue()
+        self.add_to_queue(asin, title, DownloadState.PENDING.value, **metadata)
     
     def get_statistics(self) -> Dict:
         """Get download statistics"""
-        batch_info = self._queue.get('_batch_info', {})
+        batch_info = self.get_batch_info()
         current_batch_id = batch_info.get('current_batch_id')
         
         stats = {
@@ -177,31 +108,14 @@ class DownloadQueueManager:
         if stats['total_downloads'] > 0 and stats['active'] == 0 and stats['queued'] == 0:
             if not batch_info.get('batch_complete', False):
                 # Mark batch as complete
-                self._queue['_batch_info']['batch_complete'] = True
-                self._save_queue()
+                self.mark_batch_complete()
                 stats['batch_complete'] = True
         
         return stats
     
     def clear_completed(self, older_than_hours: int = 24):
         """Remove completed downloads older than specified hours"""
-        current_time = time.time()
-        cutoff_time = current_time - (older_than_hours * 3600)
-        
-        asins_to_remove = []
-        for asin, download in self._queue.items():
-            if download.get('state') == 'converted':
-                last_updated = download.get('last_updated', 0)
-                if last_updated < cutoff_time:
-                    asins_to_remove.append(asin)
-        
-        for asin in asins_to_remove:
-            del self._queue[asin]
-        
-        if asins_to_remove:
-            self._save_queue()
-        
-        return len(asins_to_remove)
+        return self.clear_old_items(older_than_hours)
 
 class AudiobookDownloader:
     def __init__(self, account_name, region="us", max_concurrent_downloads=3, library_path=None, downloads_dir=None):
@@ -340,7 +254,7 @@ class AudiobookDownloader:
         if not existing:
             # New download - add to queue with batch tracking
             title = metadata.get('title', 'Unknown')
-            self.queue_manager.add_to_queue(asin, title, downloaded_by_account=self.account_name)
+            self.queue_manager.add_download_to_queue(asin, title, downloaded_by_account=self.account_name)
         
         # Always include ASIN and account info in state
         update_data = {

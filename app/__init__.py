@@ -57,13 +57,27 @@ def create_app():
     csrf.exempt(login_callback)
     csrf.exempt(account_login_callback)
     
-    # Error handlers
+    # Register custom error handlers
+    from utils.errors import register_error_handlers
+    register_error_handlers(app)
+    
+    # Custom error page handlers for HTML requests
     @app.errorhandler(404)
     def not_found_error(error):
+        # Check if request expects JSON
+        from flask import request
+        if request.path.startswith('/api/'):
+            # Already handled by register_error_handlers
+            return None
         return render_template('errors/404.html'), 404
     
     @app.errorhandler(500)
     def internal_error(error):
+        # Check if request expects JSON
+        from flask import request
+        if request.path.startswith('/api/'):
+            # Already handled by register_error_handlers
+            return None
         return render_template('errors/500.html'), 500
     
     return app

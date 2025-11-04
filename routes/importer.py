@@ -415,7 +415,7 @@ def execute_import():
             audible_product = import_item['audible_product']
             title = audible_product.get('title', Path(file_path).stem)
             
-            queue_manager.add_to_queue(
+            queue_manager.add_import_to_queue(
                 file_path=file_path,
                 title=title,
                 audible_product=audible_product

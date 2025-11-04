@@ -6,6 +6,8 @@ from pathlib import Path
 from settings import settings_manager
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.constants import get_account_auth_dir, CONFIG_DIR
+from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
+from utils.account_manager import get_account_or_404, get_library_config
 
 main_bp = Blueprint('main', __name__)
 
@@ -87,14 +89,12 @@ def add_account():
 def generate_account_invite_link(account_name):
     """Generate a unique invitation link for a specific account"""
     try:
+        account_data, region = get_account_or_404(account_name)
         accounts = config_manager.get_accounts()
 
-        if account_name not in accounts:
-            return jsonify({'error': 'Account not found'}), 404
-
         # Check if already authenticated
-        if accounts[account_name].get('authenticated'):
-            return jsonify({'error': 'Account is already authenticated'}), 400
+        if account_data.get('authenticated'):
+            raise ValidationError('Account is already authenticated')
 
         # Generate unique token for this account
         import secrets
@@ -107,61 +107,51 @@ def generate_account_invite_link(account_name):
         # Build invitation URL
         invitation_url = request.url_root.rstrip('/') + '/invite/account/' + token
 
-        return jsonify({
-            'success': True,
+        return success_response({
             'invitation_url': invitation_url,
             'token': token,
             'account_name': account_name
         })
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        # Custom errors are handled by error handler
+        if isinstance(e, (AccountNotFoundError, ValidationError)):
+            raise
+        return error_response(str(e), status_code=500)
 
 @main_bp.route('/api/accounts/<account_name>/revoke-invite-link', methods=['POST'])
 def revoke_account_invite_link(account_name):
     """Revoke the invitation link for a specific account"""
     try:
+        account_data, region = get_account_or_404(account_name)
         accounts = config_manager.get_accounts()
-
-        if account_name not in accounts:
-            return jsonify({'error': 'Account not found'}), 404
 
         # Remove pending invitation token
         if 'pending_invitation_token' in accounts[account_name]:
             accounts[account_name].pop('pending_invitation_token')
             config_manager.save_accounts(accounts)
 
-        return jsonify({
-            'success': True,
-            'message': 'Invitation link revoked'
-        })
+        return success_response(message='Invitation link revoked')
+    except AccountNotFoundError:
+        raise
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return error_response(str(e), status_code=500)
 
 @main_bp.route('/api/accounts/<account_name>/select', methods=['POST'])
 def select_account(account_name):
     """API endpoint to select an account"""
-    accounts = config_manager.get_accounts()
-
-    if account_name not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-
-    session['current_account'] = account_name
-    return jsonify({'success': True})
+    try:
+        account_data, region = get_account_or_404(account_name)
+        session['current_account'] = account_name
+        return success_response()
+    except AccountNotFoundError:
+        raise
 
 @main_bp.route('/api/accounts/<account_name>', methods=['DELETE'])
 def delete_account(account_name):
     """API endpoint to delete an account"""
     try:
+        account_data, region = get_account_or_404(account_name)
         accounts = config_manager.get_accounts()
-
-        if account_name not in accounts:
-            return jsonify({'error': 'Account not found'}), 404
 
         # Remove account from accounts.json
         del accounts[account_name]
@@ -177,9 +167,11 @@ def delete_account(account_name):
             session.pop('current_account', None)
             session.pop('library', None)
 
-        return jsonify({'success': True, 'message': 'Account deleted successfully'})
+        return success_response(message='Account deleted successfully')
+    except AccountNotFoundError:
+        raise
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return error_response(str(e), status_code=500)
 
 @main_bp.route('/api/library/search')
 def search_library():
@@ -235,15 +227,16 @@ def add_library():
 @main_bp.route('/api/libraries/<library_name>', methods=['DELETE'])
 def delete_library(library_name):
     """API endpoint to delete a library"""
-    libraries = config_manager.get_libraries()
+    try:
+        library_config, library_path = get_library_config(library_name)
+        libraries = config_manager.get_libraries()
 
-    if library_name not in libraries:
-        return jsonify({'error': 'Library not found'}), 404
+        del libraries[library_name]
+        config_manager.save_libraries(libraries)
 
-    del libraries[library_name]
-    config_manager.save_libraries(libraries)
-
-    return jsonify({'success': True})
+        return success_response()
+    except LibraryNotFoundError:
+        raise
 
 @main_bp.route('/api/settings/naming', methods=['GET'])
 def get_naming_settings():

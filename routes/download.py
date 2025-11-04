@@ -5,6 +5,8 @@ import os
 import time
 from downloader import download_books, AudiobookDownloader, DownloadQueueManager
 from utils.config_manager import get_config_manager, ConfigurationError
+from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
+from utils.account_manager import get_account_or_404, get_library_config
 
 download_bp = Blueprint('download', __name__)
 
@@ -19,53 +21,42 @@ def downloads_page():
 @download_bp.route('/api/download/books', methods=['POST'])
 def download_selected_books():
     """API endpoint to download selected books"""
-    data = request.get_json()
-    selected_asins = data.get('selected_asins', [])
-    cleanup_aax = data.get('cleanup_aax', True)
-    library_name = data.get('library_name')
-
-    if not selected_asins:
-        return jsonify({'error': 'No books selected for download'}), 400
-
-    if not library_name:
-        return jsonify({'error': 'No library selected. Please configure and select a library first.'}), 400
-
-    current_account = session.get('current_account')
-    if not current_account:
-        return jsonify({'error': 'No account selected'}), 400
-
-    accounts = config_manager.get_accounts()
-    if current_account not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-
-    account_data = accounts[current_account]
-    region = account_data['region']
-
-    # Get library path from library_name
-    libraries = config_manager.get_libraries()
-    if library_name not in libraries:
-        return jsonify({'error': 'Selected library not found'}), 404
-
-    library_config = libraries[library_name]
-    library_path = library_config['path']
-
-    # Fetch library directly since session storage is too large for browser cookies
-    from auth import fetch_library
-    library = asyncio.run(fetch_library(current_account, region))
-
-    if not library:
-        return jsonify({'error': 'Failed to fetch library for download'}), 400
-
-    # Get selected book details
-    selected_books = [
-        book for book in library
-        if book['asin'] in selected_asins
-    ]
-
-    if not selected_books:
-        return jsonify({'error': 'Selected books not found in library'}), 400
-
     try:
+        data = request.get_json()
+        selected_asins = data.get('selected_asins', [])
+        cleanup_aax = data.get('cleanup_aax', True)
+        library_name = data.get('library_name')
+
+        if not selected_asins:
+            raise ValidationError('No books selected for download')
+
+        if not library_name:
+            raise ValidationError('No library selected. Please configure and select a library first.')
+
+        current_account = session.get('current_account')
+        if not current_account:
+            raise ValidationError('No account selected')
+
+        # Use utility functions for validation
+        account_data, region = get_account_or_404(current_account)
+        library_config, library_path = get_library_config(library_name)
+
+        # Fetch library directly since session storage is too large for browser cookies
+        from auth import fetch_library
+        library = asyncio.run(fetch_library(current_account, region))
+
+        if not library:
+            raise ValidationError('Failed to fetch library for download')
+
+        # Get selected book details
+        selected_books = [
+            book for book in library
+            if book['asin'] in selected_asins
+        ]
+
+        if not selected_books:
+            raise ValidationError('Selected books not found in library')
+
         # Set cleanup preference and selected library in session for progress tracking
         session['cleanup_aax'] = cleanup_aax
         session['download_library'] = library_name
@@ -81,14 +72,15 @@ def download_selected_books():
 
         successful_downloads = len([r for r in results if r])
 
-        return jsonify({
-            'success': True,
+        return success_response({
             'message': f'Download completed! {successful_downloads} of {len(selected_books)} books downloaded successfully.',
             'results': results
         })
 
+    except (AccountNotFoundError, LibraryNotFoundError, ValidationError):
+        raise
     except Exception as e:
-        return jsonify({'error': f'Download error: {str(e)}'}), 500
+        return error_response(f'Download error: {str(e)}', status_code=500)
 
 @download_bp.route('/api/download/status/<asin>')
 def download_status_asin(asin):
@@ -149,42 +141,34 @@ def download_status():
 @download_bp.route('/api/library/sync', methods=['POST'])
 def sync_library():
     """API endpoint to sync library and populate download history"""
-    data = request.get_json() or {}
-    library_name = data.get('library_name')
-
-    if not library_name:
-        return jsonify({'error': 'No library selected. Please select a library to sync.'}), 400
-
-    current_account = session.get('current_account')
-    if not current_account:
-        return jsonify({'error': 'No account selected'}), 400
-
-    accounts = config_manager.get_accounts()
-    if current_account not in accounts:
-        return jsonify({'error': 'Account not found'}), 404
-
-    # Get library path from library_name
-    libraries = config_manager.get_libraries()
-    if library_name not in libraries:
-        return jsonify({'error': 'Selected library not found'}), 404
-
-    library_config = libraries[library_name]
-    library_path = library_config['path']
-    region = accounts[current_account]['region']
-
     try:
+        data = request.get_json() or {}
+        library_name = data.get('library_name')
+
+        if not library_name:
+            raise ValidationError('No library selected. Please select a library to sync.')
+
+        current_account = session.get('current_account')
+        if not current_account:
+            raise ValidationError('No account selected')
+
+        # Use utility functions
+        account_data, region = get_account_or_404(current_account)
+        library_config, library_path = get_library_config(library_name)
+
         # Create downloader instance and run sync
         downloader = AudiobookDownloader(current_account, region, library_path=library_path)
         stats = downloader.sync_library()
 
-        return jsonify({
-            'success': True,
+        return success_response({
             'message': f'Library sync complete! Found {stats["asins_found"]} books with ASINs.',
             'stats': stats
         })
 
+    except (AccountNotFoundError, LibraryNotFoundError, ValidationError):
+        raise
     except Exception as e:
-        return jsonify({'error': f'Sync error: {str(e)}'}), 500
+        return error_response(f'Sync error: {str(e)}', status_code=500)
 
 @download_bp.route('/api/download/progress-stream')
 def download_progress_stream():
