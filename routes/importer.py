@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, List
 import json
 
-from importer import AudiobookImporter, ImportQueueManager
+from app.services.import_service import AudiobookImporter, ImportQueueManager
 
 importer_bp = Blueprint('importer', __name__, url_prefix='/api/importer')
 logger = logging.getLogger(__name__)

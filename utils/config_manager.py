@@ -6,7 +6,7 @@ import json
 import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional
-from utils.constants import (
+from app.config.constants import (
     ACCOUNTS_FILE,
     LIBRARIES_FILE,
     SETTINGS_FILE,

@@ -37,22 +37,72 @@ The application runs on `http://localhost:5000` by default.
 
 ## Architecture
 
-The application follows a **modular Flask architecture** using blueprints for route organization:
+The application follows a **layered Flask architecture** with clear separation of concerns:
 
-### Core Components
+### Project Structure
 
-- **app.py** - Flask application factory with CSRF protection and blueprint registration
-- **run.py** - Application entry point
-- **auth.py** - Audible authentication handler using official Audible library with OAuth flow
-- **downloader.py** - Complex audiobook download orchestration with state management, concurrent downloads, and FFmpeg conversion
+```
+audible-web-downloader/
+├── app/                           # Application package
+│   ├── __init__.py               # Flask application factory
+│   ├── models.py                 # Data models (enums)
+│   ├── config/                   # Configuration management
+│   │   ├── __init__.py
+│   │   └── constants.py          # Application constants and paths
+│   └── services/                 # Business logic layer
+│       ├── __init__.py           # Service exports
+│       ├── auth_service.py       # Audible authentication
+│       ├── download_service.py   # Download orchestration
+│       ├── import_service.py     # M4B file import
+│       ├── scanner_service.py    # Local library scanning
+│       ├── storage_service.py    # Persistent storage
+│       ├── settings_service.py   # Settings management
+│       ├── audio_converter.py    # FFmpeg conversion
+│       ├── library_manager.py    # Library state management
+│       ├── metadata_enricher.py  # Metadata enhancement
+│       └── path_builder.py       # Path construction
+├── routes/                       # Flask blueprints (presentation layer)
+│   ├── main.py                   # Account management and core API
+│   ├── auth.py                   # Authentication routes
+│   ├── download.py               # Download management
+│   ├── invite.py                 # Family sharing invitations
+│   ├── library.py                # Library management
+│   └── importer.py               # Import management
+├── utils/                        # Utility functions
+│   ├── config_manager.py         # Configuration file I/O
+│   ├── account_manager.py        # Account utilities
+│   ├── oauth_flow.py             # OAuth flow helpers
+│   ├── errors.py                 # Error handling
+│   ├── fuzzy_matching.py         # Fuzzy matching utilities
+│   ├── audio_metadata.py         # Audio metadata utilities
+│   ├── validation.py             # Input validation
+│   └── queue_base.py             # Base queue manager
+├── templates/                    # Jinja2 HTML templates
+├── static/                       # CSS and JavaScript assets
+└── run.py                        # Application entry point
+```
 
-### Flask Blueprints (routes/)
+### Architecture Layers
 
-- **main.py** - Account management, library display, and core API endpoints
-- **auth.py** - Authentication routes for Audible OAuth
-- **download.py** - Download management and batch processing routes
-- **invite.py** - Family sharing invitation routes (not behind authentication middleware)
-- **library.py** - Library management and synchronization routes
+**Presentation Layer (routes/)**
+- Flask blueprints handling HTTP requests/responses
+- Thin controllers delegating to service layer
+- Input validation and error handling
+
+**Business Logic Layer (app/services/)**
+- **Authentication**: `auth_service.py` - Audible OAuth flow and library fetching
+- **Downloads**: `download_service.py` - Complex audiobook download orchestration with state management, concurrent downloads, and FFmpeg conversion
+- **Imports**: `import_service.py` - M4B file import with Audible metadata enrichment
+- **Library**: `scanner_service.py`, `storage_service.py`, `library_manager.py` - Local library management
+- **Settings**: `settings_service.py` - Application settings and naming patterns
+
+**Configuration Layer (app/config/)**
+- Constants and path definitions
+- Centralized configuration values
+
+**Data Layer**
+- JSON file persistence via `utils/config_manager.py`
+- Atomic writes with proper error handling
 
 ### Frontend Architecture
 

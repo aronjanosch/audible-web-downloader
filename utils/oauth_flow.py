@@ -10,7 +10,7 @@ from threading import Event, Thread
 from typing import Dict, Any, Callable, Optional, Tuple
 import audible
 from audible.localization import Locale
-from utils.constants import get_account_auth_dir
+from app.config.constants import get_account_auth_dir
 from utils.config_manager import get_config_manager
 
 

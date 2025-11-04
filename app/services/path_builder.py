@@ -11,7 +11,7 @@ This service is responsible for:
 import re
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from settings import get_naming_pattern
+from app.services.settings_service import get_naming_pattern
 
 
 class PathBuilder:

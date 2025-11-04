@@ -10,10 +10,10 @@ import os
 import secrets
 from pathlib import Path
 from functools import wraps
-from auth import AudibleAuth
+from app.services.auth_service import AudibleAuth
 from audible.localization import Locale, search_template
 import audible
-from settings import settings_manager
+from app.services.settings_service import settings_manager
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
 

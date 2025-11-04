@@ -16,10 +16,10 @@ import time
 import hashlib
 import unicodedata
 from typing import Optional, Dict, List, Tuple
-from settings import get_naming_pattern
+from app.services.settings_service import get_naming_pattern
 from datetime import datetime
 from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
-from utils.constants import CONFIG_DIR, DOWNLOAD_QUEUE_FILE, get_auth_file_path
+from app.config.constants import CONFIG_DIR, DOWNLOAD_QUEUE_FILE, get_auth_file_path
 from app.models import DownloadState
 from app.services import PathBuilder, AudioConverter, MetadataEnricher, LibraryManager
 from utils.queue_base import BaseQueueManager
@@ -30,45 +30,45 @@ class DownloadQueueManager(BaseQueueManager):
     Singleton manager for download queue and progress tracking.
     Provides persistent state storage shared across all downloader instances.
     """
-    
+
     def __init__(self):
         # Initialize base class with queue file path
         super().__init__(DOWNLOAD_QUEUE_FILE)
-    
+
     def _generate_batch_id(self) -> str:
         """Generate a unique batch ID for downloads"""
         return f"batch_{int(time.time())}"
-    
+
     def _get_item_id_key(self) -> str:
         """Get the key name for download items"""
         return 'asin'
-    
+
     def _log_warning(self, message: str):
         """Log warning message"""
         print(f"Warning: {message}")
-    
+
     # Download-specific convenience methods
     def get_all_downloads(self) -> Dict:
         """Get all downloads in the queue (excluding batch info)"""
         return self.get_all_items()
-    
+
     def get_download(self, asin: str) -> Optional[Dict]:
         """Get a specific download by ASIN"""
         return self.get_item(asin)
-    
+
     def update_download(self, asin: str, updates: Dict):
         """Update download state"""
         self.update_item(asin, updates)
-    
+
     def add_download_to_queue(self, asin: str, title: str, **metadata):
         """Add a new download to the queue"""
         self.add_to_queue(asin, title, DownloadState.PENDING.value, **metadata)
-    
+
     def get_statistics(self) -> Dict:
         """Get download statistics"""
         batch_info = self.get_batch_info()
         current_batch_id = batch_info.get('current_batch_id')
-        
+
         stats = {
             'active': 0,
             'queued': 0,
@@ -79,19 +79,19 @@ class DownloadQueueManager(BaseQueueManager):
             'batch_complete': batch_info.get('batch_complete', False),
             'batch_id': current_batch_id
         }
-        
+
         for asin, download in self._queue.items():
             # Skip metadata entries
             if asin.startswith('_'):
                 continue
-                
+
             # Only count downloads in current batch
             if download.get('batch_id') != current_batch_id:
                 continue
-                
+
             stats['total_downloads'] += 1
             state = download.get('state', '')
-            
+
             if state in ['pending', 'retrying']:
                 stats['queued'] += 1
             elif state in ['license_requested', 'license_granted', 'downloading', 'download_complete', 'decrypting']:
@@ -103,16 +103,16 @@ class DownloadQueueManager(BaseQueueManager):
                 stats['completed'] += 1
             elif state == 'error':
                 stats['failed'] += 1
-        
+
         # Check if batch is complete (all downloads finished)
         if stats['total_downloads'] > 0 and stats['active'] == 0 and stats['queued'] == 0:
             if not batch_info.get('batch_complete', False):
                 # Mark batch as complete
                 self.mark_batch_complete()
                 stats['batch_complete'] = True
-        
+
         return stats
-    
+
     def clear_completed(self, older_than_hours: int = 24):
         """Remove completed downloads older than specified hours"""
         return self.clear_old_items(older_than_hours)
@@ -246,16 +246,16 @@ class AudiobookDownloader:
         self.library_manager.add_to_library(asin, title, file_path, **metadata)
         # Update the exposed library_state for backward compatibility
         self.library_state = self.library_manager.library_state
-    
+
     def set_download_state(self, asin: str, state: DownloadState, **metadata):
         # Check if this is a new download
         existing = self.queue_manager.get_download(asin)
-        
+
         if not existing:
             # New download - add to queue with batch tracking
             title = metadata.get('title', 'Unknown')
             self.queue_manager.add_download_to_queue(asin, title, downloaded_by_account=self.account_name)
-        
+
         # Always include ASIN and account info in state
         update_data = {
             'state': state.value,
@@ -269,7 +269,7 @@ class AudiobookDownloader:
             update_data['downloaded_by_account'] = self.account_name
 
         self.queue_manager.update_download(asin, update_data)
-    
+
     def update_download_progress(self, asin: str, downloaded_bytes: int, total_bytes: int = None, **metadata):
         """Update download progress without changing state"""
         progress_data = {
@@ -326,7 +326,7 @@ class AudiobookDownloader:
             return license_response["content_license"]["content_metadata"]["content_url"]["offline_url"]
         except KeyError as e:
             raise Exception(f"Could not extract download URL from license: {e}")
-    
+
     async def _download_file(self, url: str, filename: Path, asin: str = None, title: str = None):
         headers = {"User-Agent": "Audible/671 CFNetwork/1240.0.4 Darwin/20.6.0"}
         try:
@@ -368,11 +368,11 @@ class AudiobookDownloader:
                                 elapsed = current_time - download_start_time
                                 speed = downloaded_bytes / elapsed if elapsed > 0 else 0
                                 eta = (total_bytes - downloaded_bytes) / speed if speed > 0 and total_bytes else 0
-                                
+
                                 # Update progress with speed and ETA
                                 self.update_download_progress(
-                                    asin, 
-                                    downloaded_bytes, 
+                                    asin,
+                                    downloaded_bytes,
                                     total_bytes,
                                     speed=speed,
                                     eta=eta,
@@ -411,7 +411,7 @@ class AudiobookDownloader:
             if filename.exists():
                 filename.unlink()
             raise e
-    
+
     async def download_book(self, book_asin: str, book_title: str, quality: str = "High", cleanup_aax: bool = True, max_retries: int = 3, product: Dict = None) -> Optional[str]:
         if not self.auth:
             raise Exception("Authentication required.")
@@ -475,8 +475,8 @@ class AudiobookDownloader:
                     if attempt < max_retries - 1:
                         self._log(f"⏳ Retrying in 5 seconds...", book_asin)
                         self.set_download_state(
-                            book_asin, 
-                            DownloadState.RETRYING, 
+                            book_asin,
+                            DownloadState.RETRYING,
                             error=str(e),
                             error_type=type(e).__name__,
                             attempt=attempt + 1,
@@ -486,8 +486,8 @@ class AudiobookDownloader:
                     else:
                         self._log(f"💔 Failed after {max_retries} attempts", book_asin)
                         self.set_download_state(
-                            book_asin, 
-                            DownloadState.ERROR, 
+                            book_asin,
+                            DownloadState.ERROR,
                             error=str(e),
                             error_type=type(e).__name__,
                             failed_at=time.time(),
@@ -498,7 +498,7 @@ class AudiobookDownloader:
                             del self.download_start_times[book_asin]
                         return None
         return None
-    
+
     async def _process_book_download(self, asin: str, title: str, quality: str, paths: Dict[str, Path], cleanup_aax: bool) -> Optional[str]:
         async with audible.AsyncClient(auth=self.auth) as client:
             aaxc_file = paths['aaxc_file']
@@ -558,7 +558,7 @@ class AudiobookDownloader:
 
             # Add to library state (persisted to library.json for duplicate detection)
             self.add_to_library(asin, title, str(final_m4b_file))
-            
+
             # Update queue manager state to CONVERTED (important for UI progress tracking)
             self.set_download_state(asin, DownloadState.CONVERTED, title=title, file_path=str(final_m4b_file))
 

@@ -3,7 +3,7 @@ import asyncio
 import json
 import os
 import time
-from downloader import download_books, AudiobookDownloader, DownloadQueueManager
+from app.services.download_service import download_books, AudiobookDownloader, DownloadQueueManager
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
 from utils.account_manager import get_account_or_404, get_library_config

@@ -16,7 +16,7 @@ from datetime import datetime
 from app.models import DownloadState
 from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
 from .metadata_enricher import MetadataEnricher
-from utils.constants import CONFIG_DIR
+from app.config.constants import CONFIG_DIR
 
 
 class LibraryManager:

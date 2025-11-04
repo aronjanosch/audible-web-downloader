@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 import logging
 from datetime import datetime
-from library_scanner import LocalLibraryScanner, LibraryComparator
-from library_storage import LibraryStorage
+from app.services.scanner_service import LocalLibraryScanner, LibraryComparator
+from app.services.storage_service import LibraryStorage
 
 library_bp = Blueprint('library', __name__, url_prefix='/api/library')
 logger = logging.getLogger(__name__)

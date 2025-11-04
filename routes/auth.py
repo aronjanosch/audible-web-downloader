@@ -4,10 +4,10 @@ import json
 import os
 from pathlib import Path
 import audible
-from auth import authenticate_account, fetch_library, AudibleAuth
+from app.services.auth_service import authenticate_account, fetch_library, AudibleAuth
 from audible.localization import Locale, search_template
 from utils.config_manager import get_config_manager, ConfigurationError
-from utils.constants import get_account_auth_dir, get_auth_file_path
+from app.config.constants import get_account_auth_dir, get_auth_file_path
 from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
 from utils.errors import AccountNotFoundError, ValidationError, AuthenticationError, success_response, error_response
 from utils.account_manager import get_account_or_404

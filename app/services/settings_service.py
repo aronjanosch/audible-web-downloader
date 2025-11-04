@@ -78,7 +78,7 @@ Additional Cleanup:
   - Empty directory segments are removed from paths
 """
 
-SETTINGS_FILE = Path(__file__).parent / "config" / "settings.json"
+SETTINGS_FILE = Path(__file__).parent.parent.parent / "config" / "settings.json"
 
 
 class SettingsManager:

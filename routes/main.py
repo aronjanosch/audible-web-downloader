@@ -3,9 +3,9 @@ import json
 import os
 import shutil
 from pathlib import Path
-from settings import settings_manager
+from app.services.settings_service import settings_manager
 from utils.config_manager import get_config_manager, ConfigurationError
-from utils.constants import get_account_auth_dir, CONFIG_DIR
+from app.config.constants import get_account_auth_dir, CONFIG_DIR
 from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
 from utils.account_manager import get_account_or_404, get_library_config
 
