@@ -2,12 +2,18 @@ from flask import Blueprint, request, jsonify, session, current_app, render_temp
 import asyncio
 import json
 import os
+from pathlib import Path
+import audible
 from auth import authenticate_account, fetch_library, AudibleAuth
 from audible.localization import Locale, search_template
-from utils.account_manager import load_accounts, save_accounts
-from utils.oauth_flow import start_oauth_login
+from utils.config_manager import get_config_manager, ConfigurationError
+from utils.constants import get_account_auth_dir, get_auth_file_path
+from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
 
 auth_bp = Blueprint('auth', __name__)
+
+# Get ConfigManager singleton
+config_manager = get_config_manager()
 
 @auth_bp.route('/api/auth/authenticate', methods=['POST'])
 def authenticate():
@@ -18,7 +24,7 @@ def authenticate():
     if not account_name:
         return jsonify({'error': 'Account name is required'}), 400
     
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
@@ -32,7 +38,7 @@ def authenticate():
         
         if auth:
             accounts[account_name]['authenticated'] = True
-            save_accounts(accounts)
+            config_manager.save_accounts(accounts)
             return jsonify({'success': True, 'message': 'Authentication successful'})
         else:
             return jsonify({'error': 'Authentication failed'}), 400
@@ -49,7 +55,7 @@ def check_auth():
     if not account_name:
         return jsonify({'error': 'Account name is required'}), 400
     
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
@@ -58,11 +64,7 @@ def check_auth():
     region = account_data['region']
     
     # Check if we have a valid auth file
-    from pathlib import Path
-    import audible
-    
-    config_dir = Path("config") / "auth" / account_name
-    auth_file = config_dir / "auth.json"
+    auth_file = get_auth_file_path(account_name)
     
     is_authenticated = False
     if auth_file.exists():
@@ -87,7 +89,7 @@ login_sessions = {}
 @auth_bp.route('/auth/login/<account_name>')
 def start_login(account_name):
     """Start the Audible login process"""
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
 
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
@@ -131,54 +133,30 @@ def login_page(session_id):
 @auth_bp.route('/auth/callback/<session_id>', methods=['POST'])
 def login_callback(session_id):
     """Handle the OAuth callback URL from user"""
-    if session_id not in login_sessions:
-        return jsonify({'error': 'Login session not found'}), 404
-    
     data = request.get_json()
     response_url = data.get('response_url')
-    
-    if not response_url:
-        return jsonify({'error': 'Response URL is required'}), 400
-    
-    session_data = login_sessions[session_id]
-    session_data['result']['response_url'] = response_url
-    session_data['event'].set()
-    
-    return jsonify({'success': True, 'message': 'Processing login...'})
+
+    success, error, code = handle_oauth_callback(
+        session_id=session_id,
+        response_url=response_url,
+        sessions_storage=login_sessions
+    )
+
+    if not success:
+        return jsonify({'error': error}), code
+
+    return jsonify({'success': True, 'message': 'Processing login...'}), code
 
 @auth_bp.route('/auth/status/<session_id>')
 def login_status(session_id):
     """Check login status"""
-    if session_id not in login_sessions:
-        return jsonify({'error': 'Login session not found'}), 404
-    
-    session_data = login_sessions[session_id]
-    result = session_data['result']
-    
-    if 'success' in result:
-        # Clean up session
-        del login_sessions[session_id]
-        
-        if result['success']:
-            # The authenticator should already be created in the login_thread
-            # Just mark account as authenticated
-            accounts = load_accounts()
-            account_name = session_data['account_name']
-            accounts[account_name]['authenticated'] = True
-            save_accounts(accounts)
-            
-            return jsonify({
-                'success': True, 
-                'message': 'Login successful!',
-                'redirect': url_for('main.index')
-            })
-        else:
-            return jsonify({
-                'success': False, 
-                'error': result.get('error', 'Unknown error')
-            })
-    
-    return jsonify({'status': 'pending'})
+    response, code = check_oauth_status(
+        session_id=session_id,
+        sessions_storage=login_sessions,
+        success_redirect=url_for('main.index')
+    )
+
+    return jsonify(response), code
 
 @auth_bp.route('/api/library/fetch', methods=['POST'])
 def fetch_library_route():
@@ -189,7 +167,7 @@ def fetch_library_route():
     if not account_name:
         return jsonify({'error': 'Account name is required'}), 400
     
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
@@ -198,11 +176,7 @@ def fetch_library_route():
     region = account_data['region']
     
     # Check if authenticated by trying to load the auth file
-    from pathlib import Path
-    import audible
-    
-    config_dir = Path("config") / "auth" / account_name
-    auth_file = config_dir / "auth.json"
+    auth_file = get_auth_file_path(account_name)
     
     if not auth_file.exists():
         return jsonify({'error': 'Account not authenticated'}), 401

@@ -19,6 +19,7 @@ from typing import Optional, Dict, List, Tuple
 from settings import get_naming_pattern
 from datetime import datetime
 from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
+from utils.constants import CONFIG_DIR, DOWNLOAD_QUEUE_FILE, get_auth_file_path
 
 class DownloadState(Enum):
     PENDING = "pending"
@@ -51,7 +52,7 @@ class DownloadQueueManager:
             return
         
         self._initialized = True
-        self._queue_file = Path("config") / "download_queue.json"
+        self._queue_file = DOWNLOAD_QUEUE_FILE
         self._queue_file.parent.mkdir(parents=True, exist_ok=True)
         
         # Load existing queue or create empty
@@ -237,7 +238,7 @@ class AudiobookDownloader:
         self._auth_details = self._load_auth_details() if self.auth else None
 
         # Library tracking file - persists which books are in the library
-        self.library_file = Path("config") / "library.json"
+        self.library_file = CONFIG_DIR / "library.json"
         self.library_state = self._load_library_state()
 
         # Use shared queue manager for download progress tracking (persisted to disk)
@@ -279,14 +280,14 @@ class AudiobookDownloader:
 
     def _load_authenticator(self) -> Optional[audible.Authenticator]:
         """Loads the authenticator object from file."""
-        auth_file = Path("config") / "auth" / self.account_name / "auth.json"
+        auth_file = get_auth_file_path(self.account_name)
         if auth_file.exists():
             return audible.Authenticator.from_file(auth_file)
         return None
 
     def _load_auth_details(self) -> Optional[Dict]:
         """Loads the raw auth JSON file for details not exposed by the authenticator."""
-        auth_file = Path("config") / "auth" / self.account_name / "auth.json"
+        auth_file = get_auth_file_path(self.account_name)
         if auth_file.exists():
             return json.loads(auth_file.read_text())
         return None

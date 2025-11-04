@@ -7,9 +7,11 @@ regular auth and invitation routes.
 
 from pathlib import Path
 from threading import Event, Thread
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any, Callable, Optional, Tuple
 import audible
 from audible.localization import Locale
+from utils.constants import get_account_auth_dir
+from utils.config_manager import get_config_manager
 
 
 class OAuthSession:
@@ -87,7 +89,7 @@ class OAuthSession:
             )
 
             # Save authenticator to expected location
-            config_dir = Path("config") / "auth" / self.account_name
+            config_dir = get_account_auth_dir(self.account_name)
             config_dir.mkdir(parents=True, exist_ok=True)
             auth_file = config_dir / "auth.json"
             auth.to_file(auth_file, encryption=False)
@@ -156,3 +158,121 @@ def start_oauth_login(
     )
 
     return oauth_session.start()
+
+
+def handle_oauth_callback(
+    session_id: str,
+    response_url: str,
+    sessions_storage: Dict[str, Any],
+    token: Optional[str] = None
+) -> Tuple[bool, Optional[str], int]:
+    """
+    Handle OAuth callback URL from user.
+
+    Shared handler for both regular auth and invitation flows.
+
+    Args:
+        session_id: The OAuth session ID
+        response_url: The OAuth response URL from the user
+        sessions_storage: Storage dict containing session data
+        token: Optional invitation token for validation (invitation flow only)
+
+    Returns:
+        Tuple of (success, error_message, status_code)
+
+    Example:
+        >>> success, error, code = handle_oauth_callback(
+        ...     session_id='my_session',
+        ...     response_url='https://...',
+        ...     sessions_storage=login_sessions
+        ... )
+        >>> if not success:
+        ...     return jsonify({'error': error}), code
+    """
+    # Check if session exists
+    if session_id not in sessions_storage:
+        return False, 'Login session not found', 404
+
+    session_data = sessions_storage[session_id]
+
+    # Verify token if provided (invitation flow)
+    if token is not None and session_data.get('token') != token:
+        return False, 'Invalid token', 403
+
+    # Validate response URL
+    if not response_url:
+        return False, 'Response URL is required', 400
+
+    # Pass response URL to waiting OAuth session
+    session_data['result']['response_url'] = response_url
+    session_data['event'].set()
+
+    return True, None, 200
+
+
+def check_oauth_status(
+    session_id: str,
+    sessions_storage: Dict[str, Any],
+    success_redirect: str,
+    token: Optional[str] = None
+) -> Tuple[Dict[str, Any], int]:
+    """
+    Check OAuth login status and return appropriate response.
+
+    Shared handler for both regular auth and invitation flows.
+
+    Args:
+        session_id: The OAuth session ID
+        sessions_storage: Storage dict containing session data
+        success_redirect: URL to redirect to on successful authentication
+        token: Optional invitation token for validation (invitation flow only)
+
+    Returns:
+        Tuple of (response_dict, status_code)
+
+    Example:
+        >>> response, code = check_oauth_status(
+        ...     session_id='my_session',
+        ...     sessions_storage=login_sessions,
+        ...     success_redirect='/dashboard'
+        ... )
+        >>> return jsonify(response), code
+    """
+    # Check if session exists
+    if session_id not in sessions_storage:
+        return {'error': 'Login session not found'}, 404
+
+    session_data = sessions_storage[session_id]
+
+    # Verify token if provided (invitation flow)
+    if token is not None and session_data.get('token') != token:
+        return {'error': 'Invalid token'}, 403
+
+    result = session_data['result']
+
+    # Check if login completed
+    if 'success' in result:
+        # Clean up session
+        del sessions_storage[session_id]
+        account_name = session_data['account_name']
+
+        if result['success']:
+            # Mark account as authenticated in config
+            config_manager = get_config_manager()
+            accounts = config_manager.get_accounts()
+            accounts[account_name]['authenticated'] = True
+            config_manager.save_accounts(accounts)
+
+            return {
+                'success': True,
+                'message': 'Login successful!',
+                'redirect': success_redirect
+            }, 200
+        else:
+            return {
+                'success': False,
+                'error': result.get('error', 'Unknown error')
+            }, 200
+
+    # Login still in progress
+    return {'status': 'pending'}, 200

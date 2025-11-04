@@ -4,9 +4,12 @@ import json
 import os
 import time
 from downloader import download_books, AudiobookDownloader, DownloadQueueManager
-from utils.account_manager import load_accounts, load_libraries
+from utils.config_manager import get_config_manager, ConfigurationError
 
 download_bp = Blueprint('download', __name__)
+
+# Get ConfigManager singleton
+config_manager = get_config_manager()
 
 @download_bp.route('/downloads')
 def downloads_page():
@@ -31,7 +34,7 @@ def download_selected_books():
     if not current_account:
         return jsonify({'error': 'No account selected'}), 400
 
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     if current_account not in accounts:
         return jsonify({'error': 'Account not found'}), 404
 
@@ -39,7 +42,7 @@ def download_selected_books():
     region = account_data['region']
 
     # Get library path from library_name
-    libraries = load_libraries()
+    libraries = config_manager.get_libraries()
     if library_name not in libraries:
         return jsonify({'error': 'Selected library not found'}), 404
 
@@ -156,12 +159,12 @@ def sync_library():
     if not current_account:
         return jsonify({'error': 'No account selected'}), 400
 
-    accounts = load_accounts()
+    accounts = config_manager.get_accounts()
     if current_account not in accounts:
         return jsonify({'error': 'Account not found'}), 404
 
     # Get library path from library_name
-    libraries = load_libraries()
+    libraries = config_manager.get_libraries()
     if library_name not in libraries:
         return jsonify({'error': 'Selected library not found'}), 404
 
