@@ -517,7 +517,7 @@ class AudiobookImporter:
         logger.info(f"Importing '{title}' (ASIN: {asin})")
         
         # Build target path using naming pattern
-        target_path = self.downloader.build_path_from_pattern(
+        target_path = self.downloader.path_builder.build_path_from_pattern(
             base_path=str(self.library_path),
             title=title,
             authors=audible_product.get('authors', []),

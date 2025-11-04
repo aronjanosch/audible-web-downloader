@@ -273,7 +273,7 @@ def preview_import_path():
         )
         
         # Build the target path
-        target_path = downloader.build_path_from_pattern(
+        target_path = downloader.path_builder.build_path_from_pattern(
             base_path=library_path,
             title=audible_product.get('title', 'Unknown'),
             authors=audible_product.get('authors', []),
