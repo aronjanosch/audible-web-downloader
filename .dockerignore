@@ -43,5 +43,5 @@ test_*.py
 *_test.py
 
 # Lock files
-uv.lock
+# uv.lock is intentionally included — required for reproducible Docker builds
 
