@@ -1,0 +1,474 @@
+/* ============================================================
+   app.css — Design tokens, layout, navbar, shared components
+   ============================================================ */
+
+/* ── Design Tokens ── */
+:root {
+  --color-primary: #667eea;
+  --color-primary-dark: #5a6fd8;
+  --color-primary-end: #764ba2;
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+  --color-bg: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-border: #dee2e6;
+  --color-border-light: #f0f0f0;
+
+  --color-text: #212529;
+  --color-text-muted: #6c757d;
+
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+  --color-info: #17a2b8;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 50px;
+
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 6px 20px rgba(0, 0, 0, 0.14);
+  --shadow-navbar: 0 2px 8px rgba(0, 0, 0, 0.10);
+
+  --navbar-height: 64px;
+  --download-bar-height: 0px;
+  --download-bar-transition: height 0.25s ease, opacity 0.25s ease;
+}
+
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background-color: var(--color-bg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--color-text);
+  margin: 0;
+  padding-top: var(--navbar-height);
+}
+
+/* ── Navbar ── */
+.app-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--navbar-height);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-navbar);
+  z-index: 1030;
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  font-size: 1.25rem;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.navbar-brand i {
+  -webkit-text-fill-color: var(--color-primary);
+}
+
+/* Account selector in navbar */
+.navbar-account {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.navbar-account select {
+  min-width: 160px;
+  max-width: 240px;
+  font-size: 0.875rem;
+}
+
+.account-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #adb5bd;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.account-status-dot.authenticated { background: var(--color-success); }
+.account-status-dot.unauthenticated { background: var(--color-warning); }
+.account-status-dot.no-account { background: #adb5bd; }
+
+/* Download status pill in navbar */
+.download-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.download-pill:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.download-pill.active {
+  background: var(--gradient-primary);
+  border-color: transparent;
+  color: white;
+}
+
+.download-pill .pill-count {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-pill);
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+}
+
+/* Navbar icon buttons */
+.navbar-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.navbar-icon-btn:hover {
+  background: var(--color-bg);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  text-decoration: none;
+}
+
+.navbar-icon-btn.active,
+.navbar-icon-btn[aria-current="page"] {
+  background: var(--gradient-primary);
+  color: white;
+  border-color: transparent;
+}
+
+/* ── Download Status Bar ── */
+.download-status-bar {
+  position: fixed;
+  top: var(--navbar-height);
+  left: 0;
+  right: 0;
+  height: var(--download-bar-height);
+  overflow: hidden;
+  background: var(--gradient-primary);
+  color: white;
+  z-index: 1020;
+  transition: var(--download-bar-transition);
+  opacity: 0;
+}
+
+.download-status-bar.visible {
+  opacity: 1;
+}
+
+.download-bar-inner {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+  gap: 1.5rem;
+  max-width: 1800px;
+  margin: 0 auto;
+  font-size: 0.8rem;
+}
+
+.download-bar-stats {
+  display: flex;
+  gap: 1rem;
+  white-space: nowrap;
+}
+
+.download-bar-stat { opacity: 0.85; }
+.download-bar-stat strong { opacity: 1; margin-left: 0.2rem; }
+
+.download-bar-progress {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.download-bar-progress-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.download-bar-progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.download-bar-meta { white-space: nowrap; opacity: 0.9; }
+
+.download-bar-link {
+  color: white;
+  text-decoration: underline;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.download-bar-link:hover { color: rgba(255,255,255,0.8); }
+
+/* ── Main Content ── */
+.app-main {
+  padding: 1.5rem;
+  max-width: 1800px;
+  margin: 0 auto;
+  /* Compensate for download bar when it's open */
+  transition: padding-top 0.25s ease;
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  background: var(--gradient-primary);
+  border: none;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, #6a4190 100%);
+  border: none;
+  transform: translateY(-1px);
+}
+
+.btn-primary:focus, .btn-primary:active {
+  background: var(--gradient-primary);
+  border: none;
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.4);
+}
+
+/* ── Cards ── */
+.app-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--color-border-light);
+}
+
+/* ── Floating Action Button ── */
+.btn-fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 999;
+  padding: 0.875rem 1.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+  animation: fab-pulse 2.5s infinite;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: none;
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.btn-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(102, 126, 234, 0.5);
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.btn-fab:active { transform: scale(0.96); }
+
+@keyframes fab-pulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4); }
+  50% { box-shadow: 0 4px 32px rgba(102, 126, 234, 0.65); }
+}
+
+/* ── Toast Notifications ── */
+.toast-container { z-index: 1060; }
+
+/* ── Modals ── */
+.modal-content { border-radius: var(--radius-lg); }
+.modal-header { border-bottom-color: var(--color-border-light); }
+.modal-footer { border-top-color: var(--color-border-light); }
+
+/* ── Shared Badge/Status ── */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.success { background: var(--color-success); }
+.status-dot.warning { background: var(--color-warning); }
+.status-dot.danger { background: var(--color-danger); }
+.status-dot.muted { background: #adb5bd; }
+
+/* ── Empty State ── */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--color-text-muted);
+}
+
+.empty-state i {
+  font-size: 3rem;
+  color: #ced4da;
+  margin-bottom: 1rem;
+}
+
+.empty-state h4 { color: #495057; margin-bottom: 0.5rem; }
+.empty-state p { color: #adb5bd; margin-bottom: 0; }
+
+/* ── Loading Spinner ── */
+.loading-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+/* ── Section Headers ── */
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #495057;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Step Indicator (shared: onboarding + importer) ── */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 2rem;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  max-width: 180px;
+}
+
+.step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  transition: all 0.2s;
+  z-index: 1;
+}
+
+.step-item.active .step-circle {
+  background: var(--gradient-primary);
+  border-color: transparent;
+  color: white;
+}
+
+.step-item.done .step-circle {
+  background: var(--color-success);
+  border-color: transparent;
+  color: white;
+}
+
+.step-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.35rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.step-item.active .step-label { color: var(--color-primary); font-weight: 600; }
+.step-item.done .step-label   { color: var(--color-success); }
+
+.step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border);
+  margin-top: -18px;
+  transition: background 0.2s;
+  min-width: 20px;
+}
+
+.step-line.done   { background: var(--color-success); }
+.step-line.active { background: var(--color-primary); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .app-navbar { padding: 0 1rem; }
+  .app-main { padding: 1rem; }
+  .navbar-brand span { display: none; }
+  .btn-fab {
+    bottom: 1rem;
+    right: 1rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9rem;
+  }
+  .download-bar-stats { display: none; }
+}
+
+@media (max-width: 480px) {
+  .navbar-account select { min-width: 120px; }
+}

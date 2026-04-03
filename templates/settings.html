@@ -1,0 +1,491 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — Audible Downloader{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-7">
+
+        <h2 class="mb-4"><i class="fas fa-cog me-2"></i>Settings</h2>
+
+        <!-- Tab navigation -->
+        <ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-accounts" data-bs-toggle="tab"
+                        data-bs-target="#pane-accounts" type="button" role="tab">
+                    <i class="fas fa-users me-2"></i>Accounts
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-libraries" data-bs-toggle="tab"
+                        data-bs-target="#pane-libraries" type="button" role="tab">
+                    <i class="fas fa-folder me-2"></i>Libraries
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-preferences" data-bs-toggle="tab"
+                        data-bs-target="#pane-preferences" type="button" role="tab">
+                    <i class="fas fa-sliders-h me-2"></i>Preferences
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-autodownload" data-bs-toggle="tab"
+                        data-bs-target="#pane-autodownload" type="button" role="tab">
+                    <i class="fas fa-robot me-2"></i>Auto-Download
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+
+            <!-- ── Accounts Tab ── -->
+            <div class="tab-pane fade show active" id="pane-accounts" role="tabpanel">
+                <div class="app-card p-4 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">Audible Accounts</h5>
+                        <button class="btn btn-primary btn-sm" id="addAccountBtn">
+                            <i class="fas fa-plus me-1"></i>Add Account
+                        </button>
+                    </div>
+
+                    <div id="settingsAccountList">
+                        <p class="text-muted small">Loading accounts…</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Libraries Tab ── -->
+            <div class="tab-pane fade" id="pane-libraries" role="tabpanel">
+                <div class="app-card p-4 mb-3">
+                    <h5 class="mb-3">Download Libraries</h5>
+
+                    <!-- Add library form -->
+                    <form id="settingsAddLibraryForm" class="mb-4">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-sm-4">
+                                <label class="form-label small fw-semibold">Name</label>
+                                <input type="text" class="form-control form-control-sm"
+                                       id="settingsLibraryName" placeholder="e.g., Audiobooks" required>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label small fw-semibold">Path</label>
+                                <input type="text" class="form-control form-control-sm font-monospace"
+                                       id="settingsLibraryPath" placeholder="/media/audiobooks" required>
+                            </div>
+                            <div class="col-sm-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div id="configuredLibraryList">
+                        <p class="text-muted small">No libraries configured.</p>
+                    </div>
+
+                    <div class="mt-3 text-muted small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        After adding books, use the sync button on the library page to update download history.
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Preferences Tab ── -->
+            <div class="tab-pane fade" id="pane-preferences" role="tabpanel">
+
+                <!-- Naming Pattern -->
+                <div class="app-card p-4 mb-3">
+                    <h5 class="mb-3">File Naming</h5>
+                    <p class="text-muted small mb-3">
+                        Controls how downloaded audiobooks are named and organized in your library folders.
+                    </p>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mb-3" id="configureNamingBtn">
+                        <i class="fas fa-folder-tree me-1"></i>Configure Naming Pattern
+                    </button>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="cleanupAax" checked>
+                        <label class="form-check-label small" for="cleanupAax">
+                            Delete original AAX files after conversion
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Family Sharing -->
+                <div class="app-card p-4 mb-3">
+                    <h5 class="mb-3"><i class="fas fa-users me-2"></i>Family Sharing</h5>
+                    <p class="text-muted small mb-3">
+                        Share an invitation link with family members so they can add their Audible accounts.
+                        You keep full control over all accounts and downloads.
+                    </p>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="familySharingBtn">
+                        <i class="fas fa-link me-1"></i>Manage Invitation Link
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- ── Auto-Download Tab ── -->
+            <div class="tab-pane fade" id="pane-autodownload" role="tabpanel">
+                <div class="app-card p-4 mb-3">
+                    <h5 class="mb-1">Automatic Downloads</h5>
+                    <p class="text-muted small mb-4">
+                        Polls each account's Audible library on a schedule and downloads any new purchases automatically.
+                    </p>
+
+                    <div id="autoDownloadAccountList">
+                        <p class="text-muted small">Loading…</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Auto-Download ──────────────────────────────────────────────
+let _autoDownloadData = {};
+let _routableFields = [];
+// Per-account working copy of rules (mutated by the UI before saving)
+const _accountRules = {};
+
+async function loadAutoDownloadStatus() {
+    try {
+        const res = await apiCall('/api/auto-download');
+        _autoDownloadData = res.accounts || {};
+        _routableFields = res.routable_fields || [];
+    } catch (e) {
+        _autoDownloadData = {};
+        _routableFields = [];
+    }
+}
+
+async function renderAutoDownloadAccounts() {
+    const container = document.getElementById('autoDownloadAccountList');
+    if (!container) return;
+
+    await loadAutoDownloadStatus();
+    const accountData = AppState.get('accountData') || {};
+    const libraries = AppState.get('libraries') || {};
+    const libNames = Object.keys(libraries);
+
+    const authenticatedAccounts = Object.entries(accountData).filter(([, a]) => a.authenticated);
+
+    if (authenticatedAccounts.length === 0) {
+        container.innerHTML = '<p class="text-muted small">No authenticated accounts. Add and authenticate an account first.</p>';
+        return;
+    }
+
+    container.innerHTML = '';
+    authenticatedAccounts.forEach(([name, acc]) => {
+        const cfg = _autoDownloadData[name] || {};
+        // Seed the working rules copy from persisted config
+        _accountRules[name] = (cfg.rules || []).map(r => ({ ...r }));
+        container.appendChild(_buildAccountCard(name, acc, cfg, libNames));
+    });
+}
+
+function _buildAccountCard(name, acc, cfg, libNames) {
+    const enabled = cfg.enabled || false;
+    const intervalHours = cfg.interval_hours || 6;
+    const defaultLib = cfg.default_library_name || '';
+    const lastRun = cfg.last_run ? new Date(cfg.last_run).toLocaleString() : 'Never';
+    const lastResult = cfg.last_run_result || '';
+    const nextRun = cfg.next_run ? new Date(cfg.next_run).toLocaleString() : null;
+
+    const intervalOptions = [6, 12, 24, 48].map(h =>
+        `<option value="${h}" ${h === intervalHours ? 'selected' : ''}>${h}h</option>`
+    ).join('');
+
+    const defaultLibOptions = ['', ...libNames].map(lib =>
+        `<option value="${lib}" ${lib === defaultLib ? 'selected' : ''}>${lib || '— skip unmatched books —'}</option>`
+    ).join('');
+
+    const card = document.createElement('div');
+    card.className = 'border rounded p-3 mb-3';
+    card.dataset.accountName = name;
+    card.innerHTML = `
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <div>
+                <span class="fw-semibold">${name}</span>
+                <span class="text-muted small ms-2">${acc.region?.toUpperCase() || ''}</span>
+            </div>
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input auto-dl-toggle" type="checkbox" role="switch"
+                       id="autoToggle_${name}" ${enabled ? 'checked' : ''}>
+                <label class="form-check-label small" for="autoToggle_${name}">Enabled</label>
+            </div>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-auto">
+                <label class="form-label small fw-semibold mb-1">Check every</label>
+                <select class="form-select form-select-sm auto-dl-interval" style="width:auto">
+                    ${intervalOptions}
+                </select>
+            </div>
+        </div>
+
+        <div class="mb-1">
+            <span class="small fw-semibold">Library routing rules</span>
+            <span class="text-muted small ms-1">(first match wins)</span>
+        </div>
+        <div class="auto-dl-rules-container mb-2"></div>
+        <button type="button" class="btn btn-outline-secondary btn-sm auto-dl-add-rule mb-3">
+            <i class="fas fa-plus me-1"></i>Add rule
+        </button>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold mb-1">Default library</label>
+            <select class="form-select form-select-sm auto-dl-default-lib" style="max-width:260px">
+                ${defaultLibOptions}
+            </select>
+            <div class="text-muted" style="font-size:0.75rem;margin-top:3px">
+                Books not matched by any rule — leave empty to skip them
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center mb-2">
+            <button class="btn btn-primary btn-sm auto-dl-save">Save</button>
+            <button class="btn btn-outline-secondary btn-sm auto-dl-run-now" title="Run now">
+                <i class="fas fa-play me-1"></i>Run now
+            </button>
+        </div>
+
+        <div class="text-muted" style="font-size:0.75rem;">
+            Last run: <strong>${lastRun}</strong>${lastResult ? ' — ' + lastResult : ''}
+            ${nextRun ? `<span class="ms-3">Next: <strong>${nextRun}</strong></span>` : ''}
+        </div>
+    `;
+
+    // Render initial rules rows
+    const rulesContainer = card.querySelector('.auto-dl-rules-container');
+    _renderRulesRows(rulesContainer, name, libNames);
+
+    // Add rule
+    card.querySelector('.auto-dl-add-rule').addEventListener('click', () => {
+        _accountRules[name].push({ field: _routableFields[0] || 'language', value: '', library_name: libNames[0] || '' });
+        _renderRulesRows(rulesContainer, name, libNames);
+    });
+
+    // Save
+    card.querySelector('.auto-dl-save').addEventListener('click', async () => {
+        const isEnabled = card.querySelector('.auto-dl-toggle').checked;
+        const intervalHrs = parseInt(card.querySelector('.auto-dl-interval').value);
+        const defaultLibName = card.querySelector('.auto-dl-default-lib').value;
+        const rules = _accountRules[name] || [];
+
+        if (isEnabled && rules.length === 0 && !defaultLibName) {
+            showToast('Add at least one rule or a default library before enabling.', 'warning');
+            return;
+        }
+
+        for (const [i, r] of rules.entries()) {
+            if (!r.value.trim()) {
+                showToast(`Rule ${i + 1}: value cannot be empty.`, 'warning');
+                return;
+            }
+            if (!r.library_name) {
+                showToast(`Rule ${i + 1}: please select a library.`, 'warning');
+                return;
+            }
+        }
+
+        try {
+            await apiCall(`/api/accounts/${encodeURIComponent(name)}/auto-download`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    enabled: isEnabled,
+                    interval_hours: intervalHrs,
+                    rules,
+                    default_library_name: defaultLibName || null,
+                })
+            });
+            showToast(`Auto-download saved for ${name}.`, 'success');
+            await renderAutoDownloadAccounts();
+        } catch (err) {
+            showToast('Failed to save: ' + err.message, 'danger');
+        }
+    });
+
+    // Run now
+    card.querySelector('.auto-dl-run-now').addEventListener('click', async () => {
+        try {
+            await apiCall(`/api/accounts/${encodeURIComponent(name)}/auto-download/trigger`, { method: 'POST' });
+            showToast(`Auto-download triggered for ${name}. Check Downloads for progress.`, 'info');
+        } catch (err) {
+            showToast('Failed to trigger: ' + err.message, 'danger');
+        }
+    });
+
+    return card;
+}
+
+function _renderRulesRows(container, accountName, libNames) {
+    const rules = _accountRules[accountName] || [];
+
+    if (rules.length === 0) {
+        container.innerHTML = '<p class="text-muted small mb-2">No rules yet — all books go to the default library.</p>';
+        return;
+    }
+
+    container.innerHTML = '';
+
+    // Header row
+    const header = document.createElement('div');
+    header.className = 'd-flex gap-2 mb-1';
+    header.style.fontSize = '0.75rem';
+    header.innerHTML = `
+        <div style="width:130px" class="text-muted fw-semibold">Field</div>
+        <div style="flex:1" class="text-muted fw-semibold">Contains</div>
+        <div style="width:170px" class="text-muted fw-semibold">Library</div>
+        <div style="width:74px"></div>
+    `;
+    container.appendChild(header);
+
+    rules.forEach((rule, idx) => {
+        const row = document.createElement('div');
+        row.className = 'd-flex gap-2 mb-1 align-items-center';
+
+        const fieldOptions = _routableFields.map(f =>
+            `<option value="${f}" ${f === rule.field ? 'selected' : ''}>${f}</option>`
+        ).join('');
+        const libOptions = ['', ...libNames].map(lib =>
+            `<option value="${lib}" ${lib === rule.library_name ? 'selected' : ''}>${lib || '— select —'}</option>`
+        ).join('');
+
+        row.innerHTML = `
+            <select class="form-select form-select-sm rule-field" style="width:130px">${fieldOptions}</select>
+            <input type="text" class="form-control form-control-sm rule-value" placeholder="e.g. german"
+                   value="${_escHtml(rule.value)}" style="flex:1">
+            <select class="form-select form-select-sm rule-library" style="width:170px">${libOptions}</select>
+            <div class="d-flex gap-1" style="width:74px">
+                <button class="btn btn-outline-secondary btn-sm rule-up px-2" title="Move up" ${idx === 0 ? 'disabled' : ''}>
+                    <i class="fas fa-arrow-up"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm rule-down px-2" title="Move down" ${idx === rules.length - 1 ? 'disabled' : ''}>
+                    <i class="fas fa-arrow-down"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm rule-delete px-2" title="Remove rule">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+
+        // Sync changes back to working array immediately
+        row.querySelector('.rule-field').addEventListener('change', e => { rules[idx].field = e.target.value; });
+        row.querySelector('.rule-value').addEventListener('input', e => { rules[idx].value = e.target.value; });
+        row.querySelector('.rule-library').addEventListener('change', e => { rules[idx].library_name = e.target.value; });
+
+        row.querySelector('.rule-up').addEventListener('click', () => {
+            if (idx === 0) return;
+            [rules[idx - 1], rules[idx]] = [rules[idx], rules[idx - 1]];
+            _renderRulesRows(container, accountName, libNames);
+        });
+        row.querySelector('.rule-down').addEventListener('click', () => {
+            if (idx === rules.length - 1) return;
+            [rules[idx], rules[idx + 1]] = [rules[idx + 1], rules[idx]];
+            _renderRulesRows(container, accountName, libNames);
+        });
+        row.querySelector('.rule-delete').addEventListener('click', () => {
+            rules.splice(idx, 1);
+            _renderRulesRows(container, accountName, libNames);
+        });
+
+        container.appendChild(row);
+    });
+}
+
+function _escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Main init ───────────────────────────────────────────────────
+// Render accounts list on the settings page
+document.addEventListener('DOMContentLoaded', async function () {
+    await loadAccounts();
+    _renderSettingsAccounts();
+
+    document.addEventListener('appstate:change', function(e) {
+        if (e.detail.key === 'accountData') _renderSettingsAccounts();
+    });
+
+    // Load auto-download tab when it becomes active
+    document.getElementById('tab-autodownload')?.addEventListener('shown.bs.tab', async function() {
+        await loadLibraries();
+        await renderAutoDownloadAccounts();
+    });
+
+    // Add library form on this page
+    document.getElementById('settingsAddLibraryForm')?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const name = document.getElementById('settingsLibraryName')?.value?.trim();
+        const path = document.getElementById('settingsLibraryPath')?.value?.trim();
+        if (!name || !path) return;
+
+        try {
+            await apiCall('/api/libraries', {
+                method: 'POST',
+                body: JSON.stringify({ library_name: name, library_path: path })
+            });
+            showToast('Library added!', 'success');
+            this.reset();
+            await loadLibraries();
+        } catch (err) {
+            showToast('Failed to add library: ' + err.message, 'danger');
+        }
+    });
+});
+
+function _renderSettingsAccounts() {
+    const container = document.getElementById('settingsAccountList');
+    if (!container) return;
+
+    const accountData = AppState.get('accountData');
+    const names = Object.keys(accountData);
+
+    if (names.length === 0) {
+        container.innerHTML = '<p class="text-muted small">No accounts yet. Click "Add Account" to get started.</p>';
+        return;
+    }
+
+    container.innerHTML = '';
+    names.forEach(name => {
+        const acc = accountData[name];
+        const item = document.createElement('div');
+        item.className = 'd-flex align-items-center justify-content-between py-3 border-bottom gap-3';
+        item.innerHTML = `
+            <div class="d-flex align-items-center gap-3 flex-grow-1 min-width-0">
+                <span class="account-status-dot ${acc.authenticated ? 'authenticated' : 'unauthenticated'}" title="${acc.authenticated ? 'Authenticated' : 'Not authenticated'}"></span>
+                <div class="min-width-0">
+                    <div class="fw-semibold">${name}</div>
+                    <div class="text-muted small">${acc.region?.toUpperCase() || ''} &middot; ${acc.authenticated ? '<span class="text-success">Authenticated</span>' : '<span class="text-warning">Not authenticated</span>'}</div>
+                </div>
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0">
+                ${!acc.authenticated ? `<button class="btn btn-sm btn-warning login-acc-btn" data-name="${name}"><i class="fas fa-sign-in-alt me-1"></i>Login</button>` : ''}
+                ${!acc.authenticated ? `<button class="btn btn-sm btn-outline-secondary invite-acc-btn" data-name="${name}" title="Generate invite link"><i class="fas fa-link"></i></button>` : ''}
+                <button class="btn btn-sm btn-outline-danger delete-acc-btn" data-name="${name}" title="Delete account"><i class="fas fa-trash"></i></button>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+
+    container.querySelectorAll('.login-acc-btn').forEach(btn => {
+        btn.addEventListener('click', () => authenticateAccount(btn.dataset.name));
+    });
+
+    container.querySelectorAll('.invite-acc-btn').forEach(btn => {
+        btn.addEventListener('click', () => openAccountInviteModal(btn.dataset.name));
+    });
+
+    container.querySelectorAll('.delete-acc-btn').forEach(btn => {
+        btn.addEventListener('click', () => deleteAccount(btn.dataset.name));
+    });
+}
+</script>
+{% endblock %}

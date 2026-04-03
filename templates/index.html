@@ -1,1708 +1,265 @@
 {% extends "base.html" %}
 
-{% block title %}Audible Book Downloader - Library{% endblock %}
+{% block title %}Audible Downloader — Library{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/library.css') }}">
+{% endblock %}
 
 {% block content %}
-<!-- Welcome Message -->
-<div id="welcomeMessage" class="text-center py-5" style="display: none;">
-    <i class="fas fa-headphones fa-4x mb-4" style="color: var(--primary-color);"></i>
-    <h2 class="mb-3">Welcome to Audible Downloader</h2>
-    <p class="text-muted mb-4">Easily download and manage your Audible audiobook library</p>
-    <div class="d-flex justify-content-center gap-3">
-        <button class="btn btn-primary btn-lg" id="welcomeAddAccountBtn">
-            <i class="fas fa-user-plus"></i> Add Account to Get Started
-        </button>
+
+<!-- ── Onboarding Wizard ── -->
+<div id="onboardingWizard" hidden>
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+
+            <!-- Step indicator -->
+            <div class="step-indicator mb-4">
+                <div class="step-item active" id="stepItem1">
+                    <div class="step-circle" id="wizardCircle1">1</div>
+                    <div class="step-label">Add Account</div>
+                </div>
+                <div class="step-line" id="wizardLine1"></div>
+                <div class="step-item" id="stepItem2">
+                    <div class="step-circle" id="wizardCircle2">2</div>
+                    <div class="step-label">Authenticate</div>
+                </div>
+                <div class="step-line" id="wizardLine2"></div>
+                <div class="step-item" id="stepItem3">
+                    <div class="step-circle" id="wizardCircle3">3</div>
+                    <div class="step-label">Add Library</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Add Account -->
+            <div id="wizardStep1" class="app-card p-4">
+                <h4 class="mb-1"><i class="fas fa-user-circle me-2 text-primary"></i>Add your Audible account</h4>
+                <p class="text-muted mb-4">Enter a name and select the region for your Audible account.</p>
+                <form id="addAccountForm">
+                    <div class="mb-3">
+                        <label for="accountName" class="form-label fw-semibold">Account Name</label>
+                        <input type="text" class="form-control" id="accountName"
+                               placeholder="e.g., My Account" required autofocus>
+                    </div>
+                    <div class="mb-4">
+                        <label for="accountRegion" class="form-label fw-semibold">Region</label>
+                        <select class="form-select" id="accountRegion" required>
+                            <option value="us">United States</option>
+                            <option value="uk">United Kingdom</option>
+                            <option value="de">Germany</option>
+                            <option value="fr">France</option>
+                            <option value="ca">Canada</option>
+                            <option value="it">Italy</option>
+                            <option value="au">Australia</option>
+                            <option value="in">India</option>
+                            <option value="jp">Japan</option>
+                            <option value="es">Spain</option>
+                            <option value="br">Brazil</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary w-100" id="submitAddAccount">
+                        <i class="fas fa-arrow-right me-2"></i>Continue
+                    </button>
+                </form>
+            </div>
+
+            <!-- Step 2: Authenticate -->
+            <div id="wizardStep2" class="app-card p-4" hidden>
+                <h4 class="mb-1"><i class="fas fa-key me-2 text-warning"></i>Login to Audible</h4>
+                <p class="text-muted mb-3">
+                    Account <strong id="wizardAccountName">—</strong> needs to be authenticated with Audible.
+                    You'll be redirected to the Amazon login page.
+                </p>
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle me-2"></i>
+                    After logging in you'll be redirected back here automatically.
+                </div>
+                <button type="button" class="btn btn-warning w-100 mb-2" id="wizardLoginBtn">
+                    <i class="fas fa-sign-in-alt me-2"></i>Login to Audible
+                </button>
+                <button type="button" class="btn btn-link text-muted w-100 btn-sm" id="wizardSkipAuthBtn">
+                    Skip for now
+                </button>
+            </div>
+
+            <!-- Step 3: Add Library -->
+            <div id="wizardStep3" class="app-card p-4" hidden>
+                <h4 class="mb-1"><i class="fas fa-folder me-2 text-success"></i>Add a download library</h4>
+                <p class="text-muted mb-4">
+                    Choose where downloaded audiobooks will be saved.
+                    This should be a path accessible to Audiobookshelf.
+                </p>
+                <form id="wizardAddLibraryForm">
+                    <div class="mb-3">
+                        <label for="wizardLibraryName" class="form-label fw-semibold">Library Name</label>
+                        <input type="text" class="form-control" id="wizardLibraryName"
+                               placeholder="e.g., Audiobooks" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="wizardLibraryPath" class="form-label fw-semibold">Library Path</label>
+                        <input type="text" class="form-control font-monospace" id="wizardLibraryPath"
+                               placeholder="/media/audiobooks" required>
+                        <div class="form-text">Absolute path to the folder on your server</div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 mb-2">
+                        <i class="fas fa-check me-2"></i>Save & Finish
+                    </button>
+                    <button type="button" class="btn btn-link text-muted w-100 btn-sm" id="wizardSkipLibraryBtn">
+                        Skip for now
+                    </button>
+                </form>
+            </div>
+
+        </div>
     </div>
 </div>
 
-<!-- Library Content -->
-<div id="libraryContent" style="display: none;">
-    <!-- Search and Controls Bar -->
-    <div class="filter-bar mb-3">
-        <div class="row g-3 align-items-center">
-            <div class="col-lg-4 col-md-5">
-                <div class="input-group">
-                    <span class="input-group-text bg-white border-end-0">
-                        <i class="fas fa-search text-muted"></i>
-                    </span>
-                    <input type="text" class="form-control border-start-0 ps-0" id="searchInput" 
-                           placeholder="Search books by title or author...">
-                </div>
-            </div>
-            <div class="col-lg-4 col-md-5">
-                <!-- Download Library Selector -->
-                <div class="d-flex align-items-center gap-2" id="downloadLibrarySelector" style="display: none !important;">
-                    <label class="text-muted small mb-0 text-nowrap">
-                        <i class="fas fa-folder"></i> Download to:
-                    </label>
-                    <div class="input-group input-group-sm flex-grow-1">
-                        <select class="form-select form-select-sm" id="downloadLibrarySelect" required>
-                            <option value="">Select library...</option>
-                        </select>
-                        <button class="btn btn-outline-primary btn-sm" type="button" id="syncLibraryBtn" title="Sync Library">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4 col-md-2 text-end">
-                <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
-                    <button id="selectAllVisibleBtn" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-check-double"></i> Select All
-                    </button>
-                    <button id="clearSelectionBtn" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-times"></i> Clear
-                    </button>
-                    <div class="vr d-none d-md-block"></div>
-                    <div class="btn-group view-switcher" role="group">
-                        <button type="button" class="btn btn-sm active" id="cardViewBtn" title="Card View">
-                            <i class="fas fa-th-large"></i>
-                        </button>
-                        <button type="button" class="btn btn-sm" id="listViewBtn" title="List View">
-                            <i class="fas fa-list"></i>
-                        </button>
-                    </div>
-                    <span id="bookCount" class="text-muted ms-2 small"></span>
-                </div>
+<!-- ── Welcome (existing user, no account selected) ── -->
+<div id="welcomeMessage" class="empty-state" hidden>
+    <i class="fas fa-headphones"></i>
+    <h4>Welcome back</h4>
+    <p>Select an account from the dropdown above to browse your library.</p>
+</div>
+
+<!-- ── Library UI ── -->
+<div id="libraryContent" hidden>
+
+    <!-- Library header row -->
+    <div class="library-header mb-3">
+        <!-- Auth alert (shown when not authenticated) -->
+        <div id="libraryAuthAlert" class="w-100 mb-2" hidden></div>
+
+        <!-- Refresh -->
+        <button class="btn btn-sm btn-outline-secondary" id="refreshLibraryBtn" hidden>
+            <i class="fas fa-sync me-1"></i>Load Library
+        </button>
+
+        <!-- Login button (shown when not authenticated) -->
+        <button class="btn btn-sm btn-warning" id="libraryLoginBtn" hidden>
+            <i class="fas fa-sign-in-alt me-1"></i>Login to Audible
+        </button>
+
+        <div class="header-spacer"></div>
+
+        <!-- Download destination -->
+        <div class="download-to-group" id="downloadToSection" hidden>
+            <label><i class="fas fa-folder me-1"></i>Download to:</label>
+            <div class="input-group input-group-sm" style="width:auto">
+                <select class="form-select form-select-sm" id="downloadLibrarySelect" style="min-width:150px">
+                    <option value="">Select library…</option>
+                </select>
+                <button class="btn btn-outline-secondary" type="button" id="syncLibraryBtn" title="Sync library state">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Filter Bar -->
-    <div class="filter-bar mb-4">
-        <div class="row g-2 align-items-center">
-            <div class="col-auto">
-                <label class="form-label mb-0 text-muted small fw-bold">
-                    <i class="fas fa-filter"></i> Filters:
-                </label>
+    <!-- Search & Filter bar -->
+    <div class="search-filter-bar mb-3">
+        <div class="search-row">
+            <!-- Search input -->
+            <div class="search-input-wrapper">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="Search books by title or author…">
             </div>
-            <div class="col">
-                <div class="row g-2">
-                    <div class="col-md col-sm-6">
-                        <select class="form-select form-select-sm" id="authorFilter">
-                            <option value="">All Authors</option>
-                        </select>
-                    </div>
-                    <div class="col-md col-sm-6">
-                        <select class="form-select form-select-sm" id="languageFilter">
-                            <option value="">All Languages</option>
-                        </select>
-                    </div>
-                    <div class="col-md col-sm-6">
-                        <select class="form-select form-select-sm" id="narratorFilter">
-                            <option value="">All Narrators</option>
-                        </select>
-                    </div>
-                    <div class="col-md col-sm-6">
-                        <select class="form-select form-select-sm" id="seriesFilter">
-                            <option value="">All Series</option>
-                        </select>
-                    </div>
-                    <div class="col-md col-sm-6">
-                        <select class="form-select form-select-sm" id="publisherFilter">
-                            <option value="">All Publishers</option>
-                        </select>
-                    </div>
-                    <div class="col-md col-sm-6">
-                        <select class="form-select form-select-sm" id="releaseYearFilter">
-                            <option value="">All Years</option>
-                        </select>
-                    </div>
-                    <div class="col-auto">
-                        <button class="btn btn-sm btn-outline-secondary" id="clearFiltersBtn" title="Clear all filters">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                </div>
+
+            <!-- Filter toggle -->
+            <button class="btn btn-sm btn-outline-secondary filter-toggle" id="filterToggleBtn">
+                <i class="fas fa-sliders-h me-1"></i>Filters
+                <span class="filter-active-count" id="filterActiveCount" style="display:none">0</span>
+            </button>
+
+            <!-- View switcher -->
+            <div class="btn-group view-switcher btn-group-sm">
+                <button type="button" class="btn active" id="cardViewBtn" title="Grid view">
+                    <i class="fas fa-th-large"></i>
+                </button>
+                <button type="button" class="btn" id="listViewBtn" title="List view">
+                    <i class="fas fa-list"></i>
+                </button>
             </div>
         </div>
-        <div class="row mt-2">
-            <div class="col-12">
-                <div class="form-check form-check-inline">
+
+        <!-- Controls row -->
+        <div class="controls-row mt-1">
+            <span class="book-count-text" id="bookCount"></span>
+            <div class="controls-spacer"></div>
+            <button class="btn btn-sm btn-outline-primary" id="selectAllVisibleBtn">
+                <i class="fas fa-check-double me-1"></i>Select All
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="clearSelectionBtn">
+                <i class="fas fa-times me-1"></i>Clear
+            </button>
+        </div>
+
+        <!-- Collapsible filter tray -->
+        <div class="filter-tray" id="filterTray" hidden>
+            <div class="filter-tray-grid">
+                <select class="form-select form-select-sm" id="authorFilter">
+                    <option value="">All Authors</option>
+                </select>
+                <select class="form-select form-select-sm" id="seriesFilter">
+                    <option value="">All Series</option>
+                </select>
+                <select class="form-select form-select-sm" id="languageFilter">
+                    <option value="">All Languages</option>
+                </select>
+                <select class="form-select form-select-sm" id="narratorFilter">
+                    <option value="">All Narrators</option>
+                </select>
+                <select class="form-select form-select-sm" id="publisherFilter">
+                    <option value="">All Publishers</option>
+                </select>
+                <select class="form-select form-select-sm" id="releaseYearFilter">
+                    <option value="">All Years</option>
+                </select>
+            </div>
+            <div class="filter-tray-footer">
+                <div class="form-check mb-0">
                     <input class="form-check-input" type="checkbox" id="hideDownloadedFilter">
                     <label class="form-check-label small text-muted" for="hideDownloadedFilter">
-                        <i class="fas fa-eye-slash"></i> Hide already downloaded books
+                        Hide already downloaded
                     </label>
                 </div>
-            </div>
-        </div>
-        <div class="row mt-2" id="filterStatusRow" style="display: none;">
-            <div class="col-12">
-                <small class="text-muted" id="filterStatus"></small>
+                <button class="btn btn-sm btn-link text-muted p-0" id="clearFiltersBtn">
+                    Clear filters
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Loading Spinner -->
-    <div id="loadingSpinner" class="text-center py-5" style="display: none;">
+    <!-- Loading -->
+    <div id="loadingSpinner" class="loading-state" hidden>
         <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
+            <span class="visually-hidden">Loading…</span>
         </div>
-        <p class="mt-3" id="loadingText">Loading your library...</p>
-    </div>
-    
-    <!-- Library Grid -->
-    <div id="libraryGrid" class="row g-4">
-        <!-- Books will be dynamically loaded here -->
+        <p class="mt-3 text-muted">Loading your library…</p>
     </div>
 
-    <!-- Library List -->
-    <div id="libraryList" class="list-group" style="display: none;">
-        <!-- Books will be dynamically loaded here -->
-    </div>
-    
-    <!-- No Books Message -->
-    <div id="noBooksMessage" class="text-center py-5" style="display: none;">
-        <i class="fas fa-book fa-2x text-muted mb-3"></i>
+    <!-- Book grid -->
+    <div id="libraryGrid" class="row g-3"></div>
+
+    <!-- Book list -->
+    <div id="libraryList" style="display:none"></div>
+
+    <!-- Empty state -->
+    <div id="noBooksMessage" class="empty-state" hidden>
+        <i class="fas fa-book"></i>
         <h4>No books found</h4>
-        <p class="text-muted">Click 'Refresh Library' to load your audiobooks.</p>
+        <p id="noBooksSubtext">Click "Load Library" to fetch your audiobooks, or adjust your filters.</p>
     </div>
+
 </div>
 
-<!-- Download Progress Modal -->
-<div class="modal fade" id="downloadModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-download"></i> Downloading Books
-                </h5>
-            </div>
-            <div class="modal-body">
-                <div class="progress mb-3">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                         role="progressbar" style="width: 0%"></div>
-                </div>
-                <p id="downloadStatus">Preparing download...</p>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- ── Floating Download Button ── -->
+<button id="downloadBtn" class="btn-fab" hidden>
+    <i class="fas fa-download me-2"></i>Download
+</button>
+
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    let currentView = 'card';
-    let downloadStatusInterval = null;
-    let progressEventSource = null;
-
-    // Check for welcome message on page load
-    // (loadAccounts and updateAccountSelector are now in base.html)
-    async function checkForWelcomeMessage() {
-        try {
-            const accounts = await apiCall('/api/accounts');
-            const accountNames = Object.keys(accounts);
-            if (accountNames.length === 0) {
-                document.getElementById('welcomeMessage').style.display = 'block';
-            }
-        } catch (error) {
-            console.error('Failed to check accounts:', error);
-        }
-    }
-    
-    // Local library variables
-    let localLibrary = [];
-    let localLibraryId = null;
-    let currentLibraryPath = '';
-    let libraryComparison = null;
-    let currentFilter = 'all';
-
-    // Filter variables
-    let currentlyDisplayedBooks = [];
-
-    // Library state - ASINs of books already in library.json
-    let libraryStateAsins = new Set();
-    
-    function setupEventListeners() {
-        // Account selection
-        document.getElementById('accountSelect').addEventListener('change', function() {
-            const accountName = this.value;
-            const accountStatus = document.getElementById('accountStatus');
-            const noAccountSelected = document.getElementById('noAccountSelected');
-            
-            if (accountName) {
-                selectAccount(accountName);
-                if (accountStatus) accountStatus.style.display = 'block';
-                if (noAccountSelected) noAccountSelected.style.display = 'none';
-            } else {
-                hideAccountInfo();
-                if (accountStatus) accountStatus.style.display = 'none';
-                if (noAccountSelected) noAccountSelected.style.display = 'block';
-            }
-        });
-
-        // Delete account
-        document.getElementById('deleteAccountBtn').addEventListener('click', function() {
-            deleteAccount();
-        });
-
-        // Add account button (navbar)
-        document.getElementById('addAccountBtn').addEventListener('click', function() {
-            const modal = new bootstrap.Modal(document.getElementById('addAccountModal'));
-            modal.show();
-        });
-        
-        // Welcome page add account button
-        const welcomeBtn = document.getElementById('welcomeAddAccountBtn');
-        if (welcomeBtn) {
-            welcomeBtn.addEventListener('click', function() {
-                const modal = new bootstrap.Modal(document.getElementById('addAccountModal'));
-                modal.show();
-            });
-        }
-
-        // Submit add account form (from modal)
-        document.getElementById('submitAddAccount').addEventListener('click', function() {
-            const form = document.getElementById('addAccountForm');
-            if (form.checkValidity()) {
-                addAccount();
-            } else {
-                form.reportValidity();
-            }
-        });
-
-        // Authentication
-        document.getElementById('authenticateBtn').addEventListener('click', function() {
-            authenticateAccount();
-        });
-
-        // Refresh library
-        document.getElementById('refreshLibraryBtn').addEventListener('click', function() {
-            fetchLibrary();
-        });
-
-        // Download
-        document.getElementById('downloadBtn').addEventListener('click', function() {
-            downloadSelectedBooks();
-        });
-
-        // Clear selection
-        document.getElementById('clearSelectionBtn').addEventListener('click', function() {
-            clearSelection();
-        });
-
-        // Select all visible books
-        document.getElementById('selectAllVisibleBtn').addEventListener('click', function() {
-            selectAllVisible();
-        });
-
-        // Search
-        document.getElementById('searchInput').addEventListener('input', function() {
-            searchBooks(this.value);
-        });
-
-        // View switcher
-        document.getElementById('cardViewBtn').addEventListener('click', () => switchView('card'));
-        document.getElementById('listViewBtn').addEventListener('click', () => switchView('list'));
-
-        // Library management
-        document.getElementById('addLibraryForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            addLibrary();
-        });
-
-        // Sync library button (now on main screen)
-        const syncBtn = document.getElementById('syncLibraryBtn');
-        if (syncBtn) {
-            syncBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                syncLibrary();
-            });
-        }
-
-        // Book filters
-        document.getElementById('authorFilter').addEventListener('change', applyFilters);
-        document.getElementById('languageFilter').addEventListener('change', applyFilters);
-        document.getElementById('narratorFilter').addEventListener('change', applyFilters);
-        document.getElementById('seriesFilter').addEventListener('change', applyFilters);
-        document.getElementById('publisherFilter').addEventListener('change', applyFilters);
-        document.getElementById('releaseYearFilter').addEventListener('change', applyFilters);
-        document.getElementById('hideDownloadedFilter').addEventListener('change', applyFilters);
-        document.getElementById('clearFiltersBtn').addEventListener('click', clearAllFilters);
-
-        // Load libraries on startup
-        loadLibraries();
-    }
-    
-    async function selectAccount(accountName) {
-        try {
-            await apiCall(`/api/accounts/${accountName}/select`, {
-                method: 'POST'
-            });
-            
-            currentAccount = accountName;
-            showAccountInfo(accountName);
-            checkAuthentication(accountName);
-        } catch (error) {
-            showAlert('Failed to select account: ' + error.message, 'danger');
-        }
-    }
-    
-    async function addAccount() {
-        const accountName = document.getElementById('accountName').value;
-        const region = document.getElementById('accountRegion').value;
-        
-        if (!accountName) {
-            showAlert('Please enter an account name', 'warning');
-            return;
-        }
-        
-        try {
-            const result = await apiCall('/api/accounts', {
-                method: 'POST',
-                body: JSON.stringify({
-                    account_name: accountName,
-                    region: region
-                })
-            });
-            
-            showAlert('Account added successfully!', 'success');
-            
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addAccountModal'));
-            if (modal) modal.hide();
-            
-            // Reset form
-            document.getElementById('addAccountForm').reset();
-            
-            // Reload accounts and select the new one
-            await loadAccounts();
-            document.getElementById('accountSelect').value = accountName;
-            selectAccount(accountName);
-            
-        } catch (error) {
-            showAlert('Failed to add account: ' + error.message, 'danger');
-        }
-    }
-    
-    async function deleteAccount() {
-        const accountSelect = document.getElementById('accountSelect');
-        const accountName = accountSelect.value;
-        
-        if (!accountName) {
-            showAlert('Please select an account to delete', 'warning');
-            return;
-        }
-        
-        // Confirm deletion
-        if (!confirm(`Are you sure you want to delete the account "${accountName}"?\n\nThis will remove all authentication data for this account.`)) {
-            return;
-        }
-        
-        try {
-            await apiCall(`/api/accounts/${accountName}`, {
-                method: 'DELETE'
-            });
-            
-            showAlert(`Account "${accountName}" deleted successfully!`, 'success');
-            
-            // Reload accounts and hide account info
-            await loadAccounts();
-            accountSelect.value = '';
-            hideAccountInfo();
-            
-            // Check if we should show welcome message
-            const accounts = await apiCall('/api/accounts');
-            if (Object.keys(accounts).length === 0) {
-                document.getElementById('welcomeMessage').style.display = 'block';
-            }
-            
-        } catch (error) {
-            showAlert('Failed to delete account: ' + error.message, 'danger');
-        }
-    }
-    
-    async function checkAuthentication(accountName) {
-        try {
-            const result = await apiCall('/api/auth/check', {
-                method: 'POST',
-                body: JSON.stringify({ account_name: accountName })
-            });
-            
-            updateAuthStatus(result.authenticated);
-        } catch (error) {
-            showAlert('Failed to check authentication: ' + error.message, 'danger');
-        }
-    }
-    
-    async function authenticateAccount() {
-        if (!currentAccount) return;
-        
-        // Redirect to web-based login flow
-        window.location.href = `/auth/login/${currentAccount}`;
-    }
-    
-    async function loadLibraryState() {
-        try {
-            const result = await apiCall('/api/library/state');
-            if (result.success) {
-                libraryStateAsins = new Set(result.asins);
-            }
-        } catch (error) {
-            console.error('Failed to load library state:', error);
-        }
-    }
-
-    async function fetchLibrary() {
-        if (!currentAccount) return;
-
-        const btn = document.getElementById('refreshLibraryBtn');
-        btn.setAttribute('data-original-text', btn.innerHTML);
-        showLoading(btn, true);
-
-        showLoadingSpinner('Loading your Audible library...');
-
-        try {
-            // Load library state first to mark books already in library
-            await loadLibraryState();
-
-            const result = await apiCall('/api/library/fetch', {
-                method: 'POST',
-                body: JSON.stringify({ account_name: currentAccount })
-            });
-
-            library = result.library;
-            populateFilterDropdowns(library);
-            displayLibrary(library);
-            showAlert(`Loaded ${library.length} books!`, 'success');
-
-            // Show compare button if we have local library data
-            if (localLibraryId) {
-                document.getElementById('compareLibrariesBtn').style.display = 'block';
-            }
-
-        } catch (error) {
-            showAlert('Failed to load library: ' + error.message, 'danger');
-        } finally {
-            showLoading(btn, false);
-            hideLoadingSpinner();
-        }
-    }
-    
-    function updateAuthStatus(isAuthenticated) {
-        const statusDiv = document.getElementById('authStatus');
-        const authBtn = document.getElementById('authenticateBtn');
-        const refreshBtn = document.getElementById('refreshLibraryBtn');
-        const generateInviteBtn = document.getElementById('generateAccountInviteBtn');
-        const statusIndicator = document.getElementById('authStatusIndicator');
-        const downloadLibrarySelector = document.getElementById('downloadLibrarySelector');
-
-        if (isAuthenticated) {
-            statusDiv.className = 'alert alert-success mb-3';
-            statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> Authenticated';
-            authBtn.style.display = 'none';
-            refreshBtn.style.display = 'inline-block';
-            if (generateInviteBtn) generateInviteBtn.style.display = 'none';
-            
-            // Show download library selector on main page
-            if (downloadLibrarySelector) {
-                downloadLibrarySelector.style.display = 'flex !important';
-                downloadLibrarySelector.classList.remove('d-none');
-                downloadLibrarySelector.removeAttribute('style');
-            }
-            
-            // Update navbar status indicator
-            if (statusIndicator) {
-                statusIndicator.className = 'badge auth-status-badge bg-success';
-                statusIndicator.innerHTML = '<i class="fas fa-check-circle"></i> Authenticated';
-                statusIndicator.style.display = 'inline-block';
-            }
-        } else {
-            statusDiv.className = 'alert alert-warning mb-3';
-            statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Not authenticated';
-            authBtn.style.display = 'inline-block';
-            refreshBtn.style.display = 'none';
-            if (generateInviteBtn) generateInviteBtn.style.display = 'block';
-            
-            // Hide download library selector on main page
-            if (downloadLibrarySelector) {
-                downloadLibrarySelector.style.display = 'none';
-            }
-            
-            // Update navbar status indicator
-            if (statusIndicator) {
-                statusIndicator.className = 'badge auth-status-badge bg-warning';
-                statusIndicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Not Authenticated';
-                statusIndicator.style.display = 'inline-block';
-            }
-        }
-    }
-    
-    function showAccountInfo(accountName) {
-        document.getElementById('welcomeMessage').style.display = 'none';
-        document.getElementById('libraryContent').style.display = 'block';
-        document.getElementById('accountStatus').style.display = 'block';
-        
-        // Show auth status indicator in navbar
-        const statusIndicator = document.getElementById('authStatusIndicator');
-        if (statusIndicator) {
-            statusIndicator.style.display = 'inline-block';
-        }
-    }
-    
-    function hideAccountInfo() {
-        document.getElementById('welcomeMessage').style.display = 'block';
-        document.getElementById('libraryContent').style.display = 'none';
-        document.getElementById('accountStatus').style.display = 'none';
-        
-        // Hide auth status indicator in navbar
-        const statusIndicator = document.getElementById('authStatusIndicator');
-        if (statusIndicator) {
-            statusIndicator.style.display = 'none';
-        }
-        
-        currentAccount = null;
-        library = [];
-        selectedBooks.clear();
-        // Keep local library data as it's not account-specific
-    }
-
-    function switchView(view) {
-        currentView = view;
-        document.getElementById('cardViewBtn').classList.toggle('active', view === 'card');
-        document.getElementById('listViewBtn').classList.toggle('active', view === 'list');
-        displayLibrary(library);
-    }
-    
-    function displayLibrary(books) {
-        // Track currently displayed books for Select All functionality
-        currentlyDisplayedBooks = books;
-
-        const grid = document.getElementById('libraryGrid');
-        const list = document.getElementById('libraryList');
-        const countSpan = document.getElementById('bookCount');
-
-        if (books.length === 0) {
-            document.getElementById('noBooksMessage').style.display = 'block';
-            grid.style.display = 'none';
-            list.style.display = 'none';
-        } else {
-            document.getElementById('noBooksMessage').style.display = 'none';
-            grid.innerHTML = '';
-            list.innerHTML = '';
-
-            if (currentView === 'card') {
-                grid.style.display = 'flex';
-                list.style.display = 'none';
-                books.forEach(book => {
-                    const bookCard = createBookCard(book);
-                    grid.appendChild(bookCard);
-                });
-            } else {
-                grid.style.display = 'none';
-                list.style.display = 'block';
-                books.forEach(book => {
-                    const bookItem = createBookListItem(book);
-                    list.appendChild(bookItem);
-                });
-            }
-        }
-        
-        countSpan.textContent = `Showing ${books.length} books`;
-    }
-    
-    function createBookCard(book) {
-        const col = document.createElement('div');
-        col.className = 'col-md-4 col-lg-3 col-xl-2';
-        
-        const hours = Math.floor(book.length_mins / 60);
-        const minutes = book.length_mins % 60;
-        const duration = book.length_mins ? `${hours}h ${minutes}m` : 'Unknown';
-        
-        col.innerHTML = `
-            <div class="card book-card" data-asin="${book.asin}">
-                <div class="status-overlay"></div>
-                <input class="form-check-input book-checkbox position-absolute top-0 start-0 m-2" type="checkbox" id="book_${book.asin}" data-asin="${book.asin}">
-                <img src="${book.cover_url || 'https://via.placeholder.com/150x200?text=No+Cover'}" 
-                     class="card-img-top book-cover" alt="${book.title}">
-                <div class="card-body">
-                    <h6 class="card-title">${book.title}</h6>
-                    <p class="card-text text-muted">${book.authors}</p>
-                </div>
-            </div>
-        `;
-        
-        const card = col.querySelector('.book-card');
-        card.addEventListener('click', () => {
-            const checkbox = card.querySelector('.book-checkbox');
-            checkbox.checked = !checkbox.checked;
-            toggleBookSelection(book.asin, checkbox.checked);
-        });
-        
-        return col;
-    }
-
-    function createBookListItem(book) {
-        const item = document.createElement('div');
-        item.className = 'list-group-item book-list-item';
-        item.dataset.asin = book.asin;
-
-        const hours = Math.floor(book.length_mins / 60);
-        const minutes = book.length_mins % 60;
-        const duration = book.length_mins ? `${hours}h ${minutes}m` : 'Unknown';
-
-        // Check if book is in library
-        const inLibrary = libraryStateAsins.has(book.asin);
-        const libraryBadge = inLibrary
-            ? '<span class="badge bg-success ms-2"><i class="fas fa-check"></i> In Library</span>'
-            : '';
-
-        item.innerHTML = `
-            <input class="form-check-input book-checkbox me-3" type="checkbox" id="list_book_${book.asin}" data-asin="${book.asin}">
-            <img src="${book.cover_url || 'https://via.placeholder.com/50x75?text=No+Cover'}" class="book-cover" alt="${book.title}">
-            <div class="book-info">
-                <h6 class="mb-1">${book.title} ${libraryBadge}</h6>
-                <p class="mb-1 text-muted">${book.authors}</p>
-                <small class="text-muted">Length: ${duration}</small>
-                <div class="progress-container mt-2" style="display: none;">
-                    <div class="progress" style="height: 6px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated"
-                             role="progressbar" style="width: 0%"></div>
-                    </div>
-                    <small class="progress-text text-muted mt-1"></small>
-                </div>
-            </div>
-            <div class="status-text"></div>
-        `;
-
-        item.addEventListener('click', (e) => {
-            if (e.target.type !== 'checkbox' && !e.target.classList.contains('badge')) {
-                const checkbox = item.querySelector('.book-checkbox');
-                checkbox.checked = !checkbox.checked;
-                toggleBookSelection(book.asin, checkbox.checked);
-            }
-        });
-
-        const checkbox = item.querySelector('.book-checkbox');
-        checkbox.addEventListener('change', function() {
-            toggleBookSelection(book.asin, this.checked);
-        });
-
-        return item;
-    }
-    
-    function toggleBookSelection(asin, selected) {
-        const card = document.querySelector(`.book-card[data-asin="${asin}"]`);
-        const listItem = document.querySelector(`.book-list-item[data-asin="${asin}"]`);
-
-        if (selected) {
-            selectedBooks.add(asin);
-            if (card) {
-                card.classList.add('book-selected');
-                const checkbox = card.querySelector('.book-checkbox');
-                if (checkbox) checkbox.checked = true;
-            }
-            if (listItem) {
-                listItem.classList.add('book-selected');
-                const checkbox = listItem.querySelector('.book-checkbox');
-                if (checkbox) checkbox.checked = true;
-            }
-        } else {
-            selectedBooks.delete(asin);
-            if (card) {
-                card.classList.remove('book-selected');
-                const checkbox = card.querySelector('.book-checkbox');
-                if (checkbox) checkbox.checked = false;
-            }
-            if (listItem) {
-                listItem.classList.remove('book-selected');
-                const checkbox = listItem.querySelector('.book-checkbox');
-                if (checkbox) checkbox.checked = false;
-            }
-        }
-
-        updateDownloadButton();
-    }
-    
-    function updateDownloadButton() {
-        const downloadBtn = document.getElementById('downloadBtn');
-        const count = selectedBooks.size;
-        
-        if (count > 0) {
-            downloadBtn.innerHTML = `<i class="fas fa-download"></i> Download ${count} Book${count > 1 ? 's' : ''}`;
-            downloadBtn.style.display = 'block';
-        } else {
-            downloadBtn.style.display = 'none';
-        }
-    }
-    
-    function clearSelection() {
-        selectedBooks.clear();
-        document.querySelectorAll('.book-checkbox').forEach(checkbox => {
-            checkbox.checked = false;
-        });
-        document.querySelectorAll('.book-card, .book-list-item').forEach(item => {
-            item.classList.remove('book-selected');
-        });
-        updateDownloadButton();
-    }
-
-    function selectAllVisible() {
-        // Select all currently displayed books
-        currentlyDisplayedBooks.forEach(book => {
-            toggleBookSelection(book.asin, true);
-        });
-        updateDownloadButton();
-        showAlert(`Selected ${currentlyDisplayedBooks.length} visible books`, 'info');
-    }
-
-    function searchBooks(query) {
-        applyFilters(); // Use unified filter system
-    }
-
-    function populateFilterDropdowns(books) {
-        // Get unique values for each filter, excluding empty values
-        const authors = [...new Set(books.map(b => b.authors).filter(v => v))].sort();
-        const languages = [...new Set(books.map(b => b.language).filter(v => v && v !== 'Unknown'))].sort();
-        const narrators = [...new Set(books.map(b => b.narrator).filter(v => v))].sort();
-        const series = [...new Set(books.map(b => b.series).filter(v => v))].sort();
-        const publishers = [...new Set(books.map(b => b.publisher).filter(v => v))].sort();
-        const years = [...new Set(books.map(b => b.release_year).filter(v => v))].sort().reverse(); // Most recent first
-
-        // Populate author filter
-        const authorSelect = document.getElementById('authorFilter');
-        const currentAuthor = authorSelect.value;
-        authorSelect.innerHTML = '<option value="">All Authors</option>';
-        authors.forEach(author => {
-            const option = document.createElement('option');
-            option.value = author;
-            option.textContent = author;
-            authorSelect.appendChild(option);
-        });
-        if (currentAuthor) authorSelect.value = currentAuthor;
-
-        // Populate language filter
-        const languageSelect = document.getElementById('languageFilter');
-        const currentLanguage = languageSelect.value;
-        languageSelect.innerHTML = '<option value="">All Languages</option>';
-        languages.forEach(lang => {
-            const option = document.createElement('option');
-            option.value = lang;
-            option.textContent = lang;
-            languageSelect.appendChild(option);
-        });
-        if (currentLanguage) languageSelect.value = currentLanguage;
-
-        // Populate narrator filter
-        const narratorSelect = document.getElementById('narratorFilter');
-        const currentNarrator = narratorSelect.value;
-        narratorSelect.innerHTML = '<option value="">All Narrators</option>';
-        narrators.forEach(narrator => {
-            const option = document.createElement('option');
-            option.value = narrator;
-            option.textContent = narrator;
-            narratorSelect.appendChild(option);
-        });
-        if (currentNarrator) narratorSelect.value = currentNarrator;
-
-        // Populate series filter
-        const seriesSelect = document.getElementById('seriesFilter');
-        const currentSeries = seriesSelect.value;
-        seriesSelect.innerHTML = '<option value="">All Series</option>';
-        series.forEach(s => {
-            const option = document.createElement('option');
-            option.value = s;
-            option.textContent = s;
-            seriesSelect.appendChild(option);
-        });
-        if (currentSeries) seriesSelect.value = currentSeries;
-
-        // Populate publisher filter
-        const publisherSelect = document.getElementById('publisherFilter');
-        const currentPublisher = publisherSelect.value;
-        publisherSelect.innerHTML = '<option value="">All Publishers</option>';
-        publishers.forEach(pub => {
-            const option = document.createElement('option');
-            option.value = pub;
-            option.textContent = pub;
-            publisherSelect.appendChild(option);
-        });
-        if (currentPublisher) publisherSelect.value = currentPublisher;
-
-        // Populate year filter
-        const yearSelect = document.getElementById('releaseYearFilter');
-        const currentYear = yearSelect.value;
-        yearSelect.innerHTML = '<option value="">All Years</option>';
-        years.forEach(year => {
-            const option = document.createElement('option');
-            option.value = year;
-            option.textContent = year;
-            yearSelect.appendChild(option);
-        });
-        if (currentYear) yearSelect.value = currentYear;
-    }
-
-    function applyFilters() {
-        let filtered = library;
-
-        // Apply search filter
-        const searchQuery = document.getElementById('searchInput').value;
-        if (searchQuery.trim()) {
-            filtered = filtered.filter(book =>
-                book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                book.authors.toLowerCase().includes(searchQuery.toLowerCase())
-            );
-        }
-
-        // Apply author filter
-        const author = document.getElementById('authorFilter').value;
-        if (author) {
-            filtered = filtered.filter(book => book.authors === author);
-        }
-
-        // Apply language filter
-        const language = document.getElementById('languageFilter').value;
-        if (language) {
-            filtered = filtered.filter(book => book.language === language);
-        }
-
-        // Apply narrator filter
-        const narrator = document.getElementById('narratorFilter').value;
-        if (narrator) {
-            filtered = filtered.filter(book => book.narrator === narrator);
-        }
-
-        // Apply series filter
-        const series = document.getElementById('seriesFilter').value;
-        if (series) {
-            filtered = filtered.filter(book => book.series === series);
-        }
-
-        // Apply publisher filter
-        const publisher = document.getElementById('publisherFilter').value;
-        if (publisher) {
-            filtered = filtered.filter(book => book.publisher === publisher);
-        }
-
-        // Apply release year filter
-        const releaseYear = document.getElementById('releaseYearFilter').value;
-        if (releaseYear) {
-            filtered = filtered.filter(book => book.release_year === releaseYear);
-        }
-
-        // Apply hide downloaded books filter
-        const hideDownloaded = document.getElementById('hideDownloadedFilter').checked;
-        if (hideDownloaded) {
-            filtered = filtered.filter(book => !libraryStateAsins.has(book.asin));
-        }
-
-        // Apply library comparison filter if active
-        if (currentFilter !== 'all' && libraryComparison) {
-            if (currentFilter === 'missing') {
-                const localAsins = new Set(libraryComparison.local_books.map(b => b.asin));
-                filtered = filtered.filter(book => !localAsins.has(book.asin));
-            } else if (currentFilter === 'available') {
-                const localAsins = new Set(libraryComparison.local_books.map(b => b.asin));
-                filtered = filtered.filter(book => localAsins.has(book.asin));
-            }
-        }
-
-        // Update filter status display
-        updateFilterStatus(filtered.length);
-
-        // Display filtered results
-        displayLibrary(filtered);
-    }
-
-    function updateFilterStatus(filteredCount) {
-        const activeFilters = [];
-
-        if (document.getElementById('authorFilter').value) activeFilters.push('Author');
-        if (document.getElementById('languageFilter').value) activeFilters.push('Language');
-        if (document.getElementById('narratorFilter').value) activeFilters.push('Narrator');
-        if (document.getElementById('seriesFilter').value) activeFilters.push('Series');
-        if (document.getElementById('publisherFilter').value) activeFilters.push('Publisher');
-        if (document.getElementById('releaseYearFilter').value) activeFilters.push('Year');
-        if (document.getElementById('hideDownloadedFilter').checked) activeFilters.push('Hide Downloaded');
-        if (document.getElementById('searchInput').value.trim()) activeFilters.push('Search');
-
-        const statusRow = document.getElementById('filterStatusRow');
-        const statusText = document.getElementById('filterStatus');
-
-        if (activeFilters.length > 0) {
-            statusRow.style.display = 'block';
-            const totalBooks = library.length;
-            statusText.innerHTML = `<i class="fas fa-info-circle"></i> Showing <strong>${filteredCount}</strong> of <strong>${totalBooks}</strong> books | Active filters: <strong>${activeFilters.join(', ')}</strong>`;
-        } else {
-            statusRow.style.display = 'none';
-        }
-    }
-
-    function clearAllFilters() {
-        document.getElementById('authorFilter').value = '';
-        document.getElementById('languageFilter').value = '';
-        document.getElementById('narratorFilter').value = '';
-        document.getElementById('seriesFilter').value = '';
-        document.getElementById('publisherFilter').value = '';
-        document.getElementById('releaseYearFilter').value = '';
-        document.getElementById('hideDownloadedFilter').checked = false;
-        document.getElementById('searchInput').value = '';
-        applyFilters();
-    }
-
-    async function downloadSelectedBooks() {
-        if (selectedBooks.size === 0) {
-            showAlert('Please select books to download', 'warning');
-            return;
-        }
-
-        const cleanupAax = document.getElementById('cleanupAax').checked;
-        const libraryName = document.getElementById('downloadLibrarySelect').value;
-
-        if (!libraryName) {
-            showAlert('Please select a library to download to', 'warning');
-            return;
-        }
-
-        const downloadBtn = document.getElementById('downloadBtn');
-        const bookCount = selectedBooks.size;
-        const originalContent = downloadBtn.innerHTML;
-        
-        // Add loading animation to button
-        downloadBtn.disabled = true;
-        downloadBtn.innerHTML = `
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Adding to queue...
-        `;
-        
-        // Add animation class
-        downloadBtn.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-            downloadBtn.style.transform = 'scale(1)';
-        }, 150);
-        
-        // Reset button after 3 seconds regardless of API response
-        setTimeout(() => {
-            downloadBtn.disabled = false;
-            downloadBtn.innerHTML = originalContent;
-        }, 3000);
-
-        // Start SSE-based progress tracking immediately before making the download request
-        startProgressTracking();
-
-        // Fire and forget the API call - don't wait for it
-        apiCall('/api/download/books', {
-            method: 'POST',
-            body: JSON.stringify({
-                selected_asins: Array.from(selectedBooks),
-                cleanup_aax: cleanupAax,
-                library_name: libraryName
-            })
-        }).then(() => {
-            // Show success notification at bottom
-            showBottomNotification(
-                `${bookCount} book${bookCount > 1 ? 's' : ''} added to download queue! <a href="/downloads" class="text-white text-decoration-underline ms-2">View Progress →</a>`,
-                'success',
-                8000
-            );
-        }).catch(error => {
-            showBottomNotification('Download failed: ' + error.message, 'error', 5000);
-            // Stop progress tracking if download failed to start
-            stopProgressTracking();
-        });
-    }
-
-    function startProgressTracking() {
-        // Stop any existing progress tracking
-        stopProgressTracking();
-        
-        // Create Server-Sent Events connection
-        progressEventSource = new EventSource('/api/download/progress-stream');
-        
-        progressEventSource.onmessage = function(event) {
-            try {
-                const progressData = JSON.parse(event.data);
-                
-                // Check for errors
-                if (progressData.error) {
-                    console.error('Progress tracking error:', progressData.error);
-                    showAlert('Progress tracking error: ' + progressData.error, 'warning');
-                    return;
-                }
-                
-                // Update progress for all books
-                if (progressData && typeof progressData === 'object') {
-                    for (const [asin, progress] of Object.entries(progressData)) {
-                        updateBookProgress(asin, progress);
-                    }
-                }
-                
-            } catch (error) {
-                console.error('Failed to parse progress data:', error);
-            }
-        };
-        
-        progressEventSource.onerror = function(event) {
-            console.error('EventSource failed:', event);
-            // EventSource will automatically try to reconnect
-        };
-        
-        progressEventSource.onopen = function(event) {
-            console.log('Progress tracking connected');
-        };
-    }
-    
-    function stopProgressTracking() {
-        if (progressEventSource) {
-            progressEventSource.close();
-            progressEventSource = null;
-            console.log('Progress tracking stopped');
-        }
-    }
-
-    function updateBookProgress(asin, progressInfo) {
-        const card = document.querySelector(`.book-card[data-asin="${asin}"]`);
-        const listItem = document.querySelector(`.book-list-item[data-asin="${asin}"]`);
-
-        if (!card && !listItem) return;
-
-        console.log(`Updating ${asin}: ${progressInfo.state} - ${progressInfo.progress_percent}%`);
-
-        let statusText = '';
-        let progressPercent = progressInfo.progress_percent || 0;
-
-        switch (progressInfo.state) {
-            case 'pending':
-                statusText = 'Pending...';
-                break;
-            case 'license_requested':
-                statusText = 'Requesting license...';
-                break;
-            case 'license_granted':
-                statusText = 'License granted';
-                break;
-            case 'downloading':
-                if (progressInfo.total_bytes && progressInfo.downloaded_bytes) {
-                    const mbDownloaded = (progressInfo.downloaded_bytes / 1024 / 1024).toFixed(1);
-                    const mbTotal = (progressInfo.total_bytes / 1024 / 1024).toFixed(1);
-                    statusText = `${Math.round(progressPercent)}% (${mbDownloaded}/${mbTotal} MB)`;
-                } else {
-                    statusText = 'Downloading...';
-                }
-                break;
-            case 'download_complete':
-                statusText = 'Download complete';
-                break;
-            case 'decrypting':
-                statusText = 'Converting...';
-                break;
-            case 'converted':
-                statusText = '✅ Complete';
-                // Refresh library state when download completes to show badge
-                loadLibraryState().then(() => {
-                    if (library.length > 0) {
-                        displayLibrary(library);
-                    }
-                });
-                break;
-            case 'error':
-                statusText = `❌ Error`;
-                break;
-            default:
-                statusText = progressInfo.state;
-        }
-
-        // Update card view - simple status overlay
-        if (card) {
-            const overlay = card.querySelector('.status-overlay');
-            if (progressInfo.state === 'converted') {
-                overlay.style.display = 'none';
-            } else {
-                overlay.textContent = statusText;
-                overlay.style.display = 'flex';
-            }
-        }
-
-        // Update list view
-        if (listItem) {
-            const statusEl = listItem.querySelector('.status-text');
-            statusEl.textContent = statusText;
-        }
-    }
-    
-    function showLoadingSpinner(text) {
-        document.getElementById('loadingSpinner').style.display = 'block';
-        document.getElementById('loadingText').textContent = text;
-        document.getElementById('libraryGrid').style.display = 'none';
-        document.getElementById('libraryList').style.display = 'none';
-    }
-    
-    function hideLoadingSpinner() {
-        document.getElementById('loadingSpinner').style.display = 'none';
-        if (currentView === 'card') {
-            document.getElementById('libraryGrid').style.display = 'flex';
-        } else {
-            document.getElementById('libraryList').style.display = 'block';
-        }
-    }
-    
-    // Local library functions
-    async function setLibraryPath() {
-        const path = document.getElementById('libraryPath').value.trim();
-        if (!path) {
-            showAlert('Please enter a library path', 'warning');
-            return;
-        }
-        
-        try {
-            const result = await apiCall('/api/library/set-path', {
-                method: 'POST',
-                body: JSON.stringify({ library_path: path })
-            });
-            
-            showAlert(result.message, 'success');
-        } catch (error) {
-            showAlert('Failed to set library path: ' + error.message, 'danger');
-        }
-    }
-    
-    async function scanLocalLibrary() {
-        const path = document.getElementById('libraryPath').value.trim();
-        if (!path) {
-            showAlert('Please set a library path first', 'warning');
-            return;
-        }
-        
-        const btn = document.getElementById('scanLocalBtn');
-        btn.setAttribute('data-original-text', btn.innerHTML);
-        showLoading(btn, true);
-        
-        try {
-            const result = await apiCall('/api/library/scan-local', {
-                method: 'POST',
-                body: JSON.stringify({ library_path: path })
-            });
-            
-            // Store library information
-            localLibrary = result.books || [];
-            localLibraryId = result.library_id;
-            currentLibraryPath = result.library_path;
-            
-            const message = result.cached ? 
-                `Loaded ${result.book_count} books from cached library (last scanned: ${new Date(result.last_scanned).toLocaleDateString()})` :
-                `Scanned ${result.book_count} books from local library`;
-            
-            showAlert(message, 'success');
-            
-            // Update stats if available
-            if (result.stats) {
-                updateLibraryStats(result.stats);
-            }
-            
-            // Show compare button if we have both libraries
-            if (library.length > 0) {
-                document.getElementById('compareLibrariesBtn').style.display = 'block';
-            }
-            
-        } catch (error) {
-            showAlert('Failed to scan library: ' + error.message, 'danger');
-        } finally {
-            showLoading(btn, false);
-        }
-    }
-    
-    async function compareLibraries() {
-        if (library.length === 0) {
-            showAlert('Please fetch your Audible library first', 'warning');
-            return;
-        }
-        
-        if (!localLibraryId) {
-            showAlert('Please scan your local library first', 'warning');
-            return;
-        }
-        
-        const btn = document.getElementById('compareLibrariesBtn');
-        btn.setAttribute('data-original-text', btn.innerHTML);
-        showLoading(btn, true);
-        
-        try {
-            const result = await apiCall('/api/library/compare', {
-                method: 'POST',
-                body: JSON.stringify({ 
-                    audible_library: library,
-                    library_id: localLibraryId,
-                    audible_account: currentAccount || 'unknown'
-                })
-            });
-            libraryComparison = result.comparison;
-            
-            // Show filter buttons
-            document.getElementById('missingBooksFilter').style.display = 'inline-block';
-            document.getElementById('availableBooksFilter').style.display = 'inline-block';
-            document.getElementById('showMissingBtn').style.display = 'block';
-            
-            // Update stats
-            updateLibraryStats(libraryComparison);
-            
-            // Re-display library with availability indicators
-            displayLibraryWithAvailability();
-            
-            showAlert(`Found ${libraryComparison.missing_count} missing books and ${libraryComparison.available_count} available locally`, 'info');
-            
-        } catch (error) {
-            showAlert('Failed to compare libraries: ' + error.message, 'danger');
-        } finally {
-            showLoading(btn, false);
-        }
-    }
-    
-    function toggleFilter(filter) {
-        currentFilter = filter;
-        
-        // Update active filter button
-        document.querySelectorAll('.library-filter').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
-        
-        // Filter and display books
-        let booksToShow = library;
-        
-        if (libraryComparison) {
-            switch (filter) {
-                case 'missing':
-                    booksToShow = libraryComparison.missing_from_local;
-                    break;
-                case 'available':
-                    booksToShow = libraryComparison.available_locally;
-                    break;
-                case 'all':
-                default:
-                    booksToShow = library;
-                    break;
-            }
-        }
-        
-        displayLibrary(booksToShow);
-    }
-    
-    function displayLibraryWithAvailability() {
-        if (!libraryComparison) {
-            displayLibrary(library);
-            return;
-        }
-        
-        // Add availability info to books
-        const missingAsins = new Set(libraryComparison.missing_from_local.map(book => book.asin));
-        const availableAsins = new Set(libraryComparison.available_locally.map(book => book.asin));
-        
-        const booksWithAvailability = library.map(book => ({
-            ...book,
-            availability: missingAsins.has(book.asin) ? 'missing' : (availableAsins.has(book.asin) ? 'available' : 'unknown')
-        }));
-        
-        displayLibrary(booksWithAvailability);
-    }
-    
-    function updateLibraryStats(stats) {
-        const statsEl = document.getElementById('libraryStats');
-        const statsTextEl = document.getElementById('statsText');
-        
-        if (stats) {
-            // Handle both comparison stats and library scan stats
-            if (stats.total_audible !== undefined) {
-                // This is comparison stats
-                const coverage = ((stats.available_count / stats.total_audible) * 100).toFixed(1);
-                statsTextEl.innerHTML = `
-                    <div>Audible: ${stats.total_audible} books</div>
-                    <div>Local: ${stats.total_local} books</div>
-                    <div>Missing: ${stats.missing_count} books</div>
-                    <div>Coverage: ${coverage}%</div>
-                `;
-            } else {
-                // This is library scan stats
-                const sizeGB = stats.total_size_gb ? stats.total_size_gb.toFixed(2) : '0';
-                const avgHours = stats.avg_duration_hours ? stats.avg_duration_hours.toFixed(1) : '0';
-                const languageList = Object.entries(stats.languages || {})
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 3)
-                    .map(([lang, count]) => `${lang}: ${count}`)
-                    .join(', ');
-                
-                statsTextEl.innerHTML = `
-                    <div>Books: ${stats.total_books}</div>
-                    <div>Size: ${sizeGB} GB</div>
-                    <div>Avg Length: ${avgHours}h</div>
-                    ${languageList ? `<div>Languages: ${languageList}</div>` : ''}
-                `;
-            }
-            statsEl.style.display = 'block';
-        } else {
-            statsEl.style.display = 'none';
-        }
-    }
-    
-    // Override the original createBookCard to add availability indicators
-    function createBookCard(book) {
-        const col = document.createElement('div');
-        col.className = 'col-md-4 col-lg-3 col-xl-2';
-
-        const hours = Math.floor(book.length_mins / 60);
-        const minutes = book.length_mins % 60;
-        const duration = book.length_mins ? `${hours}h ${minutes}m` : 'Unknown';
-
-        // Check if book is in library
-        const inLibrary = libraryStateAsins.has(book.asin);
-
-        // Add availability class
-        let availabilityClass = '';
-        let availabilityIcon = '';
-
-        if (book.availability === 'missing') {
-            availabilityClass = 'book-missing';
-            availabilityIcon = '<i class="fas fa-exclamation-circle text-danger position-absolute top-0 end-0 m-2"></i>';
-        } else if (book.availability === 'available') {
-            availabilityClass = 'book-available';
-            availabilityIcon = '<i class="fas fa-check-circle text-success position-absolute top-0 end-0 m-2"></i>';
-        }
-
-        // Add library indicator badge (separate from availability icon)
-        const libraryBadge = inLibrary
-            ? '<span class="badge bg-success position-absolute bottom-0 end-0 m-2" style="z-index: 5;" title="In Library"><i class="fas fa-check"></i> In Library</span>'
-            : '';
-
-        col.innerHTML = `
-            <div class="card book-card ${availabilityClass}" data-asin="${book.asin}">
-                <div class="status-overlay"></div>
-                ${availabilityIcon}
-                <input class="form-check-input book-checkbox position-absolute top-0 start-0 m-2" type="checkbox" id="book_${book.asin}" data-asin="${book.asin}">
-                <img src="${book.cover_url || 'https://via.placeholder.com/150x200?text=No+Cover'}"
-                     class="card-img-top book-cover" alt="${book.title}">
-                ${libraryBadge}
-                <div class="card-body">
-                    <h6 class="card-title">${book.title}</h6>
-                    <p class="card-text text-muted">${book.authors}</p>
-                </div>
-            </div>
-        `;
-
-        const card = col.querySelector('.book-card');
-        card.addEventListener('click', (e) => {
-            if (e.target.classList.contains('fas') || e.target.classList.contains('badge')) return; // Don't select when clicking icons or badge
-            const checkbox = card.querySelector('.book-checkbox');
-            checkbox.checked = !checkbox.checked;
-            toggleBookSelection(book.asin, checkbox.checked);
-        });
-
-        return col;
-    }
-    
-    async function viewDebugLog(filename) {
-        if (!filename) {
-            showAlert('No debug file available', 'warning');
-            return;
-        }
-        
-        try {
-            const result = await apiCall(`/api/library/debug-log/${filename}`);
-            
-            if (result.success) {
-                showDebugModal(result.debug_data, filename);
-            } else {
-                showAlert('Failed to load debug file', 'danger');
-            }
-        } catch (error) {
-            showAlert('Error loading debug file: ' + error.message, 'danger');
-        }
-    }
-    
-    function showDebugModal(debugData, filename) {
-        // Create debug modal content
-        const logEntries = debugData.log_entries || [];
-        
-        // Find matching attempts for better overview
-        const matchingAttempts = logEntries.filter(entry => 
-            entry.message.includes('Processing Audible Book') || 
-            entry.message.includes('RESULT:')
-        );
-        
-        let debugHtml = `
-            <div class="debug-info">
-                <h5>Debug Log: ${filename}</h5>
-                <div class="mb-3">
-                    <strong>Comparison Settings:</strong><br>
-                    Match Threshold: ${debugData.match_threshold}<br>
-                    Author Threshold: ${debugData.author_threshold}<br>
-                    Total Log Entries: ${debugData.total_log_entries}
-                </div>
-                
-                <div class="debug-summary mb-3">
-                    <strong>Summary:</strong><br>
-        `;
-        
-        // Count results
-        const matchedCount = logEntries.filter(e => e.message === 'RESULT: MATCHED').length;
-        const notMatchedCount = logEntries.filter(e => e.message === 'RESULT: NOT MATCHED').length;
-        
-        debugHtml += `
-                    Matched: ${matchedCount}<br>
-                    Not Matched: ${notMatchedCount}<br>
-                    Total Processed: ${matchedCount + notMatchedCount}
-                </div>
-                
-                <div class="accordion" id="debugAccordion">
-        `;
-        
-        // Group entries by book processing
-        let currentBook = null;
-        let bookEntries = [];
-        let bookIndex = 0;
-        
-        for (const entry of logEntries) {
-            if (entry.message.includes('Processing Audible Book')) {
-                // Save previous book if exists
-                if (currentBook && bookEntries.length > 0) {
-                    debugHtml += createBookDebugSection(currentBook, bookEntries, bookIndex++);
-                }
-                
-                // Start new book
-                currentBook = entry;
-                bookEntries = [entry];
-            } else if (currentBook && (entry.message.includes('RESULT:') || entry.message.includes('Audible Book Details'))) {
-                bookEntries.push(entry);
-            }
-        }
-        
-        // Add last book
-        if (currentBook && bookEntries.length > 0) {
-            debugHtml += createBookDebugSection(currentBook, bookEntries, bookIndex);
-        }
-        
-        debugHtml += `
-                </div>
-                
-                <div class="mt-3">
-                    <button class="btn btn-secondary" onclick="downloadDebugFile('${filename}')">Download Full Log</button>
-                </div>
-            </div>
-        `;
-        
-        // Show in modal
-        const existingModal = document.getElementById('debugModal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-        
-        const modalHtml = `
-            <div class="modal fade" id="debugModal" tabindex="-1">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Matching Debug Information</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-                            ${debugHtml}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('debugModal'));
-        modal.show();
-    }
-    
-    function createBookDebugSection(bookEntry, entries, index) {
-        const bookData = bookEntry.data || {};
-        const resultEntry = entries.find(e => e.message.includes('RESULT:'));
-        const isMatched = resultEntry && resultEntry.message.includes('MATCHED');
-        
-        const panelClass = isMatched ? 'bg-success-subtle' : 'bg-danger-subtle';
-        const headerClass = isMatched ? 'text-success' : 'text-danger';
-        const resultText = isMatched ? '✅ MATCHED' : '❌ NOT MATCHED';
-        
-        let html = `
-            <div class="accordion-item">
-                <h2 class="accordion-header" id="heading${index}">
-                    <button class="accordion-button collapsed ${panelClass}" type="button" 
-                            data-bs-toggle="collapse" data-bs-target="#collapse${index}">
-                        <span class="${headerClass} fw-bold me-2">${resultText}</span>
-                        <span>${bookData.title || 'Unknown Title'} by ${bookData.authors || 'Unknown Author'}</span>
-                    </button>
-                </h2>
-                <div id="collapse${index}" class="accordion-collapse collapse" 
-                     data-bs-parent="#debugAccordion">
-                    <div class="accordion-body">
-        `;
-        
-        // Show book details and matching attempts
-        for (const entry of entries) {
-            if (entry.data) {
-                html += `<div class="mb-2"><strong>${entry.message}:</strong><br>`;
-                html += `<pre class="bg-light p-2 small">${JSON.stringify(entry.data, null, 2)}</pre></div>`;
-            }
-        }
-        
-        html += `
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        return html;
-    }
-    
-    async function downloadDebugFile(filename) {
-        window.open(`/api/library/debug-log/${filename}`, '_blank');
-    }
-    
-    // Add global function for modal cleanup
-    window.addEventListener('hidden.bs.modal', function(event) {
-        if (event.target.id === 'debugModal') {
-            event.target.remove();
-        }
-    });
-
-    // Library management - Listen for updates from settings panel (in base.html)
-    window.addEventListener('librariesUpdated', function(event) {
-        updateLibrarySelector(event.detail);
-    });
-
-    function updateLibrarySelector(libraries) {
-        const select = document.getElementById('downloadLibrarySelect');
-        const libraryKeys = Object.keys(libraries);
-        const downloadLibrarySelector = document.getElementById('downloadLibrarySelector');
-        const syncBtn = document.getElementById('syncLibraryBtn');
-        
-        // Store current selection
-        const currentSelection = select.value;
-
-        if (libraryKeys.length === 0) {
-            select.innerHTML = '<option value="">No libraries configured</option>';
-            select.disabled = true;
-            if (syncBtn) syncBtn.disabled = true;
-            
-            // Hide download library selector if no libraries
-            if (downloadLibrarySelector) {
-                downloadLibrarySelector.style.display = 'none';
-            }
-        } else {
-            select.innerHTML = '<option value="">Select a library...</option>';
-            select.disabled = false;
-            if (syncBtn) syncBtn.disabled = false;
-
-            for (const name of libraryKeys) {
-                const option = document.createElement('option');
-                option.value = name;
-                option.textContent = name;
-                select.appendChild(option);
-            }
-
-            // Restore previous selection if it still exists, otherwise auto-select if only one library
-            if (currentSelection && libraryKeys.includes(currentSelection)) {
-                select.value = currentSelection;
-            } else if (libraryKeys.length === 1) {
-                select.value = libraryKeys[0];
-            }
-            
-            // Show download library selector on main page if authenticated
-            if (currentAccount && downloadLibrarySelector) {
-                downloadLibrarySelector.style.display = 'flex';
-            }
-        }
-    }
-
-    // addLibrary and deleteLibrary are now handled in base.html
-
-    async function syncLibrary() {
-        const librarySelect = document.getElementById('downloadLibrarySelect');
-        const libraryName = librarySelect.value;
-
-        if (!libraryName) {
-            showBottomNotification('Please select a library to sync', 'warning');
-            return;
-        }
-
-        const syncBtn = document.getElementById('syncLibraryBtn');
-        const originalHTML = syncBtn.innerHTML;
-        const originalTitle = syncBtn.title;
-
-        try {
-            // Show loading state with animation
-            syncBtn.disabled = true;
-            syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            syncBtn.title = 'Syncing...';
-            
-            // Add visual feedback
-            syncBtn.classList.add('btn-primary');
-            syncBtn.classList.remove('btn-outline-primary');
-
-            const result = await apiCall('/api/library/sync', {
-                method: 'POST',
-                body: JSON.stringify({
-                    library_name: libraryName
-                })
-            });
-
-            if (result.success) {
-                const stats = result.stats;
-                
-                // Show success feedback on button temporarily
-                syncBtn.innerHTML = '<i class="fas fa-check"></i>';
-                syncBtn.classList.remove('btn-primary');
-                syncBtn.classList.add('btn-success');
-                
-                // Show bottom notification bar with results
-                showBottomNotification(
-                    `<strong>Library "${libraryName}" synced successfully!</strong> ` +
-                    `Scanned ${stats.files_scanned} files, found ${stats.asins_found} books with ASINs. ` +
-                    `Added ${stats.entries_added}, updated ${stats.entries_updated}.`,
-                    'success',
-                    8000  // Show for 8 seconds
-                );
-
-                // Refresh library state and re-display library with updated indicators
-                await loadLibraryState();
-                if (library.length > 0) {
-                    displayLibrary(library);
-                }
-            } else {
-                showBottomNotification('Sync completed with warnings', 'warning', 6000);
-            }
-
-        } catch (error) {
-            // Show error feedback on button temporarily
-            syncBtn.innerHTML = '<i class="fas fa-times"></i>';
-            syncBtn.classList.remove('btn-primary');
-            syncBtn.classList.add('btn-danger');
-            
-            // Show error in bottom notification bar
-            showBottomNotification(
-                `<strong>Failed to sync library:</strong> ${error.message}`,
-                'error',
-                8000
-            );
-        } finally {
-            // Restore button state after a short delay
-            setTimeout(() => {
-                syncBtn.disabled = false;
-                syncBtn.innerHTML = originalHTML;
-                syncBtn.title = originalTitle;
-                syncBtn.classList.remove('btn-primary', 'btn-success', 'btn-danger');
-                syncBtn.classList.add('btn-outline-primary');
-            }, 2000);
-        }
-    }
-
-    // Naming Pattern Settings and other settings functions are now in base.html
-    
-    // Page-specific initialization
-    document.addEventListener('DOMContentLoaded', function() {
-        checkForWelcomeMessage();
-        
-        // Initial load of libraries for this page's library selector
-        apiCall('/api/libraries').then(libraries => {
-            updateLibrarySelector(libraries);
-        }).catch(error => {
-            console.error('Failed to load libraries:', error);
-        });
-    });
-
-    // All settings-related modal functions are now in base.html
-</script>
+<script src="{{ url_for('static', filename='js/library.js') }}"></script>
+<script src="{{ url_for('static', filename='js/onboarding.js') }}"></script>
 {% endblock %}

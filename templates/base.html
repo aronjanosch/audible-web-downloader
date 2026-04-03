@@ -4,1606 +4,307 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}Audible Book Downloader{% endblock %}</title>
-    
-    <!-- Bootstrap CSS -->
+    <title>{% block title %}Audible Downloader{% endblock %}</title>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
-    <style>
-        :root {
-            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --primary-color: #667eea;
-            --primary-dark: #5a6fd8;
-        }
-        
-        body {
-            background-color: #f8f9fa;
-        }
-        
-        /* Top Navigation Bar */
-        .top-navbar {
-            background: white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            padding: 1rem 0;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-        }
-        
-        .navbar-brand {
-            font-weight: 700;
-            font-size: 1.5rem;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .account-selector-group {
-            min-width: 250px;
-        }
-        
-        .account-selector {
-            min-width: 200px;
-        }
-        
-        .auth-status-badge {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 12px;
-        }
-        
-        /* Book Cards */
-        .book-card {
-            transition: transform 0.2s, box-shadow 0.2s;
-            height: 100%;
-            border-radius: 12px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .book-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-        }
-        
-        .book-cover {
-            height: 200px;
-            object-fit: cover;
-            width: 100%;
-        }
-        
-        .book-selected {
-            border: 3px solid #28a745 !important;
-            box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2);
-        }
-        
-        /* Status Overlay */
-        .status-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
-            color: white;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: bold;
-            text-align: center;
-            z-index: 10;
-        }
-        
-        /* Buttons */
-        .btn-primary {
-            background: var(--primary-gradient);
-            border: none;
-            font-weight: 600;
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
-            transform: translateY(-1px);
-        }
-        
-        .btn-floating-action {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            z-index: 999;
-            padding: 1rem 2rem;
-            font-size: 1.1rem;
-            border-radius: 50px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            animation: pulse 2s infinite;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        
-        .btn-floating-action:active {
-            transform: scale(0.95);
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
-            }
-            50% {
-                box-shadow: 0 4px 30px rgba(102, 126, 234, 0.6);
-            }
-        }
-        
-        /* View Switcher */
-        .view-switcher .btn {
-            background-color: #e9ecef;
-            border-color: #ced4da;
-            color: #495057;
-        }
-        
-        .view-switcher .btn.active {
-            background: var(--primary-gradient);
-            border-color: var(--primary-color);
-            color: white;
-        }
-        
-        /* List View */
-        .book-list-item {
-            display: flex;
-            align-items: center;
-            padding: 1rem;
-            border-bottom: 1px solid #dee2e6;
-            transition: background-color 0.2s;
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-        }
-        
-        .book-list-item:hover {
-            background-color: #f8f9fa;
-        }
-        
-        .book-list-item .book-cover {
-            width: 50px;
-            height: 75px;
-            margin-right: 1rem;
-            border-radius: 4px;
-        }
-        
-        .book-list-item .book-info {
-            flex-grow: 1;
-            margin-right: 15px;
-        }
-        
-        .book-list-item .status-text {
-            min-width: 150px;
-            text-align: right;
-            font-weight: bold;
-            font-size: 0.9rem;
-        }
-        
-        /* Library Availability */
-        .book-missing {
-            border: 2px solid #dc3545 !important;
-        }
-        
-        .book-available {
-            border: 2px solid #28a745 !important;
-        }
-        
-        .library-filter {
-            background: white;
-            border: 2px solid #dee2e6;
-            color: #495057;
-            margin-right: 0.5rem;
-            margin-bottom: 0.5rem;
-            border-radius: 20px;
-            padding: 0.5rem 1rem;
-            transition: all 0.2s;
-        }
-        
-        .library-filter:hover {
-            border-color: var(--primary-color);
-        }
-        
-        .library-filter.active {
-            background: var(--primary-gradient);
-            border-color: var(--primary-color);
-            color: white;
-        }
-        
-        /* Settings Panel */
-        .settings-offcanvas .offcanvas-body {
-            padding: 0;
-        }
-        
-        .settings-section {
-            padding: 1.5rem;
-            border-bottom: 1px solid #dee2e6;
-        }
-        
-        .settings-section:last-child {
-            border-bottom: none;
-        }
-        
-        .settings-section h6 {
-            font-weight: 700;
-            margin-bottom: 1rem;
-            color: #495057;
-        }
-        
-        /* Filter Bar */
-        .filter-bar {
-            background: white;
-            border-radius: 12px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-        
-        /* Progress */
-        .progress-container {
-            z-index: 11;
-        }
-        
-        .progress-text {
-            font-size: 0.7rem !important;
-        }
-        
-        /* Bottom Notification Bar */
-        .bottom-notification-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            z-index: 1050;
-            padding: 0.5rem 1rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            font-size: 0.875rem;
-            transform: translateY(100%);
-            transition: transform 0.3s ease-in-out;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .bottom-notification-bar.show {
-            transform: translateY(0);
-        }
-        
-        .bottom-notification-bar.success {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-        }
-        
-        .bottom-notification-bar.error {
-            background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%);
-        }
-        
-        .bottom-notification-bar.warning {
-            background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
-            color: #212529;
-        }
-        
-        .bottom-notification-bar .notification-content {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        .bottom-notification-bar .notification-text {
-            flex-grow: 1;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .bottom-notification-bar .close-btn {
-            background: none;
-            border: none;
-            color: inherit;
-            font-size: 1.25rem;
-            cursor: pointer;
-            padding: 0;
-            margin-left: 1rem;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
-        
-        .bottom-notification-bar .close-btn:hover {
-            opacity: 1;
-        }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .btn-floating-action {
-                bottom: 1rem;
-                right: 1rem;
-                padding: 0.8rem 1.5rem;
-                font-size: 1rem;
-            }
-            
-            .account-selector {
-                min-width: 150px;
-            }
-            
-            .bottom-notification-bar {
-                font-size: 0.75rem;
-                padding: 0.4rem 0.75rem;
-            }
-        }
-    </style>
-    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    {% if not hide_sidebar %}
-    <!-- Top Navigation Bar -->
-    <nav class="top-navbar">
-        <div class="container-fluid px-4">
-            <div class="d-flex align-items-center justify-content-between">
-                <!-- Logo and Brand -->
-                <div class="d-flex align-items-center">
-                    <h1 class="navbar-brand mb-0">
-                        <i class="fas fa-headphones"></i> Audible Downloader
-                    </h1>
-                </div>
-                
-                <!-- Account Selector and Actions -->
-                <div class="d-flex align-items-center gap-3">
-                    <!-- Account Selector with Add Button -->
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="input-group input-group-sm account-selector-group">
-                            <select class="form-select form-select-sm account-selector" id="accountSelect">
-                                <option value="">Select account...</option>
-                            </select>
-                            <button class="btn btn-outline-primary" type="button" id="addAccountBtn" title="Add Account">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                        <span id="authStatusIndicator" class="badge auth-status-badge bg-secondary" style="display: none;">
-                            <i class="fas fa-circle"></i> No Account
-                        </span>
-                    </div>
-                    
-                    <!-- Action Buttons -->
-                    <button id="authenticateBtn" class="btn btn-sm btn-warning" style="display: none;">
-                        <i class="fas fa-sign-in-alt"></i> Login
-                    </button>
-                    
-                    <button id="refreshLibraryBtn" class="btn btn-sm btn-info" style="display: none;">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                    
-                    <!-- Import Button -->
-                    <a href="/import" class="btn btn-sm btn-outline-success">
-                        <i class="fas fa-file-import"></i> Import
-                    </a>
-                    
-                    <!-- Downloads Button -->
-                    <a href="/downloads" class="btn btn-sm btn-outline-primary position-relative">
-                        <i class="fas fa-download"></i> Downloads
-                        <span id="activeDownloadBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: none;">
-                            0
-                        </span>
-                    </a>
-                    
-                    <!-- Settings Button -->
-                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#settingsPanel">
-                        <i class="fas fa-cog"></i> Settings
-                    </button>
-                </div>
+
+{% if not hide_sidebar %}
+<!-- ── Navbar ── -->
+<nav class="app-navbar">
+    <div class="navbar-inner">
+        <div class="navbar-left">
+            <a href="/" class="navbar-brand">
+                <i class="fas fa-headphones"></i>
+                <span> Audible Downloader</span>
+            </a>
+
+            <!-- Account selector -->
+            <div class="navbar-account">
+                <select class="form-select form-select-sm" id="accountSelect" style="min-width:160px;max-width:220px">
+                    <option value="">Select account…</option>
+                </select>
+                <span class="account-status-dot no-account" id="accountStatusDot" title="No account selected"></span>
             </div>
         </div>
-    </nav>
-    
-    <!-- Settings Offcanvas Panel -->
-    <div class="offcanvas offcanvas-end settings-offcanvas" tabindex="-1" id="settingsPanel" style="width: 400px;">
-        <div class="offcanvas-header">
-            <h5 class="offcanvas-title"><i class="fas fa-cog"></i> Settings</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+
+        <div class="navbar-right">
+            <!-- Download status pill -->
+            <a href="/downloads" class="download-pill" id="downloadNavPill" title="View downloads">
+                <i class="fas fa-download"></i>
+                <span id="downloadNavLabel">Downloads</span>
+                <span class="pill-count" style="display:none">0</span>
+            </a>
+
+            <!-- Import -->
+            <a href="/import" class="navbar-icon-btn{% if request.endpoint == 'main.importer' %} active{% endif %}" title="Import M4B files">
+                <i class="fas fa-file-import"></i>
+            </a>
+
+            <!-- Settings -->
+            <a href="/settings" class="navbar-icon-btn{% if request.endpoint == 'main.settings' %} active{% endif %}" title="Settings">
+                <i class="fas fa-cog"></i>
+            </a>
+
+            <!-- Add Account -->
+            <button class="navbar-icon-btn" id="addAccountBtn" title="Add Audible Account">
+                <i class="fas fa-user-plus"></i>
+            </button>
         </div>
-        <div class="offcanvas-body">
-            <!-- Account Management Section -->
-            <div class="settings-section">
-                <h6><i class="fas fa-user-circle"></i> Current Account</h6>
-                
-                <!-- Current Account Info -->
-                <div id="accountStatus" style="display: none;">
-                    <div id="authStatus" class="alert alert-warning mb-3">
-                        <i class="fas fa-exclamation-triangle"></i> Not authenticated
-                    </div>
-                    <button id="generateAccountInviteBtn" class="btn btn-sm btn-outline-primary w-100 mb-3" style="display: none;">
-                        <i class="fas fa-link"></i> Generate Invite Link
-                    </button>
-                    
-                    <!-- Delete Account Button -->
-                    <button class="btn btn-sm btn-outline-danger w-100" id="deleteAccountBtn">
-                        <i class="fas fa-trash"></i> Delete Current Account
-                    </button>
-                </div>
-                
-                <div id="noAccountSelected" class="text-muted small">
-                    <i class="fas fa-info-circle"></i> No account selected. Use the "+" button next to the account selector to add one.
-                </div>
+    </div>
+</nav>
+
+<!-- ── Download Status Bar ── -->
+<div class="download-status-bar" id="downloadStatusBar" aria-hidden="true">
+    <div class="download-bar-inner">
+        <div class="download-bar-stats">
+            <span class="download-bar-stat">Active <strong class="bar-active">0</strong></span>
+            <span class="download-bar-stat">Queued <strong class="bar-queued">0</strong></span>
+            <span class="download-bar-stat">Done <strong class="bar-completed">0</strong></span>
+        </div>
+        <div class="download-bar-progress">
+            <span class="download-bar-meta" id="barSpeedEta">
+                <span class="bar-speed"></span>
+                <span class="bar-eta ms-2"></span>
+            </span>
+        </div>
+        <a href="/downloads" class="download-bar-link">View All →</a>
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Content ── -->
+<main class="app-main">
+    {% block content %}{% endblock %}
+</main>
+
+<!-- ── Toast Container ── -->
+<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1060"></div>
+
+{% if not hide_sidebar %}
+<!-- ── Modals ── -->
+
+<!-- Add Account Modal -->
+<div class="modal fade" id="addAccountModal" tabindex="-1" aria-labelledby="addAccountModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addAccountModalLabel">
+                    <i class="fas fa-user-plus me-2"></i>Add Audible Account
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            
-            <!-- Libraries Management Section -->
-            <div class="settings-section">
-                <h6><i class="fas fa-folder"></i> Download Libraries</h6>
-                
-                <!-- Add New Library -->
-                <form id="addLibraryForm" class="mb-3">
-                    <label class="form-label small fw-bold">Add Library</label>
-                    <div class="mb-2">
-                        <input type="text" class="form-control form-control-sm"
-                               id="libraryName" placeholder="Library Name (e.g., English)" required>
+            <div class="modal-body">
+                <form id="addAccountForm">
+                    <div class="mb-3">
+                        <label for="accountName" class="form-label fw-semibold">Account Name</label>
+                        <input type="text" class="form-control" id="accountName"
+                               placeholder="e.g., My Account, Jane's Account" required>
+                        <div class="form-text">A name to identify this Audible account</div>
                     </div>
-                    <div class="mb-2">
-                        <input type="text" class="form-control form-control-sm"
-                               id="libraryPath" placeholder="Library Path" required>
+                    <div class="mb-3">
+                        <label for="accountRegion" class="form-label fw-semibold">Region</label>
+                        <select class="form-select" id="accountRegion" required>
+                            <option value="us">United States</option>
+                            <option value="uk">United Kingdom</option>
+                            <option value="de">Germany</option>
+                            <option value="fr">France</option>
+                            <option value="ca">Canada</option>
+                            <option value="it">Italy</option>
+                            <option value="au">Australia</option>
+                            <option value="in">India</option>
+                            <option value="jp">Japan</option>
+                            <option value="es">Spain</option>
+                            <option value="br">Brazil</option>
+                        </select>
+                        <div class="form-text">Your Audible marketplace region</div>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                        <i class="fas fa-plus"></i> Add Library
-                    </button>
                 </form>
-
-                <!-- Library List -->
-                <div id="configuredLibraryList" class="mb-3">
-                    <small class="text-muted">No libraries configured</small>
-                </div>
-                
-                <small class="text-muted d-block">
-                    <i class="fas fa-info-circle"></i> Use the <strong>sync button</strong> (next to library selector) to scan and update download history.
-                </small>
             </div>
-            
-            <!-- Download Settings Section -->
-            <div class="settings-section" id="downloadSettings">
-                <h6><i class="fas fa-download"></i> Download Settings</h6>
-
-                <!-- Naming Pattern Configuration -->
-                <div class="mb-3">
-                    <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="configureNamingBtn">
-                        <i class="fas fa-cog"></i> Configure Naming Pattern
-                    </button>
-                </div>
-
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="cleanupAax" checked>
-                    <label class="form-check-label small" for="cleanupAax">
-                        Clean up AAX files after conversion
-                    </label>
-                </div>
-            </div>
-
-            <!-- Family Sharing Section -->
-            <div class="settings-section">
-                <h6><i class="fas fa-users"></i> Family Sharing</h6>
-                <button type="button" class="btn btn-sm btn-outline-primary w-100" id="familySharingBtn">
-                    <i class="fas fa-link"></i> Manage Invitation Link
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="submitAddAccount">
+                    <i class="fas fa-plus me-1"></i>Add Account
                 </button>
             </div>
         </div>
     </div>
-    {% endif %}
+</div>
 
-    <!-- Main Content -->
-    <div class="container-fluid px-4 py-4">
-        {% block content %}{% endblock %}
-    </div>
-    
-    <!-- Floating Download Button -->
-    <button id="downloadBtn" class="btn btn-success btn-floating-action" style="display: none;">
-        <i class="fas fa-download"></i> Download Selected
-    </button>
-    
-    <!-- Bottom Notification Bar -->
-    <div id="bottomNotificationBar" class="bottom-notification-bar">
-        <div class="notification-content">
-            <div class="notification-text">
-                <i class="fas fa-info-circle"></i>
-                <span id="notificationMessage"></span>
+<!-- Account Invite Modal -->
+<div class="modal fade" id="accountInviteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-plus me-2"></i>Account Invitation Link
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <button type="button" class="close-btn" onclick="hideBottomNotification()">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Family Sharing Modal -->
-    <div class="modal fade" id="familySharingModal" tabindex="-1" aria-labelledby="familySharingModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="familySharingModalLabel">
-                        <i class="fas fa-users me-2"></i>Family Sharing - Invitation Link
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Share this link with the person who should authenticate account
+                    <strong id="accountInviteAccountName"></strong>.
                 </div>
-                <div class="modal-body">
-                    <!-- Information -->
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>How it works:</strong> Share this link with family members to let them add their Audible accounts to your app.
-                        They will complete the Audible login, and you'll have full control to download from their library.
-                    </div>
+                <table class="table table-sm mb-4">
+                    <tr><td><strong>Account</strong></td><td><code id="accountInviteDisplayName"></code></td></tr>
+                    <tr><td><strong>Region</strong></td><td><span id="accountInviteRegion"></span></td></tr>
+                    <tr><td><strong>Status</strong></td><td><span class="badge bg-warning">Pending Authentication</span></td></tr>
+                </table>
 
-                    <!-- Current Invitation Link -->
-                    <div class="mb-4">
-                        <label for="invitationLinkDisplay" class="form-label fw-bold">Current Invitation Link</label>
-                        <div class="input-group mb-2">
-                            <input type="text" class="form-control font-monospace" id="invitationLinkDisplay" readonly value="Loading...">
-                            <button class="btn btn-outline-primary" type="button" id="copyInviteLinkModalBtn" title="Copy to clipboard">
-                                <i class="fas fa-copy"></i> Copy
-                            </button>
-                        </div>
-                        <small class="text-muted">
-                            <i class="fas fa-lock me-1"></i>Keep this link private within your family
-                        </small>
-                    </div>
-
-                    <hr>
-
-                    <!-- Custom Token Setting -->
-                    <div class="mb-4">
-                        <label for="customInvitationToken" class="form-label fw-bold">Custom Invitation Token</label>
-                        <p class="small text-muted mb-2">
-                            Set a custom token to create a memorable invitation link. Leave empty to auto-generate a secure random token.
-                        </p>
-                        <div class="input-group mb-2">
-                            <input type="text" class="form-control font-monospace" id="customInvitationToken"
-                                   placeholder="e.g., my-family-2024 (only letters, numbers, hyphens, underscores)"
-                                   pattern="[a-zA-Z0-9_-]+">
-                            <button class="btn btn-primary" type="button" id="saveCustomTokenBtn">
-                                <i class="fas fa-save"></i> Set Token
-                            </button>
-                        </div>
-                        <small class="text-muted">
-                            <i class="fas fa-exclamation-triangle me-1"></i>
-                            <strong>Security Note:</strong> Custom tokens should be at least 16 characters long and hard to guess.
-                            Auto-generated tokens are more secure.
-                        </small>
-                    </div>
-
-                    <hr>
-
-                    <!-- Regenerate Token -->
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Generate New Random Token</label>
-                        <p class="small text-muted mb-2">
-                            Generate a new secure random token. This will invalidate the current invitation link.
-                        </p>
-                        <button type="button" class="btn btn-warning w-100" id="regenerateTokenModalBtn">
-                            <i class="fas fa-sync"></i> Generate New Random Token
+                <div id="accountInviteLinkSection" style="display:none">
+                    <label class="form-label fw-semibold">Invitation Link</label>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control font-monospace" id="accountInviteLinkDisplay" readonly>
+                        <button class="btn btn-outline-primary" type="button" id="copyAccountInviteLinkBtn">
+                            <i class="fas fa-copy"></i> Copy
                         </button>
                     </div>
-
-                    <!-- Status Message -->
-                    <div id="familySharingStatus" class="mt-3">
-                        <div class="alert d-none" id="familySharingStatusMessage" role="alert"></div>
-                    </div>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="revokeAccountInviteBtn">
+                        <i class="fas fa-times me-1"></i>Revoke Link
+                    </button>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Account Modal -->
-    <div class="modal fade" id="addAccountModal" tabindex="-1" aria-labelledby="addAccountModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addAccountModalLabel">
-                        <i class="fas fa-user-plus me-2"></i>Add Audible Account
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="addAccountForm">
-                        <div class="mb-3">
-                            <label for="accountName" class="form-label">Account Name</label>
-                            <input type="text" class="form-control" id="accountName" 
-                                   placeholder="e.g., My Account, John's Account" required>
-                            <small class="text-muted">Choose a name to identify this account</small>
-                        </div>
-                        <div class="mb-3">
-                            <label for="accountRegion" class="form-label">Region</label>
-                            <select class="form-select" id="accountRegion" required>
-                                <option value="us">United States</option>
-                                <option value="uk">United Kingdom</option>
-                                <option value="de">Germany</option>
-                                <option value="fr">France</option>
-                                <option value="ca">Canada</option>
-                                <option value="it">Italy</option>
-                                <option value="au">Australia</option>
-                                <option value="in">India</option>
-                                <option value="jp">Japan</option>
-                                <option value="es">Spain</option>
-                                <option value="br">Brazil</option>
-                            </select>
-                            <small class="text-muted">Select your Audible marketplace region</small>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="submitAddAccount">
-                        <i class="fas fa-plus"></i> Add Account
+                <div id="generateAccountInviteSection">
+                    <button type="button" class="btn btn-primary w-100" id="generateAccountInviteLinkBtn">
+                        <i class="fas fa-link me-1"></i>Generate Invitation Link
                     </button>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Account Invite Link Modal -->
-    <div class="modal fade" id="accountInviteModal" tabindex="-1" aria-labelledby="accountInviteModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="accountInviteModalLabel">
-                        <i class="fas fa-user-plus me-2"></i>Account Invitation Link
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Information -->
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>How it works:</strong> Share this link with the person who should authenticate this specific account.
-                        They will complete the Audible login for account <strong id="accountInviteAccountName"></strong>.
-                    </div>
-
-                    <!-- Account Details -->
-                    <div class="mb-4">
-                        <h6 class="fw-bold">Account Details</h6>
-                        <table class="table table-sm">
-                            <tr>
-                                <td><strong>Account Name:</strong></td>
-                                <td><code id="accountInviteDisplayName"></code></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Region:</strong></td>
-                                <td><span id="accountInviteRegion"></span></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Status:</strong></td>
-                                <td><span class="badge bg-warning" id="accountInviteStatus">Pending Authentication</span></td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    <!-- Invitation Link Display -->
-                    <div id="accountInviteLinkSection" style="display: none;">
-                        <label for="accountInviteLinkDisplay" class="form-label fw-bold">Invitation Link</label>
-                        <div class="input-group mb-2">
-                            <input type="text" class="form-control font-monospace" id="accountInviteLinkDisplay" readonly>
-                            <button class="btn btn-outline-primary" type="button" id="copyAccountInviteLinkBtn" title="Copy to clipboard">
-                                <i class="fas fa-copy"></i> Copy
-                            </button>
-                        </div>
-                        <small class="text-muted d-block mb-3">
-                            <i class="fas fa-lock me-1"></i>This link is specific to this account only
-                        </small>
-
-                        <button type="button" class="btn btn-outline-danger btn-sm w-100" id="revokeAccountInviteBtn">
-                            <i class="fas fa-times"></i> Revoke Invitation Link
-                        </button>
-                    </div>
-
-                    <!-- Generate Link Section -->
-                    <div id="generateAccountInviteSection">
-                        <button type="button" class="btn btn-primary w-100" id="generateAccountInviteLinkBtn">
-                            <i class="fas fa-link"></i> Generate Invitation Link
-                        </button>
-                    </div>
-
-                    <!-- Status Message -->
-                    <div id="accountInviteStatus" class="mt-3">
-                        <div class="alert d-none" id="accountInviteStatusMessage" role="alert"></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Naming Pattern Settings Modal -->
-    <div class="modal fade" id="namingPatternModal" tabindex="-1" aria-labelledby="namingPatternModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="namingPatternModalLabel">Configure Naming Pattern</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Preset Selection -->
-                    <div class="mb-3">
-                        <label for="namingPreset" class="form-label">Preset Templates</label>
-                        <select class="form-select" id="namingPreset">
-                            <option value="audiobookshelf">AudioBookshelf (Recommended)</option>
-                            <option value="flat">Flat Structure</option>
-                            <option value="author_title">Author/Title</option>
-                            <option value="series_focused">Series Focused</option>
-                            <option value="custom">Custom</option>
-                        </select>
-                        <small class="form-text text-muted" id="presetDescription">
-                            Organizes by Author/Series/Title folders with metadata in folder name
-                        </small>
-                    </div>
-
-                    <!-- Custom Pattern Input -->
-                    <div class="mb-3">
-                        <label for="customPattern" class="form-label">Custom Naming Pattern</label>
-                        <input type="text" class="form-control font-monospace" id="customPattern"
-                               placeholder="{{ '{Author}/{Series}/Vol. {Volume} - {Year} - {Title} {' }}{{ '{' }}{{ '{Narrator}' }}{{ '}' }}{{ '}.m4b' }}">
-                        <div class="form-text">
-                            <strong>Available Placeholders:</strong>
-                            <div class="row mt-2">
-                                <div class="col-md-6">
-                                    <ul class="small mb-0">
-                                        <li><code>{Author}</code> - Author name(s)</li>
-                                        <li><code>{Series}</code> - Series name</li>
-                                        <li><code>{Title}</code> - Book title only</li>
-                                        <li><code>{Year}</code> - Release year</li>
-                                        <li><code>{Volume}</code> - Series # (1, 2, 3...)</li>
-                                    </ul>
-                                </div>
-                                <div class="col-md-6">
-                                    <ul class="small mb-0">
-                                        <li><code>{Narrator}</code> - Narrator name(s)</li>
-                                        <li><code>{Publisher}</code> - Publisher name</li>
-                                        <li><code>{Language}</code> - Language code</li>
-                                        <li><code>{ASIN}</code> - Amazon ID</li>
-                                        <li>Pattern must end with <code>.m4b</code></li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Preview Section -->
-                    <div class="mb-3">
-                        <label class="form-label">Preview</label>
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <small class="font-monospace" id="patternPreview">
-                                    Edgar Allan Poe/Erzählungen 1/Vol. 1 - 2024 - Edgar Allan Poe: Erzählungen 1 {Edgar Allan Poe}.m4b
-                                </small>
-                            </div>
-                        </div>
-                        <small class="form-text text-muted">
-                            Example: "Vol. 1 - 2024 - Edgar Allan Poe: Erzählungen 1 {Edgar Allan Poe}.m4b"
-                        </small>
-                    </div>
-
-                    <!-- Validation Messages -->
-                    <div id="patternValidation" class="alert" style="display: none;"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveNamingPattern">Save Pattern</button>
-                </div>
+<!-- Family Sharing Modal -->
+<div class="modal fade" id="familySharingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-users me-2"></i>Family Sharing
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-        </div>
-    </div>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Main JavaScript -->
-    <script>
-        // Global variables
-        let currentAccount = null;
-        let library = [];
-        let selectedBooks = new Set();
-        
-        // Utility functions
-        function showAlert(message, type = 'info') {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-            alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.querySelector('.main-content').insertBefore(alertDiv, document.querySelector('.main-content').firstChild);
-            
-            // Auto-dismiss after 5 seconds
-            setTimeout(() => {
-                if (alertDiv.parentNode) {
-                    alertDiv.remove();
-                }
-            }, 5000);
-        }
-        
-        function showLoading(element, show = true) {
-            if (show) {
-                element.disabled = true;
-                element.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
-            } else {
-                element.disabled = false;
-                element.innerHTML = element.getAttribute('data-original-text') || element.innerHTML;
-            }
-        }
-        
-        // API functions
-        async function apiCall(url, options = {}) {
-            try {
-                // Get CSRF token from meta tag
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-
-                // Add CSRF token to headers for non-GET requests
-                const headers = {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                };
-
-                if (csrfToken && (!options.method || options.method !== 'GET')) {
-                    headers['X-CSRFToken'] = csrfToken;
-                }
-
-                const response = await fetch(url, {
-                    headers: headers,
-                    ...options
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'API request failed');
-                }
-
-                return data;
-            } catch (error) {
-                console.error('API Error:', error);
-                throw error;
-            }
-        }
-        
-        // Bottom notification bar functions
-        let notificationTimeout = null;
-        
-        function showBottomNotification(message, type = 'info', duration = 5000) {
-            const bar = document.getElementById('bottomNotificationBar');
-            const messageEl = document.getElementById('notificationMessage');
-            const icon = bar.querySelector('.notification-text i');
-            
-            // Clear any existing timeout
-            if (notificationTimeout) {
-                clearTimeout(notificationTimeout);
-            }
-            
-            // Set message
-            messageEl.innerHTML = message;
-            
-            // Set icon and remove old classes
-            bar.classList.remove('success', 'error', 'warning', 'info');
-            
-            // Add appropriate class and icon
-            if (type === 'success') {
-                bar.classList.add('success');
-                icon.className = 'fas fa-check-circle';
-            } else if (type === 'error') {
-                bar.classList.add('error');
-                icon.className = 'fas fa-exclamation-circle';
-            } else if (type === 'warning') {
-                bar.classList.add('warning');
-                icon.className = 'fas fa-exclamation-triangle';
-            } else {
-                icon.className = 'fas fa-info-circle';
-            }
-            
-            // Show the bar
-            bar.classList.add('show');
-            
-            // Auto-hide after duration
-            if (duration > 0) {
-                notificationTimeout = setTimeout(() => {
-                    hideBottomNotification();
-                }, duration);
-            }
-        }
-        
-        function hideBottomNotification() {
-            const bar = document.getElementById('bottomNotificationBar');
-            bar.classList.remove('show');
-            
-            if (notificationTimeout) {
-                clearTimeout(notificationTimeout);
-                notificationTimeout = null;
-            }
-        }
-        
-        // Update download badge
-        function updateDownloadBadge() {
-            fetch('/api/download/status')
-                .then(response => response.json())
-                .then(data => {
-                    const badge = document.getElementById('activeDownloadBadge');
-                    if (badge) {
-                        const activeCount = data.active_downloads || 0;
-                        if (activeCount > 0) {
-                            badge.textContent = activeCount;
-                            badge.style.display = 'inline';
-                        } else {
-                            badge.style.display = 'none';
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Failed to fetch download status:', error);
-                });
-        }
-        
-        // Load accounts and populate account selector
-        async function loadAccounts() {
-            try {
-                const accounts = await apiCall('/api/accounts');
-                updateAccountSelector(accounts);
-                
-                // Auto-select if only one account exists
-                const accountNames = Object.keys(accounts);
-                if (accountNames.length === 1) {
-                    const accountName = accountNames[0];
-                    const selector = document.getElementById('accountSelect');
-                    if (selector) {
-                        selector.value = accountName;
-                        // Trigger change event if page has selectAccount function
-                        if (typeof selectAccount === 'function') {
-                            selectAccount(accountName);
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to load accounts:', error);
-            }
-        }
-        
-        function updateAccountSelector(accounts) {
-            const select = document.getElementById('accountSelect');
-            if (!select) return;
-            
-            select.innerHTML = '<option value="">Select an account...</option>';
-            
-            Object.keys(accounts).forEach(accountName => {
-                const option = document.createElement('option');
-                option.value = accountName;
-                option.textContent = accountName;
-                option.dataset.region = accounts[accountName].region;
-                select.appendChild(option);
-            });
-        }
-        
-        // Base setupEventListeners (can be overridden by pages)
-        function setupEventListeners() {
-            // Account selection change handler (if needed by page)
-            const accountSelect = document.getElementById('accountSelect');
-            if (accountSelect && typeof selectAccount === 'function') {
-                accountSelect.addEventListener('change', function() {
-                    const accountName = this.value;
-                    if (accountName) {
-                        selectAccount(accountName);
-                    }
-                });
-            }
-            
-            // Pages can extend this function
-        }
-        
-    // Settings Panel Functions - Works on all pages
-    async function loadLibraries() {
-        try {
-            const libraries = await apiCall('/api/libraries');
-            updateLibraryListInSettings(libraries);
-            // Dispatch custom event so pages can update their own library selectors
-            window.dispatchEvent(new CustomEvent('librariesUpdated', { detail: libraries }));
-        } catch (error) {
-            console.error('Failed to load libraries:', error);
-        }
-    }
-
-    function updateLibraryListInSettings(libraries) {
-        const listContainer = document.getElementById('configuredLibraryList');
-        if (!listContainer) return;
-
-        if (Object.keys(libraries).length === 0) {
-            listContainer.innerHTML = '<small class="text-muted">No libraries configured</small>';
-            return;
-        }
-
-        listContainer.innerHTML = '';
-
-        for (const [name, library] of Object.entries(libraries)) {
-            const libraryItem = document.createElement('div');
-            libraryItem.className = 'card mb-2';
-            libraryItem.innerHTML = `
-                <div class="card-body p-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="flex-grow-1 me-2">
-                            <strong class="d-block">${name}</strong>
-                            <small class="text-muted text-truncate d-block" style="max-width: 200px;" title="${library.path}">${library.path}</small>
-                        </div>
-                        <button class="btn btn-sm btn-outline-danger delete-library-btn" data-library-name="${name}">
-                            <i class="fas fa-trash"></i>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Share this link with family members to let them add their Audible accounts.
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Invitation Link</label>
+                    <div class="input-group mb-1">
+                        <input type="text" class="form-control font-monospace" id="invitationLinkDisplay" readonly value="Loading…">
+                        <button class="btn btn-outline-primary" type="button" id="copyInviteLinkModalBtn">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                    <small class="text-muted"><i class="fas fa-lock me-1"></i>Keep this link private</small>
+                </div>
+                <hr>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Custom Token</label>
+                    <p class="text-muted small mb-2">Set a memorable token. Leave empty to use the auto-generated secure token.</p>
+                    <div class="input-group mb-1">
+                        <input type="text" class="form-control font-monospace" id="customInvitationToken"
+                               placeholder="e.g., my-family-2024" pattern="[a-zA-Z0-9_-]+">
+                        <button class="btn btn-primary" type="button" id="saveCustomTokenBtn">
+                            <i class="fas fa-save"></i> Set
                         </button>
                     </div>
                 </div>
-            `;
-            listContainer.appendChild(libraryItem);
-        }
+                <div>
+                    <label class="form-label fw-semibold">Generate New Token</label>
+                    <p class="text-muted small mb-2">Creates a new secure token — the current link will stop working.</p>
+                    <button type="button" class="btn btn-warning w-100" id="regenerateTokenModalBtn">
+                        <i class="fas fa-sync me-1"></i>Generate New Random Token
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Naming Pattern Modal -->
+<div class="modal fade" id="namingPatternModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-folder-tree me-2"></i>Configure Naming Pattern
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="namingPreset" class="form-label fw-semibold">Preset</label>
+                    <select class="form-select" id="namingPreset">
+                        <option value="audiobookshelf">Audiobookshelf (Recommended)</option>
+                        <option value="flat">Flat Structure</option>
+                        <option value="author_title">Author / Title</option>
+                        <option value="series_focused">Series Focused</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                    <div class="form-text" id="presetDescription">Organizes by Author/Series/Title folders</div>
+                </div>
+                <div class="mb-3">
+                    <label for="customPattern" class="form-label fw-semibold">Pattern</label>
+                    <input type="text" class="form-control font-monospace" id="customPattern">
+                    <div class="form-text mt-2">
+                        <strong>Placeholders:</strong>
+                        <code>{Author}</code> <code>{Series}</code> <code>{Title}</code>
+                        <code>{Year}</code> <code>{Volume}</code> <code>{Narrator}</code>
+                        <code>{Publisher}</code> <code>{Language}</code> <code>{ASIN}</code>
+                        &mdash; wrap optional parts in <code>[…]</code>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Preview</label>
+                    <div class="p-2 bg-light rounded border">
+                        <code class="small" id="patternPreview">…</code>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveNamingPattern">
+                    <i class="fas fa-save me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Core JS (load order matters — no circular deps) -->
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/state.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/accounts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/downloads.js') }}"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+
+{% block extra_js %}{% endblock %}
+
+<script>
+// ── Global init ──
+document.addEventListener('DOMContentLoaded', function() {
+    loadAccounts();
+});
+</script>
 
-        // Attach delete event listeners
-        listContainer.querySelectorAll('.delete-library-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                deleteLibraryFromSettings(this.dataset.libraryName);
-            });
-        });
-    }
-
-    async function addLibraryFromSettings() {
-        const libraryName = document.getElementById('libraryName').value.trim();
-        const libraryPath = document.getElementById('libraryPath').value.trim();
-
-        if (!libraryName || !libraryPath) {
-            showBottomNotification('Please enter both library name and path', 'warning');
-            return;
-        }
-
-        try {
-            await apiCall('/api/libraries', {
-                method: 'POST',
-                body: JSON.stringify({
-                    library_name: libraryName,
-                    library_path: libraryPath
-                })
-            });
-
-            showBottomNotification('Library added successfully!', 'success');
-            document.getElementById('addLibraryForm').reset();
-            
-            // Reload libraries to update settings panel and trigger update event
-            await loadLibraries();
-
-        } catch (error) {
-            showBottomNotification('Failed to add library: ' + error.message, 'error');
-        }
-    }
-
-    async function deleteLibraryFromSettings(libraryName) {
-        if (!confirm(`Are you sure you want to remove the library "${libraryName}"?\n\nNote: This only removes it from the app, your files will not be deleted.`)) {
-            return;
-        }
-
-        try {
-            await apiCall(`/api/libraries/${libraryName}`, {
-                method: 'DELETE'
-            });
-
-            showBottomNotification('Library removed successfully', 'success');
-            
-            // Reload libraries to update settings panel and trigger update event
-            await loadLibraries();
-
-        } catch (error) {
-            showBottomNotification('Failed to remove library: ' + error.message, 'error');
-        }
-    }
-
-    // Naming Pattern Settings
-    let namingSettings = null;
-    let namingPatternModal = null;
-
-    async function loadNamingSettings() {
-        try {
-            const data = await apiCall('/api/settings/naming');
-            namingSettings = data.settings;
-            return namingSettings;
-        } catch (error) {
-            console.error('Failed to load naming settings:', error);
-            return null;
-        }
-    }
-
-    function updatePatternPreview(pattern) {
-        const previewEl = document.getElementById('patternPreview');
-        if (!previewEl) return;
-
-        // Sample book metadata for preview
-        const sampleData = {
-            '{Author}': 'Edgar Allan Poe',
-            '{Series}': 'Erzählungen',
-            '{Title}': 'Edgar Allan Poe: Erzählungen 1',
-            '{Year}': '2024',
-            '{Narrator}': 'Edgar Allan Poe',
-            '{Publisher}': 'Audible Studios',
-            '{Language}': 'de',
-            '{ASIN}': 'B08X123456',
-            '{Volume}': '1'
-        };
-
-        let preview = pattern;
-        for (const [placeholder, value] of Object.entries(sampleData)) {
-            preview = preview.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
-        }
-
-        // Clean up empty segments
-        preview = preview.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
-
-        previewEl.textContent = preview || 'Invalid pattern';
-    }
-
-    function showConfigureNamingModal() {
-        const modal = document.getElementById('namingPatternModal');
-        if (!modal) return;
-        
-        namingPatternModal = new bootstrap.Modal(modal);
-
-        // Load current settings
-        if (namingSettings) {
-            const presetSelect = document.getElementById('namingPreset');
-            const patternInput = document.getElementById('customPattern');
-
-            if (presetSelect) presetSelect.value = namingSettings.selected_preset || 'audiobookshelf';
-            if (patternInput) patternInput.value = namingSettings.naming_pattern;
-
-            updatePresetDescription(namingSettings.selected_preset);
-            updatePatternPreview(namingSettings.naming_pattern);
-        }
-
-        namingPatternModal.show();
-    }
-
-    function updatePresetDescription(presetKey) {
-        const descEl = document.getElementById('presetDescription');
-        if (!descEl) return;
-
-        const presets = namingSettings?.presets || {};
-        const preset = presets[presetKey];
-
-        if (preset) {
-            descEl.textContent = preset.description;
-        }
-    }
-
-    async function saveNamingPattern() {
-        const pattern = document.getElementById('customPattern').value.trim();
-        const preset = document.getElementById('namingPreset').value;
-
-        if (!pattern) {
-            showValidationError('Pattern cannot be empty');
-            return;
-        }
-
-        try {
-            const data = await apiCall('/api/settings/naming', {
-                method: 'POST',
-                body: JSON.stringify({
-                    pattern: pattern,
-                    preset: preset
-                })
-            });
-
-            if (data.success) {
-                showBottomNotification('Naming pattern saved successfully!', 'success');
-                if (namingPatternModal) namingPatternModal.hide();
-                await loadNamingSettings();
-            } else {
-                showValidationError(data.error || 'Failed to save pattern');
-            }
-        } catch (error) {
-            showValidationError(error.message || 'Failed to save pattern');
-        }
-    }
-
-    function showValidationError(message) {
-        const validationDiv = document.getElementById('patternValidation');
-        if (!validationDiv) return;
-
-        validationDiv.className = 'alert alert-danger';
-        validationDiv.textContent = message;
-        validationDiv.style.display = 'block';
-
-        setTimeout(() => {
-            validationDiv.style.display = 'none';
-        }, 5000);
-    }
-
-    // Family Sharing Functions
-    function setupFamilySharingModal() {
-        const familySharingBtn = document.getElementById('familySharingBtn');
-        if (!familySharingBtn) return;
-
-        familySharingBtn.addEventListener('click', function() {
-            loadInvitationLinkToModal();
-            const modal = new bootstrap.Modal(document.getElementById('familySharingModal'));
-            modal.show();
-        });
-
-        // Copy button in modal
-        const copyModalBtn = document.getElementById('copyInviteLinkModalBtn');
-        if (copyModalBtn) {
-            copyModalBtn.addEventListener('click', function() {
-                const linkInput = document.getElementById('invitationLinkDisplay');
-                linkInput.select();
-                linkInput.setSelectionRange(0, 99999);
-                navigator.clipboard.writeText(linkInput.value)
-                    .then(() => {
-                        const originalHTML = copyModalBtn.innerHTML;
-                        copyModalBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-                        setTimeout(() => {
-                            copyModalBtn.innerHTML = originalHTML;
-                        }, 2000);
-                        showFamilySharingStatus('Invitation link copied to clipboard!', 'success');
-                    })
-                    .catch(err => {
-                        showFamilySharingStatus('Failed to copy link', 'danger');
-                    });
-            });
-        }
-
-        // Save custom token button
-        const saveCustomTokenBtn = document.getElementById('saveCustomTokenBtn');
-        if (saveCustomTokenBtn) {
-            saveCustomTokenBtn.addEventListener('click', async function() {
-                const tokenInput = document.getElementById('customInvitationToken');
-                const customToken = tokenInput.value.trim();
-
-                if (!customToken) {
-                    showFamilySharingStatus('Please enter a token or use "Generate New Random Token"', 'warning');
-                    return;
-                }
-
-                // Validate token format
-                if (!/^[a-zA-Z0-9_-]+$/.test(customToken)) {
-                    showFamilySharingStatus('Token can only contain letters, numbers, hyphens, and underscores', 'danger');
-                    return;
-                }
-
-                if (customToken.length < 8) {
-                    showFamilySharingStatus('Token must be at least 8 characters long', 'danger');
-                    return;
-                }
-
-                try {
-                    const data = await apiCall('/api/settings/set-invitation-token', {
-                        method: 'POST',
-                        body: JSON.stringify({ token: customToken })
-                    });
-                    if (data.success) {
-                        loadInvitationLinkToModal();
-                        tokenInput.value = '';
-                        showFamilySharingStatus('Custom token set successfully!', 'success');
-                    }
-                } catch (error) {
-                    showFamilySharingStatus('Failed to set token: ' + error.message, 'danger');
-                }
-            });
-        }
-
-        // Regenerate token button in modal
-        const regenModalBtn = document.getElementById('regenerateTokenModalBtn');
-        if (regenModalBtn) {
-            regenModalBtn.addEventListener('click', async function() {
-                if (!confirm('Generate a new random token? This will invalidate the current invitation link.')) {
-                    return;
-                }
-                try {
-                    const data = await apiCall('/api/settings/regenerate-invitation-token', {
-                        method: 'POST'
-                    });
-                    if (data.success) {
-                        loadInvitationLinkToModal();
-                        document.getElementById('customInvitationToken').value = '';
-                        showFamilySharingStatus('New random token generated successfully!', 'success');
-                    }
-                } catch (error) {
-                    showFamilySharingStatus('Failed to regenerate token: ' + error.message, 'danger');
-                }
-            });
-        }
-    }
-
-    async function loadInvitationLinkToModal() {
-        try {
-            const data = await apiCall('/api/settings/invitation-link');
-            const linkInput = document.getElementById('invitationLinkDisplay');
-            if (linkInput && data.invitation_url) {
-                linkInput.value = data.invitation_url;
-            }
-        } catch (error) {
-            console.error('Failed to load invitation link:', error);
-            const linkInput = document.getElementById('invitationLinkDisplay');
-            if (linkInput) {
-                linkInput.value = 'Error loading link';
-            }
-            showFamilySharingStatus('Failed to load invitation link', 'danger');
-        }
-    }
-
-    function showFamilySharingStatus(message, type) {
-        const statusDiv = document.getElementById('familySharingStatusMessage');
-        if (!statusDiv) return;
-
-        statusDiv.className = `alert alert-${type}`;
-        statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
-        statusDiv.classList.remove('d-none');
-
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            statusDiv.classList.add('d-none');
-        }, 5000);
-    }
-
-    // Account Invite Functions
-    let currentAccountForInvite = null;
-
-    function setupAccountInviteModal() {
-        const generateAccountInviteBtn = document.getElementById('generateAccountInviteBtn');
-        if (!generateAccountInviteBtn) return;
-
-        generateAccountInviteBtn.addEventListener('click', function() {
-            if (currentAccount) {
-                openAccountInviteModal(currentAccount);
-            }
-        });
-
-        // Generate link button inside modal
-        const generateLinkBtn = document.getElementById('generateAccountInviteLinkBtn');
-        if (generateLinkBtn) {
-            generateLinkBtn.addEventListener('click', async function() {
-                if (!currentAccountForInvite) return;
-
-                try {
-                    const data = await apiCall(`/api/accounts/${currentAccountForInvite}/generate-invite-link`, {
-                        method: 'POST'
-                    });
-
-                    if (data.success) {
-                        displayAccountInviteLink(data.invitation_url);
-                        showAccountInviteStatus('Invitation link generated successfully!', 'success');
-                    }
-                } catch (error) {
-                    showAccountInviteStatus('Failed to generate link: ' + error.message, 'danger');
-                }
-            });
-        }
-
-        // Copy link button
-        const copyBtn = document.getElementById('copyAccountInviteLinkBtn');
-        if (copyBtn) {
-            copyBtn.addEventListener('click', function() {
-                const linkInput = document.getElementById('accountInviteLinkDisplay');
-                linkInput.select();
-                linkInput.setSelectionRange(0, 99999);
-                navigator.clipboard.writeText(linkInput.value)
-                    .then(() => {
-                        const originalHTML = copyBtn.innerHTML;
-                        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-                        setTimeout(() => {
-                            copyBtn.innerHTML = originalHTML;
-                        }, 2000);
-                        showAccountInviteStatus('Link copied to clipboard!', 'success');
-                    })
-                    .catch(err => {
-                        showAccountInviteStatus('Failed to copy link', 'danger');
-                    });
-            });
-        }
-
-        // Revoke link button
-        const revokeBtn = document.getElementById('revokeAccountInviteBtn');
-        if (revokeBtn) {
-            revokeBtn.addEventListener('click', async function() {
-                if (!currentAccountForInvite) return;
-
-                if (!confirm('Revoke invitation link? This will invalidate the link.')) {
-                    return;
-                }
-
-                try {
-                    const data = await apiCall(`/api/accounts/${currentAccountForInvite}/revoke-invite-link`, {
-                        method: 'POST'
-                    });
-
-                    if (data.success) {
-                        hideAccountInviteLink();
-                        showAccountInviteStatus('Invitation link revoked', 'success');
-                    }
-                } catch (error) {
-                    showAccountInviteStatus('Failed to revoke link: ' + error.message, 'danger');
-                }
-            });
-        }
-    }
-
-    async function openAccountInviteModal(accountName) {
-        currentAccountForInvite = accountName;
-
-        try {
-            const accounts = await apiCall('/api/accounts');
-            const account = accounts[accountName];
-
-            if (!account) {
-                showBottomNotification('Account not found', 'error');
-                return;
-            }
-
-            // Update modal content
-            document.getElementById('accountInviteAccountName').textContent = accountName;
-            document.getElementById('accountInviteDisplayName').textContent = accountName;
-            document.getElementById('accountInviteRegion').textContent = account.region.toUpperCase();
-
-            // Check if account has pending invitation token
-            if (account.pending_invitation_token) {
-                const inviteUrl = window.location.origin + '/invite/account/' + account.pending_invitation_token;
-                displayAccountInviteLink(inviteUrl);
-            } else {
-                hideAccountInviteLink();
-            }
-
-            // Open the modal
-            const accountInviteModal = new bootstrap.Modal(document.getElementById('accountInviteModal'));
-            accountInviteModal.show();
-        } catch (error) {
-            showBottomNotification('Failed to load account details: ' + error.message, 'error');
-        }
-    }
-
-    function displayAccountInviteLink(url) {
-        const linkDisplay = document.getElementById('accountInviteLinkDisplay');
-        const linkSection = document.getElementById('accountInviteLinkSection');
-        const generateSection = document.getElementById('generateAccountInviteSection');
-        
-        if (linkDisplay) linkDisplay.value = url;
-        if (linkSection) linkSection.style.display = 'block';
-        if (generateSection) generateSection.style.display = 'none';
-    }
-
-    function hideAccountInviteLink() {
-        const linkSection = document.getElementById('accountInviteLinkSection');
-        const generateSection = document.getElementById('generateAccountInviteSection');
-        
-        if (linkSection) linkSection.style.display = 'none';
-        if (generateSection) generateSection.style.display = 'block';
-    }
-
-    function showAccountInviteStatus(message, type) {
-        const statusDiv = document.getElementById('accountInviteStatusMessage');
-        if (!statusDiv) return;
-
-        statusDiv.className = `alert alert-${type}`;
-        statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
-        statusDiv.classList.remove('d-none');
-
-        // Auto-hide after 5 seconds
-        setTimeout(() => {
-            statusDiv.classList.add('d-none');
-        }, 5000);
-    }
-
-    // Setup all settings panel event listeners
-    function setupSettingsPanel() {
-        // Add library form
-        const addLibraryForm = document.getElementById('addLibraryForm');
-        if (addLibraryForm) {
-            addLibraryForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                addLibraryFromSettings();
-            });
-        }
-
-        // Configure naming button
-        const configureNamingBtn = document.getElementById('configureNamingBtn');
-        if (configureNamingBtn) {
-            configureNamingBtn.addEventListener('click', showConfigureNamingModal);
-        }
-
-        // Preset selection change in naming modal
-        const presetSelect = document.getElementById('namingPreset');
-        if (presetSelect) {
-            presetSelect.addEventListener('change', function() {
-                const selectedPreset = this.value;
-                updatePresetDescription(selectedPreset);
-
-                if (selectedPreset !== 'custom' && namingSettings?.presets) {
-                    const preset = namingSettings.presets[selectedPreset];
-                    if (preset) {
-                        const patternInput = document.getElementById('customPattern');
-                        if (patternInput) {
-                            patternInput.value = preset.pattern;
-                            updatePatternPreview(preset.pattern);
-                        }
-                    }
-                }
-            });
-        }
-
-        // Pattern input change
-        const patternInput = document.getElementById('customPattern');
-        if (patternInput) {
-            patternInput.addEventListener('input', function() {
-                updatePatternPreview(this.value);
-                const presetSelect = document.getElementById('namingPreset');
-                if (presetSelect) presetSelect.value = 'custom';
-            });
-        }
-
-        // Save button in naming modal
-        const saveBtn = document.getElementById('saveNamingPattern');
-        if (saveBtn) {
-            saveBtn.addEventListener('click', saveNamingPattern);
-        }
-
-        // Delete account button
-        const deleteAccountBtn = document.getElementById('deleteAccountBtn');
-        if (deleteAccountBtn) {
-            deleteAccountBtn.addEventListener('click', async function() {
-                const accountSelect = document.getElementById('accountSelect');
-                const accountName = accountSelect?.value;
-                
-                if (!accountName) {
-                    showBottomNotification('Please select an account to delete', 'warning');
-                    return;
-                }
-                
-                // Confirm deletion
-                if (!confirm(`Are you sure you want to delete the account "${accountName}"?\n\nThis will remove all authentication data for this account.`)) {
-                    return;
-                }
-                
-                try {
-                    await apiCall(`/api/accounts/${accountName}`, {
-                        method: 'DELETE'
-                    });
-                    
-                    showBottomNotification(`Account "${accountName}" deleted successfully!`, 'success');
-                    
-                    // Reload accounts and hide account info
-                    await loadAccounts();
-                    if (accountSelect) accountSelect.value = '';
-                    
-                    // Update account status in settings
-                    const accountStatus = document.getElementById('accountStatus');
-                    const noAccountSelected = document.getElementById('noAccountSelected');
-                    if (accountStatus) accountStatus.style.display = 'none';
-                    if (noAccountSelected) noAccountSelected.style.display = 'block';
-                    
-                } catch (error) {
-                    showBottomNotification('Failed to delete account: ' + error.message, 'error');
-                }
-            });
-        }
-
-        // Setup family sharing modal
-        setupFamilySharingModal();
-
-        // Setup account invite modal
-        setupAccountInviteModal();
-
-        // Load libraries for settings panel
-        loadLibraries();
-
-        // Load naming settings
-        loadNamingSettings();
-    }
-    
-    // Initialize the application
-    document.addEventListener('DOMContentLoaded', function() {
-        loadAccounts();
-        setupEventListeners();
-        setupSettingsPanel();
-        
-        // Update download badge periodically
-        updateDownloadBadge();
-        setInterval(updateDownloadBadge, 3000); // Update every 3 seconds
-    });
-    </script>
-    
-    {% block extra_js %}{% endblock %}
 </body>
 </html>

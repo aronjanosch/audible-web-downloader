@@ -34,6 +34,11 @@ def index():
                          current_account_data=current_account_data,
                          library=library)
 
+@main_bp.route('/settings')
+def settings():
+    """Settings page"""
+    return render_template('settings.html')
+
 @main_bp.route('/import')
 def importer():
     """Import page for M4B audiobooks"""

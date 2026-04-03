@@ -1,0 +1,212 @@
+/* ============================================================
+   importer.css — Step indicator, file list, match cards
+   ============================================================ */
+
+/* ── Step Indicator ── */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2rem;
+  gap: 0;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+  max-width: 180px;
+}
+
+.step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  transition: all 0.2s;
+  z-index: 1;
+}
+
+.step-item.active .step-circle {
+  background: var(--gradient-primary);
+  border-color: transparent;
+  color: white;
+}
+
+.step-item.done .step-circle {
+  background: var(--color-success);
+  border-color: transparent;
+  color: white;
+}
+
+.step-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.35rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.step-item.active .step-label { color: var(--color-primary); font-weight: 600; }
+.step-item.done .step-label { color: var(--color-success); }
+
+.step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border);
+  margin-top: -18px;
+  transition: background 0.2s;
+}
+
+.step-line.done { background: var(--color-success); }
+.step-line.active { background: var(--color-primary); }
+
+/* ── Import Step Cards ── */
+.import-step {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.import-step-header {
+  background: var(--gradient-primary);
+  color: white;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.import-step-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.import-step-body { padding: 1.5rem; }
+
+/* ── File Scan Table ── */
+.scan-table { border-radius: var(--radius-md); overflow: hidden; }
+.scan-table thead th { background: #f8f9fa; font-size: 0.8rem; font-weight: 700; }
+.scan-table tbody td { font-size: 0.85rem; vertical-align: middle; }
+.scan-table .file-checkbox { width: 20px; }
+
+/* ── Match Stats Cards ── */
+.match-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.match-stat-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.match-stat-card .stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+
+.match-stat-card .stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+}
+
+.match-stat-card.matched   { background: #d4edda; }
+.match-stat-card.matched .stat-value   { color: #155724; }
+.match-stat-card.uncertain { background: #fff3cd; }
+.match-stat-card.uncertain .stat-value { color: #856404; }
+.match-stat-card.duplicate { background: #f8d7da; }
+.match-stat-card.duplicate .stat-value { color: #721c24; }
+.match-stat-card.not-found { background: #e2e3e5; }
+.match-stat-card.not-found .stat-value { color: #383d41; }
+
+/* ── Match Item Cards ── */
+.match-item {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.match-item .match-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.match-item.uncertain  .match-item-header { background: #fff9e6; }
+.match-item.duplicate  .match-item-header { background: #fef3f3; }
+.match-item.not-found  .match-item-header { background: #f4f4f4; }
+
+.match-item-body { padding: 0.75rem 1rem; }
+
+.match-confidence {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
+}
+
+.match-confidence.high   { background: #d4edda; color: #155724; }
+.match-confidence.medium { background: #fff3cd; color: #856404; }
+.match-confidence.low    { background: #f8d7da; color: #721c24; }
+
+/* ── Import Progress ── */
+.import-progress-item {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.5rem;
+  border-left: 3px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.import-progress-item.state-importing   { border-left-color: #007bff; }
+.import-progress-item.state-organizing  { border-left-color: #ffc107; }
+.import-progress-item.state-completed   { border-left-color: #28a745; }
+.import-progress-item.state-error       { border-left-color: #dc3545; }
+.import-progress-item.state-skipped     { border-left-color: #adb5bd; }
+
+.import-progress-info { flex: 1; min-width: 0; }
+.import-progress-title { font-size: 0.85rem; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.import-progress-sub { font-size: 0.75rem; color: var(--color-text-muted); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .match-stats { grid-template-columns: repeat(2, 1fr); }
+  .import-step-body { padding: 1rem; }
+}
+
+@media (max-width: 480px) {
+  .step-label { display: none; }
+  .match-stats { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+}
