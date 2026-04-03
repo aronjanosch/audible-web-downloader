@@ -12,4 +12,5 @@ if __name__ == '__main__':
     print("🚀 Starting Audible Book Downloader...")
     print(f"📖 Open your browser and go to: http://localhost:{port}")
     print("⚠️  Press Ctrl+C to stop the server")
-    app.run(debug=True, host='0.0.0.0', port=port) 
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    app.run(debug=debug, host='0.0.0.0', port=port) 
