@@ -42,6 +42,7 @@ def create_app():
     from routes.library import library_bp
     from routes.invite import invite_bp
     from routes.importer import importer_bp
+    from routes.scheduler import scheduler_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -49,6 +50,10 @@ def create_app():
     app.register_blueprint(library_bp)
     app.register_blueprint(invite_bp)
     app.register_blueprint(importer_bp)
+    app.register_blueprint(scheduler_bp)
+
+    from utils.scheduler import init_scheduler
+    init_scheduler(app)
 
     # CSRF protection is now enabled for all routes by default
     # Selectively exempt public invitation endpoints

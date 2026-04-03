@@ -15,4 +15,5 @@ dependencies = [
     "requests>=2.32.5",
     "streamlit>=1.48.1",
     "wtforms>=3.2.1",
+    "apscheduler>=3.10.0",
 ]
