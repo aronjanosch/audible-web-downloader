@@ -7,8 +7,25 @@
  */
 async function loadAccounts() {
     try {
-        const accounts = await apiCall('/api/accounts');
+        const [accounts, sessionInfo] = await Promise.all([
+            apiCall('/api/accounts'),
+            apiCall('/api/session').catch(() => ({ current_account: null })),
+        ]);
+
         AppState.set('accountData', accounts);
+
+        let current = sessionInfo?.current_account ?? null;
+        const names = Object.keys(accounts);
+        if (current && !accounts[current]) {
+            current = null;
+        }
+        if (!current && names.length === 1) {
+            const only = names[0];
+            await apiCall(`/api/accounts/${encodeURIComponent(only)}/select`, { method: 'POST' });
+            current = only;
+        }
+        AppState.set('currentAccount', current);
+
         document.dispatchEvent(new CustomEvent('accounts:loaded', { detail: accounts }));
         return accounts;
     } catch (err) {
@@ -18,19 +35,41 @@ async function loadAccounts() {
 }
 
 /**
- * Redirect to Audible OAuth login for the given account.
+ * Set the active account (server session + AppState).
  */
-function authenticateAccount(accountName) {
+async function selectAccount(accountName) {
     if (!accountName) return;
-    window.location.href = `/auth/login/${accountName}`;
+    try {
+        await apiCall(`/api/accounts/${encodeURIComponent(accountName)}/select`, { method: 'POST' });
+        AppState.set('currentAccount', accountName);
+        showToast(`Active account: ${accountName}`, 'success');
+        document.dispatchEvent(new CustomEvent('accounts:active-changed', { detail: { accountName } }));
+    } catch (err) {
+        showToast('Failed to set active account: ' + err.message, 'danger');
+    }
 }
 
 /**
- * Add a new account via the modal form.
+ * Redirect to Audible OAuth login for the given account.
  */
-async function addAccount() {
-    const nameInput = document.getElementById('accountName');
-    const regionInput = document.getElementById('accountRegion');
+function authenticateAccount(accountName) {
+    const name = accountName || AppState.get('currentAccount');
+    if (!name) {
+        showToast('Select an account first', 'warning');
+        return;
+    }
+    window.location.href = `/auth/login/${name}`;
+}
+
+/**
+ * Add a new account using inputs inside `root` (wizard card or modal).
+ */
+async function addAccountFromForm(root) {
+    const scope = root && root.querySelector ? root : document;
+    const nameInput = scope.querySelector('#modalAccountName') || scope.querySelector('#wizardAccountName');
+    const regionInput = scope.querySelector('#modalAccountRegion') || scope.querySelector('#wizardAccountRegion');
+    const submitBtn =
+        scope.querySelector('#modalSubmitAddAccount') || scope.querySelector('#wizardSubmitAddAccount');
 
     const accountName = nameInput?.value?.trim();
     const region = regionInput?.value || 'us';
@@ -40,30 +79,28 @@ async function addAccount() {
         return;
     }
 
-    const btn = document.getElementById('submitAddAccount');
-    const restore = btn ? setButtonLoading(btn, 'Adding…') : null;
+    const restore = submitBtn ? setButtonLoading(submitBtn, 'Adding…') : null;
 
     try {
         await apiCall('/api/accounts', {
             method: 'POST',
-            body: JSON.stringify({ account_name: accountName, region })
+            body: JSON.stringify({ account_name: accountName, region }),
         });
 
-        // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('addAccountModal'));
+        const modalEl = document.getElementById('addAccountModal');
+        const modal = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
         if (modal) modal.hide();
 
-        document.getElementById('addAccountForm')?.reset();
+        document.getElementById('modalAddAccountForm')?.reset();
+        document.getElementById('wizardAddAccountForm')?.reset();
 
         const accounts = await loadAccounts();
 
         showToast(`Account "${accountName}" added!`, 'success');
 
-        // If first account, signal to dismiss onboarding wizard step 1
         if (Object.keys(accounts).length === 1) {
             document.dispatchEvent(new CustomEvent('onboarding:accountAdded', { detail: { accountName } }));
         }
-
     } catch (err) {
         showToast('Failed to add account: ' + err.message, 'danger');
     } finally {
@@ -72,7 +109,7 @@ async function addAccount() {
 }
 
 /**
- * Delete the currently selected account.
+ * Delete an account by name.
  */
 async function deleteAccount(accountName) {
     if (!accountName) {
@@ -86,7 +123,7 @@ async function deleteAccount(accountName) {
     if (!confirm(`Delete account "${accountName}"?\n\nThis removes all authentication data.`)) return;
 
     try {
-        await apiCall(`/api/accounts/${accountName}`, { method: 'DELETE' });
+        await apiCall(`/api/accounts/${encodeURIComponent(accountName)}`, { method: 'DELETE' });
         showToast(`Account "${accountName}" deleted`, 'success');
         await loadAccounts();
     } catch (err) {
@@ -94,20 +131,12 @@ async function deleteAccount(accountName) {
     }
 }
 
-/**
- * Redirect to Audible OAuth login for current account.
- */
-function authenticateAccount(accountName) {
-    const name = accountName || AppState.get('currentAccount');
-    if (!name) return;
-    window.location.href = `/auth/login/${name}`;
-}
-
 // ── Account Invite Modal ──
 
 let _currentAccountForInvite = null;
 
 async function openAccountInviteModal(accountName) {
+    if (!accountName) return;
     _currentAccountForInvite = accountName;
 
     try {
@@ -147,11 +176,10 @@ function _hideAccountInviteLink() {
 }
 
 function setupAccountInviteModal() {
-    // Generate invite link button
     document.getElementById('generateAccountInviteLinkBtn')?.addEventListener('click', async function () {
         if (!_currentAccountForInvite) return;
         try {
-            const data = await apiCall(`/api/accounts/${_currentAccountForInvite}/generate-invite-link`, { method: 'POST' });
+            const data = await apiCall(`/api/accounts/${encodeURIComponent(_currentAccountForInvite)}/generate-invite-link`, { method: 'POST' });
             _showAccountInviteLink(data.invitation_url);
             showToast('Invitation link generated!', 'success');
         } catch (err) {
@@ -159,18 +187,16 @@ function setupAccountInviteModal() {
         }
     });
 
-    // Copy link button
     document.getElementById('copyAccountInviteLinkBtn')?.addEventListener('click', function () {
         const val = document.getElementById('accountInviteLinkDisplay')?.value;
         if (val) copyToClipboard(val, this);
     });
 
-    // Revoke link button
     document.getElementById('revokeAccountInviteBtn')?.addEventListener('click', async function () {
         if (!_currentAccountForInvite) return;
         if (!confirm('Revoke invitation link?')) return;
         try {
-            await apiCall(`/api/accounts/${_currentAccountForInvite}/revoke-invite-link`, { method: 'POST' });
+            await apiCall(`/api/accounts/${encodeURIComponent(_currentAccountForInvite)}/revoke-invite-link`, { method: 'POST' });
             _hideAccountInviteLink();
             showToast('Invitation link revoked', 'success');
         } catch (err) {
@@ -182,21 +208,31 @@ function setupAccountInviteModal() {
 // ── Init event listeners that are needed on all pages ──
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Add account button (opens modal)
-    document.getElementById('addAccountBtn')?.addEventListener('click', function () {
-        new bootstrap.Modal(document.getElementById('addAccountModal')).show();
+    document.querySelectorAll('.js-open-add-account-modal').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const el = document.getElementById('addAccountModal');
+            if (!el) return;
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        });
     });
 
-    // Submit add account form
-    document.getElementById('submitAddAccount')?.addEventListener('click', function () {
-        const form = document.getElementById('addAccountForm');
+    document.getElementById('modalSubmitAddAccount')?.addEventListener('click', function () {
+        const form = document.getElementById('modalAddAccountForm');
         if (form?.checkValidity()) {
-            addAccount();
+            addAccountFromForm(document.getElementById('addAccountModal'));
         } else {
             form?.reportValidity();
         }
     });
 
-    // Setup account invite modal
+    document.getElementById('wizardSubmitAddAccount')?.addEventListener('click', function () {
+        const form = document.getElementById('wizardAddAccountForm');
+        if (form?.checkValidity()) {
+            addAccountFromForm(document.getElementById('wizardStep1') || form);
+        } else {
+            form?.reportValidity();
+        }
+    });
+
     setupAccountInviteModal();
 });

@@ -210,3 +210,67 @@
   .step-label { display: none; }
   .match-stats { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
 }
+
+/* ── Dark mode ── */
+[data-bs-theme="dark"] .scan-table thead th {
+  background: var(--color-bg);
+}
+
+[data-bs-theme="dark"] .match-stat-card.matched {
+  background: #14532d;
+}
+[data-bs-theme="dark"] .match-stat-card.matched .stat-value {
+  color: #86efac;
+}
+
+[data-bs-theme="dark"] .match-stat-card.uncertain {
+  background: #422006;
+}
+[data-bs-theme="dark"] .match-stat-card.uncertain .stat-value {
+  color: #fcd34d;
+}
+
+[data-bs-theme="dark"] .match-stat-card.duplicate {
+  background: #450a0a;
+}
+[data-bs-theme="dark"] .match-stat-card.duplicate .stat-value {
+  color: #fca5a5;
+}
+
+[data-bs-theme="dark"] .match-stat-card.not-found {
+  background: #3d424d;
+}
+[data-bs-theme="dark"] .match-stat-card.not-found .stat-value {
+  color: #d1d5db;
+}
+
+[data-bs-theme="dark"] .match-item .match-item-header {
+  background: var(--color-bg);
+}
+
+[data-bs-theme="dark"] .match-item.uncertain .match-item-header {
+  background: #2a2418;
+}
+
+[data-bs-theme="dark"] .match-item.duplicate .match-item-header {
+  background: #2a1818;
+}
+
+[data-bs-theme="dark"] .match-item.not-found .match-item-header {
+  background: #252a33;
+}
+
+[data-bs-theme="dark"] .match-confidence.high {
+  background: #14532d;
+  color: #86efac;
+}
+
+[data-bs-theme="dark"] .match-confidence.medium {
+  background: #422006;
+  color: #fcd34d;
+}
+
+[data-bs-theme="dark"] .match-confidence.low {
+  background: #450a0a;
+  color: #fca5a5;
+}

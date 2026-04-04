@@ -1,216 +1,146 @@
 # Library State Tracking Documentation
 
-This document explains the different library state tracking systems in the application and how they work together.
+This document explains the different library-related persistence layers and how they work together.
+
+> **SQLite (`config/audible.db`)** is the runtime source of truth. Legacy JSON files (`config/library.json`, `config/libraries.json`, `library_data/libraries.json`, etc.) may remain on disk from older versions; they are **imported once** when the database is first created (`utils/db.migrate`) and are **not** updated by the current application. Do not rely on those files for operational state.
 
 ## Overview
 
-The application uses **three separate systems** for tracking library-related data, each serving a distinct purpose:
+The application uses **three complementary layers**, each with a distinct purpose. All are backed by SQLite tables (accessed through the same manager classes as before):
 
-1. **Download History Tracking** (`config/library.json`)
-2. **Library Scan Cache** (`library_data/libraries.json`)
-3. **Library Configuration** (`config/libraries.json`)
+1. **Download history / book state** — `books` table (`LibraryManager` in `app/services/library_manager.py`)
+2. **Library scan cache** — `scan_cache` table (`LibraryStorage` in `library_storage.py`)
+3. **Library configuration** — `libraries` table (`ConfigManager` in `utils/config_manager.py`)
 
-## 1. Download History Tracking
+---
 
-**File**: `config/library.json`  
+## 1. Download history and book state
+
+**Storage**: SQLite table `books` in `config/audible.db`  
 **Manager**: `app/services/library_manager.py` (`LibraryManager` class)  
-**Purpose**: Track which audiobooks have been downloaded and where they are stored
+**Purpose**: Track which audiobooks have been downloaded (or are wanted, missing, etc.) and where files live
 
-### Data Structure
-```json
-{
-  "B00ABCD123": {
-    "asin": "B00ABCD123",
-    "title": "Example Audiobook",
-    "file_path": "/path/to/library/Author/Book/book.m4b",
-    "state": "converted",
-    "timestamp": 1699123456.789,
-    "downloaded_by_account": "main_account"
-  }
-}
-```
+### Logical shape (per ASIN)
 
-### Key Features
-- **ASIN-indexed**: Each entry is keyed by Amazon Standard Identification Number
-- **Download state tracking**: Records the conversion state of each download
-- **Account attribution**: Tracks which Audible account downloaded each book
-- **File location**: Maps ASINs to actual filesystem paths
+Rows include ASIN, title, metadata fields, `status` (`wanted`, `downloading`, `downloaded`, `missing`, `ignored`), `file_path`, optional `library_name` and `downloaded_by_account`, and timestamps.
 
-### Use Cases
-1. **Duplicate Prevention**: Check if a book with a given ASIN has already been downloaded
-2. **Download Queue Management**: Track the state of ongoing downloads
-3. **Library Sync**: Populate download history by scanning existing M4B files for ASINs
-4. **Multi-account Support**: Track which account downloaded each book
+### Key features
 
-### API Access
-- Used by: `AudiobookDownloader`, `DownloadQueueManager`
-- Methods: `LibraryManager.get_library_entry()`, `LibraryManager.add_to_library()`
-- Route: `/api/library/state` (GET) - Returns list of ASINs in library
+- **ASIN-keyed**: One row per ASIN in the downloader’s library state
+- **Status tracking**: Distinguishes wanted, in-progress, completed, and ignored items
+- **Account attribution**: Which Audible account downloaded the book (when applicable)
+- **File location**: Maps ASINs to paths under configured libraries
 
-## 2. Library Scan Cache
+### Use cases
 
-**File**: `library_data/libraries.json`  
+1. Duplicate prevention before starting a download
+2. Integration with the download pipeline and queue
+3. Library sync / rescan workflows using on-disk M4B metadata
+
+### API access
+
+- Used by: `AudiobookDownloader`, download and library routes
+- Methods: `LibraryManager.get_library_entry()`, `LibraryManager.add_to_library()`, etc.
+- Route: `/api/library/state` (GET) — returns ASIN-oriented state derived from the DB
+
+---
+
+## 2. Library scan cache
+
+**Storage**: SQLite table `scan_cache` in `config/audible.db` (keyed by `library_name` from the `libraries` table)  
 **Manager**: `library_storage.py` (`LibraryStorage` class)  
-**Purpose**: Store detailed scan results from filesystem with rich metadata and statistics
+**Purpose**: Store filesystem scan results (paths, extracted metadata, scan timestamps) for local libraries
 
-### Data Structure
-```json
-{
-  "abc123ef": {
-    "id": "abc123ef",
-    "path": "/path/to/library",
-    "books": [
-      {
-        "file_path": "/path/to/library/Author/Book/book.m4b",
-        "title": "Example Audiobook",
-        "authors": "Author Name",
-        "series": "Series Name",
-        "series_sequence": "1",
-        "language": "en",
-        "duration_seconds": 36000,
-        "file_size": 536870912,
-        "asin": "B00ABCD123"
-      }
-    ],
-    "book_count": 1,
-    "last_scanned": "2024-11-04T12:34:56",
-    "stats": {
-      "total_books": 1,
-      "languages": {"en": 1},
-      "authors": {"Author Name": 1},
-      "series": {"Series Name": 1},
-      "total_size_gb": 0.5,
-      "avg_duration_hours": 10.0
-    }
-  }
-}
-```
+### Key features
 
-### Key Features
-- **Library ID-indexed**: Each library scan is keyed by a hash of its path
-- **Full metadata**: Stores complete metadata extracted from M4B files
-- **Statistics**: Calculates aggregate stats (languages, authors, series, size)
-- **Comparison data**: Stores results of library comparisons with Audible
-- **Historical tracking**: Keeps last scan timestamp and creation date
+- **Per-library rows**: Entries reference a registered library name and file path
+- **Rich metadata**: Title, author, series, ASIN when present, duration, size, etc.
+- **Stable library IDs**: Legacy 8-character IDs are still derived from the library path (hash) for API compatibility
 
-### Use Cases
-1. **Library Browsing**: Display all books in a local library with rich metadata
-2. **Statistics Dashboard**: Show library statistics and analytics
-3. **Library Comparison**: Compare local library with Audible library to find missing books
-4. **Search & Filter**: Search through local library by title, author, series
-5. **Multi-library Support**: Manage and compare multiple separate library locations
+### Use cases
 
-### API Access
-- Used by: `LocalLibraryScanner`, library comparison features
-- Methods: `LibraryStorage.save_library()`, `LibraryStorage.load_library_by_path()`
+1. Library browsing and statistics in the UI
+2. Comparing local files to the Audible catalog
+3. Search and filter over scanned files
+
+### API access
+
+- Used by: `LocalLibraryScanner`, comparison features
+- Methods: `LibraryStorage.save_library()`, `LibraryStorage.load_library_by_path()`, etc.
 - Routes: `/api/library/scan-local` (POST), `/api/library/compare` (POST)
 
-## 3. Library Configuration
+**Note**: `library_data/libraries.json` is no longer written; it may exist only as an old backup.
 
-**File**: `config/libraries.json`  
+---
+
+## 3. Library configuration
+
+**Storage**: SQLite table `libraries` in `config/audible.db`  
 **Manager**: `utils/config_manager.py` (`ConfigManager` class)  
-**Purpose**: Store user-configured library locations and settings
+**Purpose**: User-defined library names and filesystem paths
 
-### Data Structure
-```json
-{
-  "My Main Library": {
-    "path": "/path/to/library",
-    "created_at": 1699123456.789
-  },
-  "Secondary Library": {
-    "path": "/another/path/library",
-    "created_at": 1699456789.012
-  }
-}
-```
+### Logical shape (per library name)
 
-### Key Features
-- **Library name-indexed**: User-friendly names for library locations
-- **Path configuration**: Maps library names to filesystem paths
-- **Multiple libraries**: Support for managing multiple library locations
-- **Simple structure**: Lightweight configuration without heavy metadata
+Each row has `name`, `path`, and `created_at`.
 
-### Use Cases
-1. **Library Selection**: Allow users to choose which library to download to
-2. **Library Management**: Add, remove, or rename library configurations
-3. **Path Resolution**: Convert library names to filesystem paths
-4. **UI Display**: Show available libraries in dropdowns and selectors
+### Key features
 
-### API Access
-- Used by: All routes that need library path resolution
+- **Name → path**: Resolve which folder receives downloads and scans
+- **Multiple libraries**: Several roots can be registered
+
+### Use cases
+
+1. Library selection in the UI
+2. Path resolution for downloads and scans
+
+### API access
+
 - Methods: `ConfigManager.get_libraries()`, `ConfigManager.save_libraries()`
 - Routes: `/api/libraries` (GET, POST), `/api/libraries/<name>` (DELETE)
 
-## System Interaction Flow
+---
 
-### Download Flow
-1. User selects books to download from Audible library
-2. System checks `config/library.json` (download history) for duplicate ASINs
-3. Downloads are queued and processed
-4. After conversion, entry is added to `config/library.json` with ASIN and file path
+## System interaction flow
 
-### Library Scan Flow
-1. User requests library scan via `/api/library/scan-local`
-2. System reads `config/libraries.json` to get library path
-3. `LocalLibraryScanner` scans filesystem and extracts metadata
-4. Results are saved to `library_data/libraries.json` with full metadata
-5. Optionally, ASINs from M4B files update `config/library.json` for sync
+### Download flow
 
-### Library Comparison Flow
-1. User requests comparison via `/api/library/compare`
-2. System loads Audible library (from authenticated session)
-3. System loads local library from `library_data/libraries.json`
-4. Comparison algorithm matches books by ASIN, title similarity
-5. Results show which books are missing locally
+1. User selects books from the Audible library (often via cached data in `library_cache`).
+2. The downloader checks the `books` table for existing ASINs / status to avoid duplicates where appropriate.
+3. Work is tracked in `download_queue` / `download_batches`.
+4. After conversion, state is updated in `books` (and temp files under `downloads/` are cleaned up).
 
-## Recommendations
+### Library scan flow
 
-### Current State
-All three systems are **necessary and serve distinct purposes**. They should all remain in place.
+1. User triggers a scan (e.g. `/api/library/scan-local`).
+2. Paths come from the `libraries` table.
+3. Scanner walks the filesystem and persists rows into `scan_cache`.
+4. Sync logic may reconcile scan results with `books` as implemented in the app.
 
-### Improvements
-1. **Add Cross-References**:
-   - `library_data/libraries.json` could reference ASINs from `config/library.json`
-   - This would enable better duplicate detection during scans
+### Library comparison flow
 
-2. **Consolidate Scan Operations**:
-   - When scanning library, update both systems simultaneously
-   - Ensure consistency between download history and scan cache
+1. User requests comparison (e.g. `/api/library/compare`).
+2. Audible library data is loaded (from cache or API).
+3. Local data is loaded from `scan_cache` (via `LibraryStorage`).
+4. Results show gaps between cloud catalog and disk.
 
-3. **Add Validation**:
-   - Validate that paths in `config/libraries.json` actually exist
-   - Validate that files referenced in `config/library.json` still exist
-   - Add consistency checks between systems
+---
 
-4. **Improve Documentation**:
-   - Add inline comments explaining the purpose of each system
-   - Add this documentation link to README.md
-   - Document the interaction between systems in code comments
+## File / table summary
 
-5. **Add Cleanup Operations**:
-   - Remove entries from `config/library.json` when files are deleted
-   - Remove stale scan data from `library_data/libraries.json`
-   - Add maintenance endpoints for cleanup
+| Storage | Purpose | Key | Manager |
+|--------|---------|-----|---------|
+| `books` | Download / library book state | ASIN | `LibraryManager` |
+| `scan_cache` | Local filesystem scan results | Path (+ library name) | `LibraryStorage` |
+| `libraries` | Registered library roots | Library name | `ConfigManager` |
 
-6. **Consider Unified Access Layer**:
-   - Create a `LibraryService` class that provides unified access to all three systems
-   - This would encapsulate the complexity and provide a single API
-
-## File Summary
-
-| File | Purpose | Key | Data Type | Manager |
-|------|---------|-----|-----------|---------|
-| `config/library.json` | Download history | ASIN | Simple metadata | `LibraryManager` |
-| `library_data/libraries.json` | Scan cache | Library ID | Full metadata + stats | `LibraryStorage` |
-| `config/libraries.json` | Configuration | Library name | Path only | `ConfigManager` |
+---
 
 ## Conclusion
 
-The three library state tracking systems are **complementary, not redundant**:
-- **Configuration** (`config/libraries.json`) defines where libraries are
-- **Download History** (`config/library.json`) tracks what was downloaded
-- **Scan Cache** (`library_data/libraries.json`) stores what's actually on disk
+The three layers remain **complementary**:
 
-They work together to provide a complete picture of the user's audiobook library.
+- **Configuration** (`libraries`) defines where libraries live on disk.
+- **Book state** (`books`) tracks downloader-oriented status and paths for ASINs.
+- **Scan cache** (`scan_cache`) reflects what was found on disk during scans.
 
+Together they support downloads, deduplication, browsing, and comparison. All active data for these features lives in **`config/audible.db`**.

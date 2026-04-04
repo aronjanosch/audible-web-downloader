@@ -5,6 +5,8 @@ This document outlines refactoring opportunities to improve code quality, reduce
 **Last Updated**: 2025-11-04
 **Status**: Phase 1 Complete ✅ (4/4 tasks done), Phase 2 In Progress (6/8 tasks done)
 
+**Note:** Subsequent work consolidated much of the on-disk JSON configuration (accounts, libraries, book state, download queue, scan cache) into **`config/audible.db`**. For current behavior, prefer `CLAUDE.md`, `LIBRARY_STATE_TRACKING.md`, and `utils/db.py` over file-path references in older sections of this plan.
+
 ---
 
 ## High Priority (Security & Architecture)
@@ -270,6 +272,7 @@ def download_selected_books():
 - Explained interaction flows (download, scan, comparison)
 - Provided recommendations for cross-references and unified access layer
 - All three systems are necessary and complementary
+- *(Later)* Those three concerns were migrated to SQLite tables (`books`, `scan_cache`, `libraries`) in `config/audible.db`; see current `LIBRARY_STATE_TRACKING.md`.
 
 ---
 

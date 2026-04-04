@@ -26,6 +26,12 @@ The application follows a modular architecture using Flask Blueprints to organiz
 *   `static/`: Static assets (CSS, JavaScript).
 *   `downloads/`: Directory for downloaded audiobooks.
 
+### Data persistence
+
+*   **`config/audible.db`** — SQLite file holding accounts, libraries, download queue, book/download history, scan cache, and related data (`utils/db.py`, `utils/config_manager.py`).
+*   **`config/settings.json`** — UI settings and the reusable family invitation token (not stored in the DB).
+*   **`config/auth/<account>/auth.json`** — Per-account Audible OAuth credentials.
+
 ## Building and Running
 
 ### Prerequisites

@@ -67,23 +67,25 @@ Phase 2 focused on improving code quality and maintainability through utility ex
 **Created**:
 - `LIBRARY_STATE_TRACKING.md` - Comprehensive documentation
 
-**Documented Three Systems**:
-1. **Download History** (`config/library.json`)
+**Documented Three Systems** (originally as JSON files; now SQLite tables in `config/audible.db`):
+1. **Download History** → `books` table (was `config/library.json`)
    - ASIN-indexed tracking of downloaded audiobooks
    - Purpose: Duplicate detection, download tracking
    - Manager: `app/services/library_manager.py`
 
-2. **Library Scan Cache** (`library_data/libraries.json`)
+2. **Library Scan Cache** → `scan_cache` table (was `library_data/libraries.json`)
    - Full metadata from filesystem scans
    - Purpose: Library browsing, statistics, comparison
    - Manager: `library_storage.py`
 
-3. **Library Configuration** (`config/libraries.json`)
+3. **Library Configuration** → `libraries` table (was `config/libraries.json`)
    - User-configured library locations
    - Purpose: Path mapping, library management
    - Manager: `utils/config_manager.py`
 
 **Conclusion**: All three systems are necessary and serve distinct purposes. They are complementary, not redundant.
+
+> **Update:** Persistence for these three concerns later moved from JSON files into SQLite (`config/audible.db`). The conceptual split (book state vs scan cache vs library config) is unchanged; see `LIBRARY_STATE_TRACKING.md` and `CLAUDE.md` for the current storage layout.
 
 **Benefits**:
 - Clear understanding of system architecture

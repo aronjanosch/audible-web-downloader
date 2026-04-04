@@ -148,9 +148,8 @@ class AudiobookDownloader:
         self.metadata_enricher = MetadataEnricher()
         self.library_manager = LibraryManager(self.library_path, self.account_name)
 
-        # Maintain backward compatibility - expose library_state through library_manager
+        # Backward compatibility: dict view over SQLite books (via lazy library_state)
         self.library_state = self.library_manager.library_state
-        self.library_file = self.library_manager.library_file
 
         # Use shared queue manager for download progress tracking (persisted to disk)
         self.queue_manager = DownloadQueueManager()

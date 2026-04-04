@@ -81,7 +81,7 @@ docker-compose down
 - Persistent downloads via mounted `downloads/` volume
 - Easy updates: rebuild and restart the container
 - Isolated environment with all dependencies included
-- Simple backup: just backup the `config/` and `downloads/` folders
+- Simple backup: backup the `config/` directory (includes `audible.db`, `settings.json`, and `auth/`) and the `downloads/` folder
 
 ### Starting the Application (Local Development)
 
@@ -127,10 +127,10 @@ http://localhost:5000
 
 - **Downloads**: `./downloads/` directory
 - **Configuration**: `./config/` directory
-  - `accounts.json` - Account configurations
-  - `libraries.json` - Library paths and settings
-  - `settings.json` - Application settings
+  - `audible.db` - SQLite database (accounts, libraries, download queue, book state, scan cache, library API cache, etc.)
+  - `settings.json` - Naming patterns, family-sharing invitation token, and other app settings
   - `auth/{account_name}/auth.json` - Audible authentication tokens per account
+- **Legacy files** (optional): Older installs may still have `accounts.json`, `libraries.json`, or `library.json` under `config/`. They are not the live source of truth after migration; the app uses `audible.db`.
 
 ## Supported Regions
 

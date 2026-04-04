@@ -166,3 +166,48 @@
   color: var(--color-text-muted);
   font-size: 0.875rem;
 }
+
+/* ── Dark mode ── */
+[data-bs-theme="dark"] .download-progress-bar-track {
+  background: var(--color-muted-fill);
+}
+
+[data-bs-theme="dark"] .state-badge.state-pending,
+[data-bs-theme="dark"] .state-badge.state-retrying {
+  background: #3d424d;
+  color: #d1d5db;
+}
+
+[data-bs-theme="dark"] .state-badge.state-downloading,
+[data-bs-theme="dark"] .state-badge.state-license_requested,
+[data-bs-theme="dark"] .state-badge.state-license_granted,
+[data-bs-theme="dark"] .state-badge.state-download_complete {
+  background: #1e3a5f;
+  color: #93c5fd;
+}
+
+[data-bs-theme="dark"] .state-badge.state-decrypting {
+  background: #4a3520;
+  color: #fdba74;
+}
+
+[data-bs-theme="dark"] .state-badge.state-converting {
+  background: #422006;
+  color: #fcd34d;
+}
+
+[data-bs-theme="dark"] .state-badge.state-completed,
+[data-bs-theme="dark"] .state-badge.state-converted {
+  background: #14532d;
+  color: #86efac;
+}
+
+[data-bs-theme="dark"] .state-badge.state-error {
+  background: #450a0a;
+  color: #fca5a5;
+}
+
+[data-bs-theme="dark"] .download-error {
+  background: #450a0a;
+  color: #fca5a5;
+}

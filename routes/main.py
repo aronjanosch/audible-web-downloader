@@ -55,6 +55,12 @@ def importer():
                          current_account=current_account,
                          current_account_data=current_account_data)
 
+@main_bp.route('/api/session', methods=['GET'])
+def get_session_state():
+    """Return session fields needed by the SPA (active account, etc.)."""
+    return jsonify({'current_account': session.get('current_account')})
+
+
 @main_bp.route('/api/accounts', methods=['GET'])
 def get_accounts():
     """API endpoint to get all accounts"""

@@ -43,10 +43,14 @@
                 <div class="app-card p-4 mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="mb-0">Audible Accounts</h5>
-                        <button class="btn btn-primary btn-sm" id="addAccountBtn">
+                        <button type="button" class="btn btn-primary btn-sm js-open-add-account-modal">
                             <i class="fas fa-plus me-1"></i>Add Account
                         </button>
                     </div>
+                    <p class="text-muted small mb-3">
+                        The <strong>active</strong> account is used for import, single-account API calls, and as the default when only one account exists.
+                        Unified library view still shows books from every authenticated account.
+                    </p>
 
                     <div id="settingsAccountList">
                         <p class="text-muted small">Loading accounts…</p>
@@ -411,7 +415,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     _renderSettingsAccounts();
 
     document.addEventListener('appstate:change', function(e) {
-        if (e.detail.key === 'accountData') _renderSettingsAccounts();
+        if (e.detail.key === 'accountData' || e.detail.key === 'currentAccount') _renderSettingsAccounts();
+    });
+    document.addEventListener('accounts:active-changed', function() {
+        _renderSettingsAccounts();
     });
 
     // Load auto-download tab when it becomes active
@@ -445,46 +452,65 @@ function _renderSettingsAccounts() {
     const container = document.getElementById('settingsAccountList');
     if (!container) return;
 
-    const accountData = AppState.get('accountData');
-    const names = Object.keys(accountData);
+    const accountData = AppState.get('accountData') || {};
+    const activeName = AppState.get('currentAccount');
+    const names = Object.keys(accountData).sort((a, b) => a.localeCompare(b));
 
     if (names.length === 0) {
-        container.innerHTML = '<p class="text-muted small">No accounts yet. Click "Add Account" to get started.</p>';
+        container.innerHTML = '<p class="text-muted small">No accounts yet. Click <strong>Add Account</strong> (above or in the top bar) to get started.</p>';
         return;
     }
 
-    container.innerHTML = '';
+    if (names.length > 1 && !activeName) {
+        container.innerHTML = '<div class="alert alert-warning py-2 small mb-3">No active account is set. Choose <strong>Set active</strong> on one account below (used for import and related actions).</div>';
+    } else {
+        container.innerHTML = '';
+    }
+    const enc = (s) => encodeURIComponent(s);
     names.forEach(name => {
         const acc = accountData[name];
+        const isActive = activeName === name;
+        const safe = _escHtml(name);
+        const encName = enc(name);
         const item = document.createElement('div');
-        item.className = 'd-flex align-items-center justify-content-between py-3 border-bottom gap-3';
+        item.className = 'd-flex flex-column flex-md-row align-items-stretch align-items-md-center justify-content-between py-3 border-bottom gap-3';
         item.innerHTML = `
             <div class="d-flex align-items-center gap-3 flex-grow-1 min-width-0">
                 <span class="account-status-dot ${acc.authenticated ? 'authenticated' : 'unauthenticated'}" title="${acc.authenticated ? 'Authenticated' : 'Not authenticated'}"></span>
                 <div class="min-width-0">
-                    <div class="fw-semibold">${name}</div>
-                    <div class="text-muted small">${acc.region?.toUpperCase() || ''} &middot; ${acc.authenticated ? '<span class="text-success">Authenticated</span>' : '<span class="text-warning">Not authenticated</span>'}</div>
+                    <div class="fw-semibold">${safe}${isActive ? ' <span class="badge bg-primary ms-1">Active</span>' : ''}</div>
+                    <div class="text-muted small">${acc.region ? _escHtml(String(acc.region).toUpperCase()) + ' · ' : ''}${acc.authenticated ? '<span class="text-success">Authenticated</span>' : '<span class="text-warning">Not authenticated</span>'}</div>
                 </div>
             </div>
-            <div class="d-flex gap-2 flex-shrink-0">
-                ${!acc.authenticated ? `<button class="btn btn-sm btn-warning login-acc-btn" data-name="${name}"><i class="fas fa-sign-in-alt me-1"></i>Login</button>` : ''}
-                ${!acc.authenticated ? `<button class="btn btn-sm btn-outline-secondary invite-acc-btn" data-name="${name}" title="Generate invite link"><i class="fas fa-link"></i></button>` : ''}
-                <button class="btn btn-sm btn-outline-danger delete-acc-btn" data-name="${name}" title="Delete account"><i class="fas fa-trash"></i></button>
+            <div class="d-flex flex-wrap gap-2 flex-shrink-0 align-items-center">
+                ${!isActive ? `<button type="button" class="btn btn-sm btn-outline-primary set-active-acc-btn" data-acc="${encName}">Set active</button>` : ''}
+                ${!acc.authenticated ? `<button type="button" class="btn btn-sm btn-warning login-acc-btn" data-acc="${encName}"><i class="fas fa-sign-in-alt me-1"></i>Login</button>` : ''}
+                ${!acc.authenticated ? `<button type="button" class="btn btn-sm btn-outline-secondary invite-acc-btn" data-acc="${encName}" title="Generate invite link"><i class="fas fa-link"></i></button>` : ''}
+                <button type="button" class="btn btn-sm btn-outline-danger delete-acc-btn" data-acc="${encName}" title="Delete account"><i class="fas fa-trash"></i></button>
             </div>
         `;
         container.appendChild(item);
     });
 
+    function _accFrom(btn) {
+        const v = btn.getAttribute('data-acc');
+        return v ? decodeURIComponent(v) : '';
+    }
+
+    container.querySelectorAll('.set-active-acc-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectAccount(_accFrom(btn)));
+    });
+
     container.querySelectorAll('.login-acc-btn').forEach(btn => {
-        btn.addEventListener('click', () => authenticateAccount(btn.dataset.name));
+        btn.addEventListener('click', () => authenticateAccount(_accFrom(btn)));
     });
 
     container.querySelectorAll('.invite-acc-btn').forEach(btn => {
-        btn.addEventListener('click', () => openAccountInviteModal(btn.dataset.name));
+        btn.addEventListener('click', () => openAccountInviteModal(_accFrom(btn)));
     });
 
     container.querySelectorAll('.delete-acc-btn').forEach(btn => {
-        btn.addEventListener('click', () => deleteAccount(btn.dataset.name));
+        btn.addEventListener('click', () => deleteAccount(_accFrom(btn)));
     });
 }
 </script>

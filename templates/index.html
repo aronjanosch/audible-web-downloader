@@ -35,15 +35,15 @@
             <div id="wizardStep1" class="app-card p-4">
                 <h4 class="mb-1"><i class="fas fa-user-circle me-2 text-primary"></i>Add your Audible account</h4>
                 <p class="text-muted mb-4">Enter a name and select the region for your Audible account.</p>
-                <form id="addAccountForm">
+                <form id="wizardAddAccountForm">
                     <div class="mb-3">
-                        <label for="accountName" class="form-label fw-semibold">Account Name</label>
-                        <input type="text" class="form-control" id="accountName"
-                               placeholder="e.g., My Account" required autofocus>
+                        <label for="wizardAccountName" class="form-label fw-semibold">Account Name</label>
+                        <input type="text" class="form-control" id="wizardAccountName"
+                               placeholder="e.g., My Account" required autofocus autocomplete="off">
                     </div>
                     <div class="mb-4">
-                        <label for="accountRegion" class="form-label fw-semibold">Region</label>
-                        <select class="form-select" id="accountRegion" required>
+                        <label for="wizardAccountRegion" class="form-label fw-semibold">Region</label>
+                        <select class="form-select" id="wizardAccountRegion" required>
                             <option value="us">United States</option>
                             <option value="uk">United Kingdom</option>
                             <option value="de">Germany</option>
@@ -57,7 +57,7 @@
                             <option value="br">Brazil</option>
                         </select>
                     </div>
-                    <button type="button" class="btn btn-primary w-100" id="submitAddAccount">
+                    <button type="button" class="btn btn-primary w-100" id="wizardSubmitAddAccount">
                         <i class="fas fa-arrow-right me-2"></i>Continue
                     </button>
                 </form>

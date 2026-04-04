@@ -4,6 +4,8 @@
 
 /* ── Design Tokens ── */
 :root {
+  color-scheme: light;
+
   --color-primary: #667eea;
   --color-primary-dark: #5a6fd8;
   --color-primary-end: #764ba2;
@@ -16,6 +18,7 @@
 
   --color-text: #212529;
   --color-text-muted: #6c757d;
+  --color-muted-fill: #e9ecef;
 
   --color-success: #28a745;
   --color-warning: #ffc107;
@@ -471,4 +474,87 @@ body {
 
 @media (max-width: 480px) {
   .navbar-account select { min-width: 120px; }
+}
+
+/* ── Dark mode (Bootstrap color mode + app tokens) ── */
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+
+  --color-primary: #8b9cf7;
+  --color-primary-dark: #7a8ae8;
+  --color-primary-end: #9b6bc4;
+  --gradient-primary: linear-gradient(135deg, #8b9cf7 0%, #9b6bc4 100%);
+
+  --color-bg: #0f1114;
+  --color-surface: #1a1d24;
+  --color-border: #343a46;
+  --color-border-light: #252a33;
+
+  --color-text: #e8eaed;
+  --color-text-muted: #9aa0a8;
+  --color-muted-fill: #2a3038;
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #38bdf8;
+
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.45);
+  --shadow-card-hover: 0 8px 28px rgba(0, 0, 0, 0.55);
+  --shadow-navbar: 0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+[data-bs-theme="dark"] .empty-state i {
+  color: var(--color-border);
+}
+
+[data-bs-theme="dark"] .empty-state h4 {
+  color: var(--color-text-muted);
+}
+
+[data-bs-theme="dark"] .empty-state p {
+  color: var(--color-text-muted);
+}
+
+[data-bs-theme="dark"] .section-title {
+  color: var(--color-text-muted);
+}
+
+[data-bs-theme="dark"] .btn-primary:focus,
+[data-bs-theme="dark"] .btn-primary:active {
+  box-shadow: 0 0 0 0.2rem rgba(139, 156, 247, 0.35);
+}
+
+[data-bs-theme="dark"] .modal-content .bg-light,
+[data-bs-theme="dark"] #namingPatternModal .bg-light {
+  background-color: var(--bs-secondary-bg) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Floating theme control when navbar is hidden (e.g. invite flow) */
+.theme-floating-toggle {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 1040;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.theme-floating-toggle:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-bg);
 }
