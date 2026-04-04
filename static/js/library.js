@@ -359,7 +359,6 @@ async function downloadSelectedBooks() {
 
     const libraryName = AppState.get('currentLibraryName');
     if (!libraryName) {
-        // Highlight the library selector
         const sel = document.getElementById('downloadLibrarySelect');
         if (sel) {
             sel.classList.add('is-invalid');
@@ -369,23 +368,40 @@ async function downloadSelectedBooks() {
         return;
     }
 
+    // Group selected ASINs by account_name
+    const byAccount = {};
+    for (const book of AppState.get('library')) {
+        if (!selectedAsins.has(book.asin)) continue;
+        const account = book.account_name;
+        if (!account) continue;
+        if (!byAccount[account]) byAccount[account] = [];
+        byAccount[account].push(book.asin);
+    }
+
+    if (Object.keys(byAccount).length === 0) {
+        showToast('Could not determine account for selected books', 'warning');
+        return;
+    }
+
     const btn = document.getElementById('downloadBtn');
     const count = selectedAsins.size;
     const restore = btn ? setButtonLoading(btn, `Adding ${count} to queue…`) : null;
 
-    // Fire and forget
-    apiCall('/api/download/books', {
-        method: 'POST',
-        body: JSON.stringify({
-            selected_asins: Array.from(selectedAsins),
-            cleanup_aax: AppState.get('cleanupAax'),
-            library_name: libraryName
+    const cleanup_aax = AppState.get('cleanupAax');
+    const promises = Object.entries(byAccount).map(([accountName, asins]) =>
+        apiCall('/api/download/books', {
+            method: 'POST',
+            body: JSON.stringify({
+                selected_asins: asins,
+                account_name: accountName,
+                cleanup_aax,
+                library_name: libraryName
+            })
         })
-    }).then(() => {
-        showToast(
-            `${count} book${count !== 1 ? 's' : ''} added to queue`,
-            'success'
-        );
+    );
+
+    Promise.all(promises).then(() => {
+        showToast(`${count} book${count !== 1 ? 's' : ''} added to queue`, 'success');
         AppState.clearSelection();
     }).catch(err => {
         showToast('Download failed: ' + err.message, 'danger');

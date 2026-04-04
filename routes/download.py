@@ -7,6 +7,7 @@ from downloader import download_books, AudiobookDownloader, DownloadQueueManager
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
 from utils.account_manager import get_account_or_404, get_library_config
+from utils.library_cache import get_cached_library, write_library_cache
 
 download_bp = Blueprint('download', __name__)
 
@@ -33,27 +34,26 @@ def download_selected_books():
         if not library_name:
             raise ValidationError('No library selected. Please configure and select a library first.')
 
-        # Accept explicit account_name from body (unified view) or fall back to session
-        current_account = data.get('account_name') or session.get('current_account')
+        current_account = data.get('account_name')
         if not current_account:
-            raise ValidationError('No account selected')
+            raise ValidationError('No account provided for download')
 
-        # Use utility functions for validation
         account_data, region = get_account_or_404(current_account)
         library_config, library_path = get_library_config(library_name)
 
-        # Fetch library directly since session storage is too large for browser cookies
-        from auth import fetch_library
-        library = asyncio.run(fetch_library(current_account, region))
-
+        # Use cached library; fall back to live fetch only on cache miss
+        library = get_cached_library(current_account)
         if not library:
-            raise ValidationError('Failed to fetch library for download')
+            from auth import fetch_library
+            library = asyncio.run(fetch_library(current_account, region))
+            if not library:
+                raise ValidationError('Failed to fetch library for download')
+            for book in library:
+                book['account_name'] = current_account
+            write_library_cache(current_account, library)
 
-        # Get selected book details
-        selected_books = [
-            book for book in library
-            if book['asin'] in selected_asins
-        ]
+        asin_set = set(selected_asins)
+        selected_books = [book for book in library if book['asin'] in asin_set]
 
         if not selected_books:
             raise ValidationError('Selected books not found in library')
@@ -161,11 +161,17 @@ def sync_library():
         if not library_name:
             raise ValidationError('No library selected. Please select a library to sync.')
 
-        current_account = session.get('current_account')
+        # Accept account_name from body; fall back to first authenticated account
+        current_account = data.get('account_name')
         if not current_account:
-            raise ValidationError('No account selected')
+            accounts = config_manager.get_accounts()
+            for name, acc in accounts.items():
+                if acc.get('authenticated'):
+                    current_account = name
+                    break
+        if not current_account:
+            raise ValidationError('No authenticated account available for sync')
 
-        # Use utility functions
         account_data, region = get_account_or_404(current_account)
         library_config, library_path = get_library_config(library_name)
 

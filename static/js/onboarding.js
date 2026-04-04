@@ -87,10 +87,8 @@ function _hideWizard() {
 
 function _completeWizard() {
     _hideWizard();
-    const content = document.getElementById('libraryContent');
-    if (content) content.hidden = false;
-    showToast('All set! Click "Load Library" to fetch your audiobooks.', 'success', 6000);
-    loadAccounts();
+    showToast('All set! Your library is loading…', 'success', 4000);
+    loadAccounts(); // triggers accounts:loaded → fetchAllLibraries automatically
 }
 
 // ── Step 1 → 2: Account was added ──
@@ -150,11 +148,4 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize
     initOnboarding();
-
-    // Handle account:selected while wizard is active (returning from auth)
-    document.addEventListener('account:selected', function () {
-        if (localStorage.getItem(ONBOARDING_KEY) === '2') {
-            initOnboarding();
-        }
-    });
 });
