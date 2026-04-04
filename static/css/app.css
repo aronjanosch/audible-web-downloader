@@ -268,9 +268,9 @@ body {
 /* ── Main Content ── */
 .app-main {
   padding: 1.5rem;
+  padding-top: calc(1.5rem + var(--download-bar-height, 0px));
   max-width: 1800px;
   margin: 0 auto;
-  /* Compensate for download bar when it's open */
   transition: padding-top 0.25s ease;
 }
 

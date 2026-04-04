@@ -33,7 +33,8 @@ def download_selected_books():
         if not library_name:
             raise ValidationError('No library selected. Please configure and select a library first.')
 
-        current_account = session.get('current_account')
+        # Accept explicit account_name from body (unified view) or fall back to session
+        current_account = data.get('account_name') or session.get('current_account')
         if not current_account:
             raise ValidationError('No account selected')
 
@@ -81,6 +82,18 @@ def download_selected_books():
         raise
     except Exception as e:
         return error_response(f'Download error: {str(e)}', status_code=500)
+
+@download_bp.route('/api/download/clear-completed', methods=['POST'])
+def clear_completed_downloads():
+    """Remove all completed and failed downloads from the queue."""
+    queue_manager = DownloadQueueManager()
+    done_states = {'converted', 'completed', 'error'}
+    to_clear = [asin for asin, d in queue_manager.get_all_downloads().items()
+                if d.get('state') in done_states]
+    for asin in to_clear:
+        queue_manager.remove_from_queue(asin)
+    return success_response({'cleared': len(to_clear)})
+
 
 @download_bp.route('/api/download/status/<asin>')
 def download_status_asin(asin):

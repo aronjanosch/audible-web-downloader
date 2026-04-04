@@ -10,6 +10,9 @@ CONFIG_DIR = BASE_DIR / "config"
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 LIBRARY_DATA_DIR = BASE_DIR / "library_data"
 
+# Database
+DB_FILE = CONFIG_DIR / "audible.db"
+
 # Config file paths
 ACCOUNTS_FILE = CONFIG_DIR / "accounts.json"
 LIBRARIES_FILE = CONFIG_DIR / "libraries.json"

@@ -11,6 +11,7 @@ from utils.constants import get_account_auth_dir, get_auth_file_path
 from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
 from utils.errors import AccountNotFoundError, ValidationError, AuthenticationError, success_response, error_response
 from utils.account_manager import get_account_or_404
+from utils.library_cache import get_cached_library, write_library_cache
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -154,6 +155,52 @@ def login_status(session_id):
 
     return jsonify(response), code
 
+@auth_bp.route('/api/library/all', methods=['GET'])
+def fetch_all_libraries():
+    """Fetch Audible libraries from all authenticated accounts, using cache where fresh."""
+    accounts = config_manager.get_accounts()
+    authenticated = [
+        (name, data) for name, data in accounts.items()
+        if data.get('authenticated') and get_auth_file_path(name).exists()
+    ]
+
+    if not authenticated:
+        return success_response({'library': []})
+
+    force = request.args.get('force', '').lower() in ('1', 'true', 'yes')
+
+    async def _fetch_all():
+        cached_results, to_fetch = [], []
+        for name, data in authenticated:
+            if not force:
+                cached = get_cached_library(name)
+                if cached is not None:
+                    cached_results.append((name, cached))
+                    continue
+            to_fetch.append((name, data))
+        tasks = [fetch_library(name, data['region']) for name, data in to_fetch]
+        live = await asyncio.gather(*tasks, return_exceptions=True) if tasks else []
+        return cached_results, to_fetch, live
+
+    cached_results, to_fetch, live_results = asyncio.run(_fetch_all())
+
+    combined = []
+    for name, books in cached_results:
+        for book in books:
+            book.setdefault('account_name', name)
+        combined.extend(books)
+
+    for (name, _), result in zip(to_fetch, live_results):
+        if isinstance(result, Exception) or not result:
+            continue
+        for book in result:
+            book['account_name'] = name
+        write_library_cache(name, result)
+        combined.extend(result)
+
+    return success_response({'library': combined})
+
+
 @auth_bp.route('/api/library/fetch', methods=['POST'])
 def fetch_library_route():
     """API endpoint to fetch the user's Audible library"""
@@ -178,12 +225,22 @@ def fetch_library_route():
         except Exception:
             raise AuthenticationError('Account not authenticated')
         
-        # Simply fetch library using existing authentication file
-        # The authenticator should already be saved during login
+        force = request.args.get('force', '').lower() in ('1', 'true', 'yes')
+        if not force:
+            cached = get_cached_library(account_name)
+            if cached is not None:
+                return success_response({
+                    'message': f'Loaded {len(cached)} books (cached)',
+                    'library': cached,
+                    'from_cache': True
+                })
+
         library = asyncio.run(fetch_library(account_name, region))
-        
+
         if library:
-            # Don't store in session - too large for browser cookies
+            for book in library:
+                book['account_name'] = account_name
+            write_library_cache(account_name, library)
             return success_response({
                 'message': f'Loaded {len(library)} books',
                 'library': library

@@ -43,6 +43,27 @@ async function fetchLibrary() {
     }
 }
 
+async function fetchAllLibraries() {
+    const btn = document.getElementById('loadAllLibrariesBtn');
+    const restore = btn ? setButtonLoading(btn, 'Loading…') : null;
+    _showLoading(true);
+
+    try {
+        await loadLibraryState();
+
+        const result = await apiCall('/api/library/all');
+        AppState.set('isUnifiedView', true);
+        AppState.set('library', result.library || []);
+        populateFilterDropdowns(result.library || []);
+        showToast(`Loaded ${result.library?.length || 0} books from all accounts`, 'success', 3000);
+    } catch (err) {
+        showToast('Failed to load libraries: ' + err.message, 'danger');
+    } finally {
+        if (restore) restore();
+        _showLoading(false);
+    }
+}
+
 async function syncLibrary() {
     const libraryName = AppState.get('currentLibraryName');
     if (!libraryName) {
@@ -93,6 +114,7 @@ function renderLibrary() {
     if (filters.series)    books = books.filter(b => b.series === filters.series);
     if (filters.publisher) books = books.filter(b => b.publisher === filters.publisher);
     if (filters.year)      books = books.filter(b => b.release_year === filters.year);
+    if (filters.account)   books = books.filter(b => b.account_name === filters.account);
     if (filters.hideDownloaded) books = books.filter(b => !libraryStateAsins.has(b.asin));
 
     _displayBooks(books);
@@ -145,6 +167,7 @@ function _formatDuration(mins) {
 function _createBookCard(book, selectedAsins) {
     const inLibrary = AppState.get('libraryStateAsins').has(book.asin);
     const isSelected = selectedAsins.has(book.asin);
+    const isUnified = AppState.get('isUnifiedView');
 
     const div = document.createElement('div');
     div.innerHTML = `
@@ -162,6 +185,7 @@ function _createBookCard(book, selectedAsins) {
             <div class="book-card-body">
                 <div class="book-card-title">${_esc(book.title)}</div>
                 <div class="book-card-author">${_esc(book.authors || '')}</div>
+                ${isUnified && book.account_name ? `<div class="book-account-badge">${_esc(book.account_name)}</div>` : ''}
             </div>
         </div>
     `;
@@ -176,6 +200,7 @@ function _createBookCard(book, selectedAsins) {
 function _createBookListItem(book, selectedAsins) {
     const inLibrary = AppState.get('libraryStateAsins').has(book.asin);
     const isSelected = selectedAsins.has(book.asin);
+    const isUnified = AppState.get('isUnifiedView');
 
     const item = document.createElement('div');
     item.className = `book-list-item${isSelected ? ' selected' : ''}`;
@@ -196,6 +221,7 @@ function _createBookListItem(book, selectedAsins) {
         </div>
         <div class="book-list-status">
             ${inLibrary ? '<span class="badge bg-success"><i class="fas fa-check"></i> In Library</span>' : ''}
+            ${isUnified && book.account_name ? `<span class="badge bg-secondary ms-1">${_esc(book.account_name)}</span>` : ''}
         </div>
     `;
 
@@ -261,6 +287,14 @@ function populateFilterDropdowns(books) {
     _populateSelect('seriesFilter',      unique('series'),       'All Series');
     _populateSelect('publisherFilter',   unique('publisher'),    'All Publishers');
     _populateSelect('releaseYearFilter', unique('release_year').reverse(), 'All Years');
+
+    const accounts = [...new Set(books.map(b => b.account_name).filter(Boolean))].sort();
+    const accountFilterEl = document.getElementById('accountFilter');
+    if (accountFilterEl) {
+        const multiAccount = accounts.length > 1;
+        accountFilterEl.hidden = !multiAccount;
+        if (multiAccount) _populateSelect('accountFilter', accounts, 'All Accounts');
+    }
 }
 
 function _populateSelect(id, values, placeholder) {
@@ -279,7 +313,7 @@ function _populateSelect(id, values, placeholder) {
 
 function clearAllFilters() {
     AppState.resetFilters();
-    ['searchInput', 'authorFilter', 'languageFilter', 'narratorFilter',
+    ['searchInput', 'accountFilter', 'authorFilter', 'languageFilter', 'narratorFilter',
      'seriesFilter', 'publisherFilter', 'releaseYearFilter'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
@@ -300,6 +334,13 @@ function selectAllVisible() {
         const q = filters.search.toLowerCase();
         books = books.filter(b => b.title?.toLowerCase().includes(q) || b.authors?.toLowerCase().includes(q));
     }
+    if (filters.author)    books = books.filter(b => b.authors === filters.author);
+    if (filters.language)  books = books.filter(b => b.language === filters.language);
+    if (filters.narrator)  books = books.filter(b => b.narrator === filters.narrator);
+    if (filters.series)    books = books.filter(b => b.series === filters.series);
+    if (filters.publisher) books = books.filter(b => b.publisher === filters.publisher);
+    if (filters.year)      books = books.filter(b => b.release_year === filters.year);
+    if (filters.account)   books = books.filter(b => b.account_name === filters.account);
     if (filters.hideDownloaded) books = books.filter(b => !libraryStateAsins.has(b.asin));
 
     AppState.selectAll(books.map(b => b.asin));
@@ -361,6 +402,13 @@ document.addEventListener('appstate:change', function (e) {
         renderLibrary();
         _updateViewButtons(e.detail.value);
     }
+    if (e.detail.key === 'isUnifiedView') {
+        renderLibrary();
+        _updateLoadButtons();
+    }
+    if (e.detail.key === 'accountData') {
+        _updateLoadButtons();
+    }
 });
 
 document.addEventListener('appstate:filterschange', renderLibrary);
@@ -418,13 +466,14 @@ function _updateViewButtons(mode) {
 // ── Auth/account events ──
 
 document.addEventListener('account:selected', function (e) {
+    AppState.set('isUnifiedView', false);
     _showLibraryUI(true);
-    // Clear library on account switch
     AppState.set('library', []);
     AppState.resetFilters();
 });
 
 document.addEventListener('account:cleared', function () {
+    AppState.set('isUnifiedView', false);
     _showLibraryUI(false);
     AppState.set('library', []);
 });
@@ -432,6 +481,19 @@ document.addEventListener('account:cleared', function () {
 document.addEventListener('auth:statusChanged', function (e) {
     _updateAuthUI(e.detail.authenticated, e.detail.accountName);
 });
+
+function _updateLoadButtons() {
+    const accountData = AppState.get('accountData') || {};
+    const currentAccount = AppState.get('currentAccount');
+    const isAuthenticated = AppState.get('isAuthenticated');
+    const authenticatedCount = Object.values(accountData).filter(a => a.authenticated).length;
+
+    const refreshBtn = document.getElementById('refreshLibraryBtn');
+    const loadAllBtn = document.getElementById('loadAllLibrariesBtn');
+
+    if (refreshBtn) refreshBtn.hidden = !(currentAccount && isAuthenticated);
+    if (loadAllBtn) loadAllBtn.hidden = authenticatedCount < 2;
+}
 
 function _showLibraryUI(show) {
     const content = document.getElementById('libraryContent');
@@ -443,17 +505,17 @@ function _showLibraryUI(show) {
 
     if (content) content.hidden = !show;
     if (welcome) welcome.hidden = show;
+    _updateLoadButtons();
 }
 
 function _updateAuthUI(isAuthenticated, accountName) {
     const loginBtn = document.getElementById('libraryLoginBtn');
-    const refreshBtn = document.getElementById('refreshLibraryBtn');
     const downloadToSection = document.getElementById('downloadToSection');
     const authAlert = document.getElementById('libraryAuthAlert');
 
     if (loginBtn) loginBtn.hidden = isAuthenticated;
-    if (refreshBtn) refreshBtn.hidden = !isAuthenticated;
     if (downloadToSection) downloadToSection.hidden = !isAuthenticated;
+    _updateLoadButtons();
     if (authAlert) {
         authAlert.hidden = isAuthenticated;
         if (!isAuthenticated) {
@@ -473,6 +535,14 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('searchInput')?.addEventListener('input', function () {
         AppState.setFilter('search', this.value);
     });
+
+    // Account filter
+    document.getElementById('accountFilter')?.addEventListener('change', function () {
+        AppState.setFilter('account', this.value);
+    });
+
+    // Load All Libraries button
+    document.getElementById('loadAllLibrariesBtn')?.addEventListener('click', fetchAllLibraries);
 
     // Filter dropdowns
     ['authorFilter', 'languageFilter', 'narratorFilter', 'seriesFilter', 'publisherFilter', 'releaseYearFilter'].forEach(id => {

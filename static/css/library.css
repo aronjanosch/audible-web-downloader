@@ -323,6 +323,17 @@
   text-overflow: ellipsis;
 }
 
+.book-account-badge {
+  font-size: 0.63rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-top: 0.15rem;
+  font-style: italic;
+  opacity: 0.75;
+}
+
 /* ── Book List View ── */
 #libraryList { display: flex; flex-direction: column; gap: 0.5rem; }
 

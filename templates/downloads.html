@@ -8,91 +8,30 @@
 
 {% block content %}
 
-<!-- Back -->
-<div class="mb-3">
-    <a href="/" class="btn btn-sm btn-outline-secondary">
-        <i class="fas fa-arrow-left me-2"></i>Back to Library
-    </a>
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <a href="/" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <h4 class="mb-0">Downloads</h4>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" id="clearDoneBtn">
+        <i class="fas fa-trash-alt me-1"></i>Clear done
+    </button>
 </div>
 
-<!-- Stats -->
-<div class="downloads-stats mb-4">
-    <div class="stat-card">
-        <div class="stat-value" id="statActive">0</div>
-        <div class="stat-label">Active</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="statQueued">0</div>
-        <div class="stat-label">Queued</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="statCompleted">0</div>
-        <div class="stat-label">Completed</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="statFailed">0</div>
-        <div class="stat-label">Failed</div>
-    </div>
+<!-- In Progress -->
+<div class="dl-section-label">
+    <span>In Progress</span>
+    <span class="dl-count" id="inProgressCount">0</span>
 </div>
+<div id="inProgressList"></div>
 
-<!-- Overall progress -->
-<div class="overall-progress-card mb-4">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Overall Progress</h5>
-        <span class="text-muted small" id="overallProgressText">0 / 0 books</span>
-    </div>
-    <div class="progress">
-        <div id="overallProgressBar"
-             class="progress-bar progress-bar-striped progress-bar-animated"
-             role="progressbar" style="width: 0%; transition: width 0.5s ease"
-             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-        </div>
-    </div>
+<!-- Done -->
+<div class="dl-section-label mt-4">
+    <span>Done</span>
+    <span class="dl-count" id="doneCount">0</span>
 </div>
-
-<!-- Active Downloads -->
-<div class="downloads-section-header" data-bs-toggle="collapse" data-bs-target="#activeSection">
-    <h3><i class="fas fa-download me-2 text-primary"></i>Active</h3>
-    <span class="badge bg-primary" id="activeCount">0</span>
-</div>
-<div id="activeSection" class="collapse show mb-4">
-    <div id="activeDownloads"></div>
-</div>
-
-<!-- Queued -->
-<div class="downloads-section-header" data-bs-toggle="collapse" data-bs-target="#queuedSection">
-    <h3><i class="fas fa-clock me-2 text-secondary"></i>Queued</h3>
-    <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-secondary" id="queuedCount">0</span>
-        <i class="fas fa-chevron-down text-muted small"></i>
-    </div>
-</div>
-<div id="queuedSection" class="collapse mb-4">
-    <div id="queuedDownloads"></div>
-</div>
-
-<!-- Completed -->
-<div class="downloads-section-header" data-bs-toggle="collapse" data-bs-target="#completedSection">
-    <h3><i class="fas fa-check-circle me-2 text-success"></i>Completed</h3>
-    <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-success" id="completedCount">0</span>
-        <i class="fas fa-chevron-down text-muted small"></i>
-    </div>
-</div>
-<div id="completedSection" class="collapse mb-4">
-    <div id="completedDownloads"></div>
-</div>
-
-<!-- Failed -->
-<div class="downloads-section-header" data-bs-toggle="collapse" data-bs-target="#failedSection">
-    <h3><i class="fas fa-exclamation-triangle me-2 text-danger"></i>Failed</h3>
-    <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-danger" id="failedCount">0</span>
-        <i class="fas fa-chevron-down text-muted small"></i>
-    </div>
-</div>
-<div id="failedSection" class="collapse mb-4">
-    <div id="failedDownloads"></div>
-</div>
+<div id="doneList"></div>
 
 {% endblock %}

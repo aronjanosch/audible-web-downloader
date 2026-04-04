@@ -1,22 +1,25 @@
 """
-Centralized configuration management for JSON file I/O.
-Provides consistent error handling, atomic writes, and optional schema validation.
+Centralized configuration management backed by SQLite.
+
+All public method signatures are identical to the previous JSON-based
+implementation so existing callers (routes, scheduler, auto-downloader)
+require no changes.
+
+Settings (naming_pattern, invitation_token) remain in settings.json and
+are still managed by SettingsManager — this class does not touch them.
+Auth files (config/auth/*/auth.json) are also untouched.
 """
-import json
-import shutil
+
+import time
 from pathlib import Path
-from typing import Dict, Any, Optional
-from utils.constants import (
-    ACCOUNTS_FILE,
-    LIBRARIES_FILE,
-    SETTINGS_FILE,
-    CONFIG_DIR,
-    AUTH_DIR,
-)
+from typing import Any, Dict, Optional
+
+from utils.db import get_db, transaction
+from utils.constants import CONFIG_DIR, AUTH_DIR
 
 
 class ConfigurationError(Exception):
-    """Raised when configuration file operations fail"""
+    """Raised when configuration operations fail"""
     pass
 
 
@@ -27,171 +30,99 @@ class ValidationError(ConfigurationError):
 
 class ConfigManager:
     """
-    Centralized manager for configuration file I/O operations.
-    Provides atomic writes, error handling, and optional validation.
+    Manages accounts and library configurations using the SQLite database.
     """
 
     def __init__(self):
-        """Initialize ConfigManager and ensure required directories exist"""
         self._ensure_directories()
 
     def _ensure_directories(self) -> None:
-        """Create required config directories if they don't exist"""
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         AUTH_DIR.mkdir(parents=True, exist_ok=True)
-
-    def _read_json_file(self, file_path: Path, default: Any = None) -> Any:
-        """
-        Read and parse a JSON file with error handling.
-
-        Args:
-            file_path: Path to the JSON file
-            default: Default value to return if file doesn't exist
-
-        Returns:
-            Parsed JSON data or default value
-
-        Raises:
-            ConfigurationError: If file exists but cannot be read or parsed
-        """
-        if not file_path.exists():
-            return default if default is not None else {}
-
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            raise ConfigurationError(
-                f"Invalid JSON in {file_path}: {e}"
-            ) from e
-        except IOError as e:
-            raise ConfigurationError(
-                f"Cannot read {file_path}: {e}"
-            ) from e
-
-    def _write_json_file(self, file_path: Path, data: Any) -> None:
-        """
-        Write data to JSON file with atomic operation.
-        Uses temporary file and rename to prevent corruption on failure.
-
-        Args:
-            file_path: Path to the JSON file
-            data: Data to serialize to JSON
-
-        Raises:
-            ConfigurationError: If file cannot be written
-        """
-        # Ensure parent directory exists
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Write to temporary file first
-        temp_file = file_path.with_suffix('.tmp')
-        try:
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-
-            # Atomic rename (replaces existing file)
-            temp_file.replace(file_path)
-
-        except (IOError, OSError) as e:
-            # Clean up temp file on error
-            if temp_file.exists():
-                temp_file.unlink()
-            raise ConfigurationError(
-                f"Cannot write {file_path}: {e}"
-            ) from e
 
     # ========== Accounts Management ==========
 
     def get_accounts(self) -> Dict[str, Any]:
         """
-        Load all Audible accounts from configuration.
+        Load all Audible accounts.
 
         Returns:
-            Dictionary of account data keyed by account name
-
-        Raises:
-            ConfigurationError: If accounts file cannot be read
+            Dictionary of account data keyed by account name, each entry
+            matching the old JSON shape (including nested ``auto_download``).
         """
-        accounts = self._read_json_file(ACCOUNTS_FILE, default={})
+        db = get_db()
+        accounts: Dict[str, Any] = {}
 
-        # Migration: Remove deprecated use_audiobookshelf_structure field
-        migrated = False
-        for account_name, account_data in accounts.items():
-            if isinstance(account_data, dict) and 'use_audiobookshelf_structure' in account_data:
-                del account_data['use_audiobookshelf_structure']
-                migrated = True
-
-        if migrated:
-            self.save_accounts(accounts)
-            print("✓ Migrated accounts.json to remove deprecated fields")
+        for row in db.execute("SELECT * FROM accounts ORDER BY name"):
+            name = row["name"]
+            accounts[name] = self._row_to_account(row, db)
 
         return accounts
 
     def save_accounts(self, accounts: Dict[str, Any]) -> None:
         """
-        Save Audible accounts to configuration.
+        Persist all account data, replacing existing records.
 
         Args:
-            accounts: Dictionary of account data
-
-        Raises:
-            ConfigurationError: If accounts file cannot be written
+            accounts: Dictionary of account data keyed by account name.
         """
-        self._write_json_file(ACCOUNTS_FILE, accounts)
+        with transaction() as conn:
+            # Remove accounts that are no longer present
+            existing = {r["name"] for r in conn.execute("SELECT name FROM accounts")}
+            incoming = set(accounts.keys())
+            for name in existing - incoming:
+                conn.execute("DELETE FROM accounts WHERE name=?", (name,))
+
+            for name, data in accounts.items():
+                self._upsert_account(conn, name, data)
 
     def get_account(self, account_name: str) -> Optional[Dict[str, Any]]:
         """
         Get a specific account by name.
 
-        Args:
-            account_name: Name of the account
-
         Returns:
-            Account data dictionary or None if not found
-
-        Raises:
-            ConfigurationError: If accounts file cannot be read
+            Account data dictionary or None if not found.
         """
-        accounts = self.get_accounts()
-        return accounts.get(account_name)
+        db = get_db()
+        row = db.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+        if row is None:
+            return None
+        return self._row_to_account(row, db)
 
     def update_account(self, account_name: str, updates: Dict[str, Any]) -> None:
         """
-        Update specific fields of an account.
-
-        Args:
-            account_name: Name of the account to update
-            updates: Dictionary of fields to update
+        Merge ``updates`` into an existing account's data.
 
         Raises:
-            ConfigurationError: If account doesn't exist or cannot be saved
+            ConfigurationError: If the account does not exist.
         """
-        accounts = self.get_accounts()
-
-        if account_name not in accounts:
+        existing = self.get_account(account_name)
+        if existing is None:
             raise ConfigurationError(f"Account '{account_name}' not found")
 
-        accounts[account_name].update(updates)
-        self.save_accounts(accounts)
+        # Deep-merge the auto_download sub-dict if present
+        if "auto_download" in updates and "auto_download" in existing:
+            merged_auto = {**existing["auto_download"], **updates["auto_download"]}
+            updates = {**updates, "auto_download": merged_auto}
+
+        merged = {**existing, **updates}
+
+        with transaction() as conn:
+            self._upsert_account(conn, account_name, merged)
 
     def delete_account(self, account_name: str) -> None:
         """
-        Delete an account from configuration.
-
-        Args:
-            account_name: Name of the account to delete
+        Delete an account.
 
         Raises:
-            ConfigurationError: If account doesn't exist or cannot be saved
+            ConfigurationError: If the account does not exist.
         """
-        accounts = self.get_accounts()
-
-        if account_name not in accounts:
+        db = get_db()
+        row = db.execute("SELECT name FROM accounts WHERE name=?", (account_name,)).fetchone()
+        if row is None:
             raise ConfigurationError(f"Account '{account_name}' not found")
-
-        del accounts[account_name]
-        self.save_accounts(accounts)
+        with transaction() as conn:
+            conn.execute("DELETE FROM accounts WHERE name=?", (account_name,))
 
     # ========== Libraries Management ==========
 
@@ -200,130 +131,103 @@ class ConfigManager:
         Load all library configurations.
 
         Returns:
-            Dictionary of library configurations keyed by library name
-
-        Raises:
-            ConfigurationError: If libraries file cannot be read
+            Dictionary of library configurations keyed by library name.
         """
-        libraries = self._read_json_file(LIBRARIES_FILE, default={})
-
-        # Migration: Remove deprecated use_audiobookshelf_structure field
-        migrated = False
-        for library_name, library_config in libraries.items():
-            if isinstance(library_config, dict) and 'use_audiobookshelf_structure' in library_config:
-                del library_config['use_audiobookshelf_structure']
-                migrated = True
-
-        if migrated:
-            self.save_libraries(libraries)
-            print("✓ Migrated libraries.json to remove deprecated fields")
-
-        return libraries
+        db = get_db()
+        return {
+            row["name"]: {"path": row["path"], "created_at": row["created_at"]}
+            for row in db.execute("SELECT * FROM libraries ORDER BY name")
+        }
 
     def save_libraries(self, libraries: Dict[str, Any]) -> None:
         """
-        Save library configurations.
-
-        Args:
-            libraries: Dictionary of library configurations
-
-        Raises:
-            ConfigurationError: If libraries file cannot be written
+        Persist all library configurations, replacing existing records.
         """
-        self._write_json_file(LIBRARIES_FILE, libraries)
+        with transaction() as conn:
+            existing = {r["name"] for r in conn.execute("SELECT name FROM libraries")}
+            incoming = set(libraries.keys())
+            for name in existing - incoming:
+                conn.execute("DELETE FROM libraries WHERE name=?", (name,))
+
+            for name, data in libraries.items():
+                conn.execute(
+                    """
+                    INSERT INTO libraries (name, path, created_at)
+                    VALUES (?,?,?)
+                    ON CONFLICT(name) DO UPDATE SET path=excluded.path
+                    """,
+                    (name, data.get("path", ""), data.get("created_at", time.time())),
+                )
 
     def get_library(self, library_name: str) -> Optional[Dict[str, Any]]:
         """
         Get a specific library configuration by name.
 
-        Args:
-            library_name: Name of the library
-
         Returns:
-            Library configuration dictionary or None if not found
-
-        Raises:
-            ConfigurationError: If libraries file cannot be read
+            Library configuration dictionary or None if not found.
         """
-        libraries = self.get_libraries()
-        return libraries.get(library_name)
+        db = get_db()
+        row = db.execute("SELECT * FROM libraries WHERE name=?", (library_name,)).fetchone()
+        if row is None:
+            return None
+        return {"path": row["path"], "created_at": row["created_at"]}
 
     def update_library(self, library_name: str, updates: Dict[str, Any]) -> None:
         """
         Update specific fields of a library configuration.
 
-        Args:
-            library_name: Name of the library to update
-            updates: Dictionary of fields to update
-
         Raises:
-            ConfigurationError: If library doesn't exist or cannot be saved
+            ConfigurationError: If the library does not exist.
         """
-        libraries = self.get_libraries()
-
-        if library_name not in libraries:
+        existing = self.get_library(library_name)
+        if existing is None:
             raise ConfigurationError(f"Library '{library_name}' not found")
-
-        libraries[library_name].update(updates)
-        self.save_libraries(libraries)
+        merged = {**existing, **updates}
+        with transaction() as conn:
+            conn.execute(
+                "UPDATE libraries SET path=?, created_at=? WHERE name=?",
+                (merged.get("path", ""), merged.get("created_at", time.time()), library_name),
+            )
 
     def delete_library(self, library_name: str) -> None:
         """
         Delete a library configuration.
 
-        Args:
-            library_name: Name of the library to delete
-
         Raises:
-            ConfigurationError: If library doesn't exist or cannot be saved
+            ConfigurationError: If the library does not exist.
         """
-        libraries = self.get_libraries()
-
-        if library_name not in libraries:
+        db = get_db()
+        row = db.execute("SELECT name FROM libraries WHERE name=?", (library_name,)).fetchone()
+        if row is None:
             raise ConfigurationError(f"Library '{library_name}' not found")
-
-        del libraries[library_name]
-        self.save_libraries(libraries)
+        with transaction() as conn:
+            conn.execute("DELETE FROM libraries WHERE name=?", (library_name,))
 
     # ========== Settings Management ==========
-    # Note: Settings are primarily managed by SettingsManager in settings.py
-    # These methods provide a unified interface for consistency
+    # Settings (naming_pattern, invitation_token) remain in settings.json.
+    # These methods delegate to that file for backward compatibility.
 
     def get_settings(self) -> Dict[str, Any]:
-        """
-        Load application settings.
-
-        Returns:
-            Dictionary of application settings
-
-        Raises:
-            ConfigurationError: If settings file cannot be read
-        """
-        return self._read_json_file(SETTINGS_FILE, default={})
+        import json
+        settings_file = CONFIG_DIR / "settings.json"
+        if not settings_file.exists():
+            return {}
+        try:
+            with open(settings_file, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except (json.JSONDecodeError, IOError):
+            return {}
 
     def save_settings(self, settings: Dict[str, Any]) -> None:
-        """
-        Save application settings.
-
-        Args:
-            settings: Dictionary of application settings
-
-        Raises:
-            ConfigurationError: If settings file cannot be written
-        """
-        self._write_json_file(SETTINGS_FILE, settings)
+        import json
+        settings_file = CONFIG_DIR / "settings.json"
+        settings_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = settings_file.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(settings, fh, indent=2, ensure_ascii=False)
+        tmp.replace(settings_file)
 
     def update_setting(self, key: str, value: Any) -> None:
-        """
-        Update a specific setting.
-
-        Args:
-            key: Setting key
-            value: Setting value
-
-        Raises:
-            ConfigurationError: If settings cannot be saved
-        """
         settings = self.get_settings()
         settings[key] = value
         self.save_settings(settings)
@@ -334,26 +238,21 @@ class ConfigManager:
         """
         Validate account data structure.
 
-        Args:
-            account_data: Account data to validate
-
         Returns:
-            True if valid
+            True if valid.
 
         Raises:
-            ValidationError: If account data is invalid
+            ValidationError: If account data is invalid.
         """
-        required_fields = ['region', 'authenticated']
-
-        for field in required_fields:
+        for field in ("region", "authenticated"):
             if field not in account_data:
                 raise ValidationError(f"Account missing required field: {field}")
 
-        valid_regions = ['us', 'uk', 'de', 'fr', 'jp', 'it', 'in', 'ca', 'au', 'es']
-        if account_data['region'] not in valid_regions:
+        valid_regions = {"us", "uk", "de", "fr", "jp", "it", "in", "ca", "au", "es"}
+        if account_data["region"] not in valid_regions:
             raise ValidationError(f"Invalid region: {account_data['region']}")
 
-        if not isinstance(account_data['authenticated'], bool):
+        if not isinstance(account_data["authenticated"], bool):
             raise ValidationError("Field 'authenticated' must be boolean")
 
         return True
@@ -362,27 +261,94 @@ class ConfigManager:
         """
         Validate library configuration structure.
 
-        Args:
-            library_config: Library configuration to validate
-
         Returns:
-            True if valid
+            True if valid.
 
         Raises:
-            ValidationError: If library configuration is invalid
+            ValidationError: If library configuration is invalid.
         """
-        required_fields = ['path']
-
-        for field in required_fields:
-            if field not in library_config:
-                raise ValidationError(f"Library missing required field: {field}")
-
-        # Validate path exists (optional - might want to allow non-existent paths)
-        # library_path = Path(library_config['path'])
-        # if not library_path.exists():
-        #     raise ValidationError(f"Library path does not exist: {library_path}")
-
+        if "path" not in library_config:
+            raise ValidationError("Library missing required field: path")
         return True
+
+    # ========== Private helpers ==========
+
+    def _row_to_account(self, row: Any, db: Any) -> Dict[str, Any]:
+        """Convert a DB row + rules query into the old JSON-shaped dict."""
+        name = row["name"]
+        rules = [
+            {"field": r["field"], "value": r["value"], "library_name": r["library_name"]}
+            for r in db.execute(
+                "SELECT field, value, library_name FROM auto_download_rules "
+                "WHERE account_name=? ORDER BY position",
+                (name,),
+            )
+        ]
+        account: Dict[str, Any] = {
+            "region": row["region"],
+            "authenticated": bool(row["authenticated"]),
+        }
+        if row["pending_invitation_token"]:
+            account["pending_invitation_token"] = row["pending_invitation_token"]
+
+        # Reconstruct the nested auto_download dict (matches old accounts.json shape)
+        account["auto_download"] = {
+            "enabled": bool(row["auto_dl_enabled"]),
+            "interval_hours": row["auto_dl_interval_hours"],
+            "rules": rules,
+            "default_library_name": row["auto_dl_default_library"],
+            "last_run": row["auto_dl_last_run"],
+            "last_run_result": row["auto_dl_last_run_result"],
+        }
+        return account
+
+    def _upsert_account(self, conn: Any, name: str, data: Dict[str, Any]) -> None:
+        """Insert or replace a single account and its rules."""
+        auto_dl = data.get("auto_download") or {}
+        conn.execute(
+            """
+            INSERT INTO accounts
+                (name, region, authenticated,
+                 auto_dl_enabled, auto_dl_interval_hours,
+                 auto_dl_default_library,
+                 auto_dl_last_run, auto_dl_last_run_result,
+                 pending_invitation_token)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(name) DO UPDATE SET
+                region                   = excluded.region,
+                authenticated            = excluded.authenticated,
+                auto_dl_enabled          = excluded.auto_dl_enabled,
+                auto_dl_interval_hours   = excluded.auto_dl_interval_hours,
+                auto_dl_default_library  = excluded.auto_dl_default_library,
+                auto_dl_last_run         = excluded.auto_dl_last_run,
+                auto_dl_last_run_result  = excluded.auto_dl_last_run_result,
+                pending_invitation_token = excluded.pending_invitation_token
+            """,
+            (
+                name,
+                data.get("region", "us"),
+                1 if data.get("authenticated") else 0,
+                1 if auto_dl.get("enabled") else 0,
+                auto_dl.get("interval_hours", 6),
+                auto_dl.get("default_library_name"),
+                auto_dl.get("last_run"),
+                auto_dl.get("last_run_result"),
+                data.get("pending_invitation_token"),
+            ),
+        )
+        # Replace rules: delete existing, re-insert in order
+        conn.execute("DELETE FROM auto_download_rules WHERE account_name=?", (name,))
+        for position, rule in enumerate(auto_dl.get("rules") or []):
+            if not isinstance(rule, dict):
+                continue
+            conn.execute(
+                """
+                INSERT INTO auto_download_rules
+                    (account_name, position, field, value, library_name)
+                VALUES (?,?,?,?,?)
+                """,
+                (name, position, rule.get("field", ""), rule.get("value", ""), rule.get("library_name", "")),
+            )
 
 
 # Global singleton instance
@@ -390,12 +356,7 @@ _config_manager: Optional[ConfigManager] = None
 
 
 def get_config_manager() -> ConfigManager:
-    """
-    Get the global ConfigManager singleton instance.
-
-    Returns:
-        ConfigManager instance
-    """
+    """Return the global ConfigManager singleton."""
     global _config_manager
     if _config_manager is None:
         _config_manager = ConfigManager()

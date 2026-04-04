@@ -8,6 +8,7 @@ window.AppState = (function () {
         currentAccount: null,
         accountData: {},           // { [name]: { region, authenticated } }
         isAuthenticated: false,
+        isUnifiedView: false,
 
         library: [],               // full book list for current account
         selectedAsins: new Set(),
@@ -23,6 +24,7 @@ window.AppState = (function () {
 
         filters: {
             search: '',
+            account: '',
             author: '',
             language: '',
             narrator: '',
@@ -69,6 +71,7 @@ window.AppState = (function () {
         const f = _state.filters;
         let count = 0;
         if (f.search) count++;
+        if (f.account) count++;
         if (f.author) count++;
         if (f.language) count++;
         if (f.narrator) count++;

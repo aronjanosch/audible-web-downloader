@@ -34,7 +34,14 @@ def create_app():
     # Ensure required directories exist
     Path(app.config['DOWNLOADS_DIR']).mkdir(exist_ok=True)
     Path('config').mkdir(exist_ok=True)
-    
+
+    # Initialise database before importing blueprints — some blueprints
+    # instantiate queue manager singletons at module level which call get_db().
+    from utils.db import init_db, migrate
+    from utils.constants import DB_FILE
+    init_db(DB_FILE)
+    migrate()
+
     # Register blueprints
     from routes.main import main_bp
     from routes.auth import auth_bp
@@ -43,6 +50,7 @@ def create_app():
     from routes.invite import invite_bp
     from routes.importer import importer_bp
     from routes.scheduler import scheduler_bp
+    from routes.books import books_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -51,6 +59,7 @@ def create_app():
     app.register_blueprint(invite_bp)
     app.register_blueprint(importer_bp)
     app.register_blueprint(scheduler_bp)
+    app.register_blueprint(books_bp)
 
     from utils.scheduler import init_scheduler
     init_scheduler(app)
