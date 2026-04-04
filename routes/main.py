@@ -380,20 +380,18 @@ def set_invitation_token():
 
 @main_bp.route('/api/library/state', methods=['GET'])
 def get_library_state():
-    """Get library state (list of ASINs in library.json)"""
+    """Get library state — ASINs whose files are confirmed present on disk."""
     try:
-        library_file = CONFIG_DIR / "library.json"
-        if library_file.exists():
-            with open(library_file, 'r') as f:
-                library_state = json.load(f)
-                # Return just the ASINs for efficient lookup
-                return jsonify({
-                    'success': True,
-                    'asins': list(library_state.keys())
-                })
+        from utils.db import get_db
+        from app.models import BookStatus
+        db = get_db()
+        rows = db.execute(
+            "SELECT asin FROM books WHERE status=?",
+            (BookStatus.DOWNLOADED.value,),
+        ).fetchall()
         return jsonify({
             'success': True,
-            'asins': []
+            'asins': [r["asin"] for r in rows],
         })
     except Exception as e:
         return jsonify({

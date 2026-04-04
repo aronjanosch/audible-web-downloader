@@ -40,7 +40,7 @@ def run_auto_download(account_name: str, region: str, rules: list, default_libra
     Designed to be called from an APScheduler job (background thread).
     """
     from auth import fetch_library
-    from downloader import download_books, DownloadQueueManager
+    from downloader import download_books
     from utils.config_manager import get_config_manager
 
     config_manager = get_config_manager()
@@ -59,12 +59,16 @@ def run_auto_download(account_name: str, region: str, rules: list, default_libra
             _update_last_run(config_manager, account_name, "Library empty or unavailable")
             return
 
-        # Determine which ASINs are already converted
-        queue_manager = DownloadQueueManager()
+        # Determine which ASINs are already downloaded (authoritative source: books table)
+        from utils.db import get_db
+        from app.models import BookStatus
+        db = get_db()
         converted_asins = {
-            asin
-            for asin, data in queue_manager.get_all_downloads().items()
-            if data.get('state') == 'converted'
+            row["asin"]
+            for row in db.execute(
+                "SELECT asin FROM books WHERE status=?",
+                (BookStatus.DOWNLOADED.value,),
+            ).fetchall()
         }
 
         new_books = [b for b in library if b['asin'] not in converted_asins]

@@ -79,7 +79,7 @@ def check_auth():
     # Update account data if status changed
     if accounts[account_name].get('authenticated') != is_authenticated:
         accounts[account_name]['authenticated'] = is_authenticated
-        save_accounts(accounts)
+        config_manager.save_accounts(accounts)
     
     return jsonify({'authenticated': is_authenticated})
 

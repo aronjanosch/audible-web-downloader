@@ -20,7 +20,7 @@ from settings import get_naming_pattern
 from datetime import datetime
 from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
 from utils.constants import CONFIG_DIR, DOWNLOAD_QUEUE_FILE, get_auth_file_path
-from app.models import DownloadState
+from app.models import DownloadState, BookStatus
 from app.services import PathBuilder, AudioConverter, MetadataEnricher, LibraryManager
 from utils.queue_base import BaseQueueManager
 
@@ -299,6 +299,11 @@ class AudiobookDownloader:
         self.library_state = self.library_manager.library_state
         return stats
 
+    def _invalidate_library_state(self) -> None:
+        """Refresh the local library_state cache after an out-of-band DB update."""
+        self.library_manager._invalidate_cache()
+        self.library_state = self.library_manager.library_state
+
     def _get_file_paths(self, book_title: str, asin: str, product: Dict = None) -> Dict[str, Path]:
         """Delegate to PathBuilder for file path construction"""
         return self.path_builder.get_file_paths(
@@ -436,10 +441,10 @@ class AudiobookDownloader:
                 self.add_to_library(book_asin, book_title, str(m4b_file))
                 return str(m4b_file)
             else:
-                # File is missing, clear state and re-download
+                # File is missing, mark as such and re-download
                 self._log(f"⚠️  '{book_title}' was downloaded but file is missing. Re-downloading...", book_asin)
-                self.library_state.pop(book_asin, None)
-                self._save_library_state()
+                self.library_manager.set_status(book_asin, BookStatus.MISSING)
+                self._invalidate_library_state()
 
         # Fuzzy duplicate check (for different ASINs but same book, e.g., regional editions)
         # Only checks within the SAME library to allow different language versions in separate libraries
