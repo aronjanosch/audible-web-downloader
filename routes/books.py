@@ -224,14 +224,17 @@ def redownload_book(asin: str):
 
     # Queue the download
     try:
-        from downloader import download_books
-        results = asyncio.run(download_books(
-            account_name,
-            region,
-            [book_record],
-            cleanup_aax=True,
-            library_path=library_path,
-        ))
+        from downloader import download_books, count_successful_batch_downloads
+
+        results = asyncio.run(
+            download_books(
+                account_name,
+                region,
+                [book_record],
+                cleanup_aax=True,
+                library_path=library_path,
+            )
+        )
     except Exception as e:
         # Revert status on failure
         with transaction() as conn:
@@ -242,9 +245,29 @@ def redownload_book(asin: str):
         logger.error("Re-download failed for %s: %s", asin, e)
         return jsonify({"error": f"Re-download failed: {e}"}), 500
 
-    return jsonify({
-        "success": True,
-        "asin": asin,
-        "title": row["title"],
-        "message": "Re-download queued",
-    })
+    if count_successful_batch_downloads(results) < 1:
+        with transaction() as conn:
+            conn.execute(
+                "UPDATE books SET status=?, updated_at=strftime('%s','now') WHERE asin=?",
+                (BookStatus.MISSING.value, asin),
+            )
+        r0 = results[0] if results else None
+        if isinstance(r0, BaseException):
+            err = str(r0)
+            err_type = type(r0).__name__
+        else:
+            err = "Download failed"
+            err_type = "DownloadFailed"
+        logger.error("Re-download failed for %s: %s (%s)", asin, err, err_type)
+        return jsonify({"error": f"Re-download failed: {err}", "error_type": err_type}), 500
+
+    path = results[0] if results and not isinstance(results[0], BaseException) else None
+    return jsonify(
+        {
+            "success": True,
+            "asin": asin,
+            "title": row["title"],
+            "message": "Re-download completed",
+            "path": path,
+        }
+    )

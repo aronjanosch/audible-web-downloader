@@ -15,7 +15,7 @@ from asyncio import Semaphore
 import time
 import hashlib
 import unicodedata
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 from settings import get_naming_pattern
 from datetime import datetime
 from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
@@ -237,7 +237,7 @@ class AudiobookDownloader:
         return self.queue_manager.get_download(asin) or {}
 
     def get_library_entry(self, asin: str) -> Dict:
-        """Get library entry from persistent library.json"""
+        """Get library entry from the books table in SQLite"""
         return self.library_manager.get_library_entry(asin)
 
     def add_to_library(self, asin: str, title: str, file_path: str, **metadata):
@@ -426,7 +426,7 @@ class AudiobookDownloader:
         paths = self._get_file_paths(book_title, book_asin, product)
         m4b_file = paths['m4b_file']
 
-        # Check if book already in library (using stored file_path from library.json)
+        # Check if book already in library (using stored file_path from SQLite books table)
         existing_entry = self.get_library_entry(book_asin)
         if existing_entry.get('state') == DownloadState.CONVERTED.value:
             # Check stored file path first
@@ -467,40 +467,42 @@ class AudiobookDownloader:
         paths['aaxc_file'].parent.mkdir(parents=True, exist_ok=True)
 
         for attempt in range(max_retries):
-            async with self.download_semaphore:
-                try:
-                    result = await self._process_book_download(book_asin, book_title, quality, paths, cleanup_aax)
-                    # Cleanup start time on success
+            try:
+                async with self.download_semaphore:
+                    result = await self._process_book_download(
+                        book_asin, book_title, quality, paths, cleanup_aax
+                    )
+            except Exception as e:
+                self._log(f"❌ Error on attempt {attempt + 1}/{max_retries}: {e}", book_asin)
+                if attempt < max_retries - 1:
+                    self._log(f"⏳ Retrying in 5 seconds...", book_asin)
+                    self.set_download_state(
+                        book_asin,
+                        DownloadState.RETRYING,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    await asyncio.sleep(5)
+                else:
+                    self._log(f"💔 Failed after {max_retries} attempts", book_asin)
+                    self.set_download_state(
+                        book_asin,
+                        DownloadState.ERROR,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        failed_at=time.time(),
+                        attempts=max_retries,
+                    )
                     if book_asin in self.download_start_times:
                         del self.download_start_times[book_asin]
-                    return result
-                except Exception as e:
-                    self._log(f"❌ Error on attempt {attempt + 1}/{max_retries}: {e}", book_asin)
-                    if attempt < max_retries - 1:
-                        self._log(f"⏳ Retrying in 5 seconds...", book_asin)
-                        self.set_download_state(
-                            book_asin, 
-                            DownloadState.RETRYING, 
-                            error=str(e),
-                            error_type=type(e).__name__,
-                            attempt=attempt + 1,
-                            max_retries=max_retries
-                        )
-                        await asyncio.sleep(5)
-                    else:
-                        self._log(f"💔 Failed after {max_retries} attempts", book_asin)
-                        self.set_download_state(
-                            book_asin, 
-                            DownloadState.ERROR, 
-                            error=str(e),
-                            error_type=type(e).__name__,
-                            failed_at=time.time(),
-                            attempts=max_retries
-                        )
-                        # Cleanup start time on failure
-                        if book_asin in self.download_start_times:
-                            del self.download_start_times[book_asin]
-                        return None
+                    return None
+                continue
+
+            if book_asin in self.download_start_times:
+                del self.download_start_times[book_asin]
+            return result
         return None
     
     async def _process_book_download(self, asin: str, title: str, quality: str, paths: Dict[str, Path], cleanup_aax: bool) -> Optional[str]:
@@ -560,7 +562,7 @@ class AudiobookDownloader:
             self._log(f"📁 Moving to library...", asin)
             self._move_to_library(temp_m4b_file, final_m4b_file, title, asin)
 
-            # Add to library state (persisted to library.json for duplicate detection)
+            # Add to library state (persisted to SQLite books table for duplicate detection)
             self.add_to_library(asin, title, str(final_m4b_file))
             
             # Update queue manager state to CONVERTED (important for UI progress tracking)
@@ -626,6 +628,35 @@ class AudiobookDownloader:
         """Delegate to MetadataEnricher for enhanced metadata"""
         await self.metadata_enricher.add_enhanced_metadata(client, m4b_file, asin)
 
+def serialize_batch_download_results(results: List[Any]) -> List[Dict[str, Any]]:
+    """Make asyncio.gather(..., return_exceptions=True) results JSON-serializable."""
+    serialized = []
+    for r in results:
+        if isinstance(r, BaseException):
+            serialized.append(
+                {
+                    "success": False,
+                    "error": str(r),
+                    "error_type": type(r).__name__,
+                }
+            )
+        elif r:
+            serialized.append({"success": True, "path": r})
+        else:
+            serialized.append(
+                {
+                    "success": False,
+                    "error": "Download failed",
+                    "error_type": "DownloadFailed",
+                }
+            )
+    return serialized
+
+
+def count_successful_batch_downloads(results: List[Any]) -> int:
+    return sum(1 for r in results if r and not isinstance(r, BaseException))
+
+
 async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3, library_path=None, downloads_dir=None):
     """
     Download multiple audiobooks.
@@ -664,7 +695,7 @@ async def download_books(account_name, region, selected_books, quality="High", c
     # Log batch summary
     elapsed = time.time() - start_time
     elapsed_str = AudiobookDownloader._format_elapsed_time(elapsed)
-    successful = sum(1 for r in results if r and not isinstance(r, Exception))
+    successful = count_successful_batch_downloads(results)
     failed = len(results) - successful
 
     end_timestamp = datetime.now().strftime("%H:%M:%S")

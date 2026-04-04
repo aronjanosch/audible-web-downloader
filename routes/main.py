@@ -164,7 +164,7 @@ def delete_account(account_name):
         account_data, region = get_account_or_404(account_name)
         accounts = config_manager.get_accounts()
 
-        # Remove account from accounts.json
+        # Remove account from SQLite
         del accounts[account_name]
         config_manager.save_accounts(accounts)
 

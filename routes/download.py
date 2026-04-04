@@ -3,7 +3,13 @@ import asyncio
 import json
 import os
 import time
-from downloader import download_books, AudiobookDownloader, DownloadQueueManager
+from downloader import (
+    AudiobookDownloader,
+    DownloadQueueManager,
+    count_successful_batch_downloads,
+    download_books,
+    serialize_batch_download_results,
+)
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
 from utils.account_manager import get_account_or_404, get_library_config
@@ -13,6 +19,7 @@ download_bp = Blueprint('download', __name__)
 
 # Get ConfigManager singleton
 config_manager = get_config_manager()
+
 
 @download_bp.route('/downloads')
 def downloads_page():
@@ -71,11 +78,11 @@ def download_selected_books():
             library_path=library_path
         ))
 
-        successful_downloads = len([r for r in results if r])
+        successful_downloads = count_successful_batch_downloads(results)
 
         return success_response({
             'message': f'Download completed! {successful_downloads} of {len(selected_books)} books downloaded successfully.',
-            'results': results
+            'results': serialize_batch_download_results(results),
         })
 
     except (AccountNotFoundError, LibraryNotFoundError, ValidationError):
