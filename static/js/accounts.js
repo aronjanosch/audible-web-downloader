@@ -3,24 +3,13 @@
  */
 
 /**
- * Load all accounts from API and update the navbar account selector.
- * Auto-selects if only one account exists.
+ * Load all accounts from API and trigger unified library load if any are authenticated.
  */
 async function loadAccounts() {
     try {
         const accounts = await apiCall('/api/accounts');
         AppState.set('accountData', accounts);
-        _updateAccountSelector(accounts);
-
-        const names = Object.keys(accounts);
-        if (names.length === 1) {
-            const select = document.getElementById('accountSelect');
-            if (select && select.value !== names[0]) {
-                select.value = names[0];
-                await selectAccount(names[0]);
-            }
-        }
-
+        document.dispatchEvent(new CustomEvent('accounts:loaded', { detail: accounts }));
         return accounts;
     } catch (err) {
         console.error('loadAccounts failed:', err);
@@ -28,73 +17,12 @@ async function loadAccounts() {
     }
 }
 
-function _updateAccountSelector(accounts) {
-    const select = document.getElementById('accountSelect');
-    if (!select) return;
-
-    const current = select.value;
-    select.innerHTML = '<option value="">Select account…</option>';
-
-    Object.entries(accounts).forEach(([name, info]) => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        opt.dataset.region = info.region;
-        opt.dataset.authenticated = info.authenticated;
-        select.appendChild(opt);
-    });
-
-    if (current && accounts[current]) select.value = current;
-}
-
 /**
- * Select an account — calls API, updates AppState, checks auth.
+ * Redirect to Audible OAuth login for the given account.
  */
-async function selectAccount(accountName) {
-    if (!accountName) {
-        AppState.set('currentAccount', null);
-        AppState.set('isAuthenticated', false);
-        _updateStatusDot(false, true);
-        document.dispatchEvent(new CustomEvent('account:cleared'));
-        return;
-    }
-
-    try {
-        await apiCall(`/api/accounts/${accountName}/select`, { method: 'POST' });
-        AppState.set('currentAccount', accountName);
-        await checkAuthentication(accountName);
-        document.dispatchEvent(new CustomEvent('account:selected', { detail: { accountName } }));
-    } catch (err) {
-        showToast('Failed to select account: ' + err.message, 'danger');
-    }
-}
-
-/**
- * Check if the given account is authenticated; update AppState and UI.
- */
-async function checkAuthentication(accountName) {
-    try {
-        const result = await apiCall('/api/auth/check', {
-            method: 'POST',
-            body: JSON.stringify({ account_name: accountName })
-        });
-
-        const auth = result.authenticated;
-        AppState.set('isAuthenticated', auth);
-        _updateStatusDot(auth, false);
-        document.dispatchEvent(new CustomEvent('auth:statusChanged', { detail: { authenticated: auth, accountName } }));
-        return auth;
-    } catch (err) {
-        console.error('checkAuthentication failed:', err);
-        return false;
-    }
-}
-
-function _updateStatusDot(authenticated, noAccount) {
-    const dot = document.getElementById('accountStatusDot');
-    if (!dot) return;
-    dot.className = 'account-status-dot ' + (noAccount ? 'no-account' : authenticated ? 'authenticated' : 'unauthenticated');
-    dot.title = noAccount ? 'No account selected' : authenticated ? 'Authenticated' : 'Not authenticated — click Login';
+function authenticateAccount(accountName) {
+    if (!accountName) return;
+    window.location.href = `/auth/login/${accountName}`;
 }
 
 /**
@@ -129,13 +57,6 @@ async function addAccount() {
 
         const accounts = await loadAccounts();
 
-        // Auto-select the new account
-        const select = document.getElementById('accountSelect');
-        if (select) {
-            select.value = accountName;
-            await selectAccount(accountName);
-        }
-
         showToast(`Account "${accountName}" added!`, 'success');
 
         // If first account, signal to dismiss onboarding wizard step 1
@@ -168,14 +89,6 @@ async function deleteAccount(accountName) {
         await apiCall(`/api/accounts/${accountName}`, { method: 'DELETE' });
         showToast(`Account "${accountName}" deleted`, 'success');
         await loadAccounts();
-        AppState.set('currentAccount', null);
-        AppState.set('isAuthenticated', false);
-        _updateStatusDot(false, true);
-
-        const select = document.getElementById('accountSelect');
-        if (select) select.value = '';
-
-        document.dispatchEvent(new CustomEvent('account:cleared'));
     } catch (err) {
         showToast('Failed to delete account: ' + err.message, 'danger');
     }
@@ -269,11 +182,6 @@ function setupAccountInviteModal() {
 // ── Init event listeners that are needed on all pages ──
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Account selector change
-    document.getElementById('accountSelect')?.addEventListener('change', function () {
-        selectAccount(this.value || null);
-    });
-
     // Add account button (opens modal)
     document.getElementById('addAccountBtn')?.addEventListener('click', function () {
         new bootstrap.Modal(document.getElementById('addAccountModal')).show();

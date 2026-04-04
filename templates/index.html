@@ -114,11 +114,11 @@
     </div>
 </div>
 
-<!-- ── Welcome (existing user, no account selected) ── -->
+<!-- ── Welcome (no authenticated accounts) ── -->
 <div id="welcomeMessage" class="empty-state" hidden>
     <i class="fas fa-headphones"></i>
-    <h4>Welcome back</h4>
-    <p>Select an account from the dropdown above to browse your library.</p>
+    <h4>No accounts yet</h4>
+    <p>Add and authenticate an Audible account to get started.</p>
 </div>
 
 <!-- ── Library UI ── -->
@@ -126,22 +126,9 @@
 
     <!-- Library header row -->
     <div class="library-header mb-3">
-        <!-- Auth alert (shown when not authenticated) -->
-        <div id="libraryAuthAlert" class="w-100 mb-2" hidden></div>
-
         <!-- Refresh -->
         <button class="btn btn-sm btn-outline-secondary" id="refreshLibraryBtn" hidden>
-            <i class="fas fa-sync me-1"></i>Load Library
-        </button>
-
-        <!-- Load All (shown when ≥2 authenticated accounts exist) -->
-        <button class="btn btn-sm btn-outline-primary" id="loadAllLibrariesBtn" hidden>
-            <i class="fas fa-layer-group me-1"></i>Load All Libraries
-        </button>
-
-        <!-- Login button (shown when not authenticated) -->
-        <button class="btn btn-sm btn-warning" id="libraryLoginBtn" hidden>
-            <i class="fas fa-sign-in-alt me-1"></i>Login to Audible
+            <i class="fas fa-sync me-1"></i>Refresh
         </button>
 
         <div class="header-spacer"></div>

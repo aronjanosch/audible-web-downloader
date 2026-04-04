@@ -198,7 +198,15 @@ def fetch_all_libraries():
         write_library_cache(name, result)
         combined.extend(result)
 
-    return success_response({'library': combined})
+    # Deduplicate by ASIN — first account wins
+    seen = set()
+    deduped = []
+    for book in combined:
+        if book['asin'] not in seen:
+            seen.add(book['asin'])
+            deduped.append(book)
+
+    return success_response({'library': deduped})
 
 
 @auth_bp.route('/api/library/fetch', methods=['POST'])

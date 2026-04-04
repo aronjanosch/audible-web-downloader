@@ -43,21 +43,23 @@ async function fetchLibrary() {
     }
 }
 
-async function fetchAllLibraries() {
-    const btn = document.getElementById('loadAllLibrariesBtn');
+async function fetchAllLibraries(force = false) {
+    const btn = document.getElementById('refreshLibraryBtn');
     const restore = btn ? setButtonLoading(btn, 'Loading…') : null;
     _showLoading(true);
+    _showLibraryUI(true);
 
     try {
         await loadLibraryState();
 
-        const result = await apiCall('/api/library/all');
+        const url = force ? '/api/library/all?force=true' : '/api/library/all';
+        const result = await apiCall(url);
         AppState.set('isUnifiedView', true);
         AppState.set('library', result.library || []);
         populateFilterDropdowns(result.library || []);
-        showToast(`Loaded ${result.library?.length || 0} books from all accounts`, 'success', 3000);
+        if (force) showToast(`Refreshed — ${result.library?.length || 0} books`, 'success', 3000);
     } catch (err) {
-        showToast('Failed to load libraries: ' + err.message, 'danger');
+        showToast('Failed to load library: ' + err.message, 'danger');
     } finally {
         if (restore) restore();
         _showLoading(false);
@@ -402,13 +404,8 @@ document.addEventListener('appstate:change', function (e) {
         renderLibrary();
         _updateViewButtons(e.detail.value);
     }
-    if (e.detail.key === 'isUnifiedView') {
-        renderLibrary();
-        _updateLoadButtons();
-    }
-    if (e.detail.key === 'accountData') {
-        _updateLoadButtons();
-    }
+    if (e.detail.key === 'isUnifiedView') renderLibrary();
+    if (e.detail.key === 'accountData') _updateAuthUI();
 });
 
 document.addEventListener('appstate:filterschange', renderLibrary);
@@ -463,36 +460,24 @@ function _updateViewButtons(mode) {
     document.getElementById('listViewBtn')?.classList.toggle('active', mode === 'list');
 }
 
-// ── Auth/account events ──
+// ── Account events ──
 
-document.addEventListener('account:selected', function (e) {
-    AppState.set('isUnifiedView', false);
-    _showLibraryUI(true);
-    AppState.set('library', []);
-    AppState.resetFilters();
-});
-
-document.addEventListener('account:cleared', function () {
-    AppState.set('isUnifiedView', false);
-    _showLibraryUI(false);
-    AppState.set('library', []);
-});
-
-document.addEventListener('auth:statusChanged', function (e) {
-    _updateAuthUI(e.detail.authenticated, e.detail.accountName);
+document.addEventListener('accounts:loaded', function (e) {
+    const accounts = e.detail || {};
+    const hasAuthenticated = Object.values(accounts).some(a => a.authenticated);
+    if (hasAuthenticated) {
+        fetchAllLibraries();
+    } else {
+        // No authenticated accounts — show onboarding or empty state
+        _showLibraryUI(false);
+    }
 });
 
 function _updateLoadButtons() {
     const accountData = AppState.get('accountData') || {};
-    const currentAccount = AppState.get('currentAccount');
-    const isAuthenticated = AppState.get('isAuthenticated');
-    const authenticatedCount = Object.values(accountData).filter(a => a.authenticated).length;
-
+    const hasAuthenticated = Object.values(accountData).some(a => a.authenticated);
     const refreshBtn = document.getElementById('refreshLibraryBtn');
-    const loadAllBtn = document.getElementById('loadAllLibrariesBtn');
-
-    if (refreshBtn) refreshBtn.hidden = !(currentAccount && isAuthenticated);
-    if (loadAllBtn) loadAllBtn.hidden = authenticatedCount < 2;
+    if (refreshBtn) refreshBtn.hidden = !hasAuthenticated;
 }
 
 function _showLibraryUI(show) {
@@ -508,24 +493,12 @@ function _showLibraryUI(show) {
     _updateLoadButtons();
 }
 
-function _updateAuthUI(isAuthenticated, accountName) {
-    const loginBtn = document.getElementById('libraryLoginBtn');
+function _updateAuthUI() {
+    const accountData = AppState.get('accountData') || {};
+    const hasAuthenticated = Object.values(accountData).some(a => a.authenticated);
     const downloadToSection = document.getElementById('downloadToSection');
-    const authAlert = document.getElementById('libraryAuthAlert');
-
-    if (loginBtn) loginBtn.hidden = isAuthenticated;
-    if (downloadToSection) downloadToSection.hidden = !isAuthenticated;
+    if (downloadToSection) downloadToSection.hidden = !hasAuthenticated;
     _updateLoadButtons();
-    if (authAlert) {
-        authAlert.hidden = isAuthenticated;
-        if (!isAuthenticated) {
-            authAlert.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>
-                Not authenticated.
-                <button class="btn btn-sm btn-warning ms-2" onclick="authenticateAccount()">
-                    <i class="fas fa-sign-in-alt"></i> Login to Audible
-                </button>`;
-        }
-    }
 }
 
 // ── DOMContentLoaded ──
@@ -540,9 +513,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('accountFilter')?.addEventListener('change', function () {
         AppState.setFilter('account', this.value);
     });
-
-    // Load All Libraries button
-    document.getElementById('loadAllLibrariesBtn')?.addEventListener('click', fetchAllLibraries);
 
     // Filter dropdowns
     ['authorFilter', 'languageFilter', 'narratorFilter', 'seriesFilter', 'publisherFilter', 'releaseYearFilter'].forEach(id => {
@@ -576,7 +546,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('clearSelectionBtn')?.addEventListener('click', () => AppState.clearSelection());
 
     // Refresh library
-    document.getElementById('refreshLibraryBtn')?.addEventListener('click', fetchLibrary);
+    document.getElementById('refreshLibraryBtn')?.addEventListener('click', () => fetchAllLibraries(true));
 
     // Sync library
     document.getElementById('syncLibraryBtn')?.addEventListener('click', syncLibrary);
