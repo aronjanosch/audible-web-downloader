@@ -300,6 +300,24 @@ def update_naming_settings():
             'error': str(e)
         }), 500
 
+
+@main_bp.route('/api/settings/max-concurrent-downloads', methods=['POST'])
+def update_max_concurrent_downloads():
+    """Set how many books may download in parallel (license + temp files per slot)."""
+    try:
+        data = request.get_json() or {}
+        raw = data.get('max_concurrent_downloads')
+        if raw is None:
+            return jsonify({'success': False, 'error': 'max_concurrent_downloads is required'}), 400
+        settings_manager.set_max_concurrent_downloads(raw)
+        return jsonify({
+            'success': True,
+            'max_concurrent_downloads': settings_manager.get_max_concurrent_downloads(),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @main_bp.route('/api/settings/invitation-link', methods=['GET'])
 def get_invitation_link():
     """Get the invitation link for family sharing"""

@@ -164,10 +164,12 @@ def get_db() -> sqlite3.Connection:
 
     conn = getattr(_local, "conn", None)
     if conn is None:
-        conn = sqlite3.connect(str(_db_path), check_same_thread=False)
+        conn = sqlite3.connect(str(_db_path), check_same_thread=False, timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
+        # Wait up to 30s when another thread/request holds the write lock (large batches + SSE, etc.)
+        conn.execute("PRAGMA busy_timeout=30000")
         _local.conn = conn
     return conn
 

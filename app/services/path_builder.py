@@ -396,12 +396,13 @@ class PathBuilder:
             product: Optional product metadata for path building
 
         Returns:
-            Dictionary of file paths for various stages of processing
+            Dictionary of file paths for various stages of processing. The temp directory
+            is not created on disk here; the downloader creates it when a download slot is acquired.
         """
-        # 1. Create temporary download directory (simple sanitized title)
+        # 1. Temporary download directory path (simple sanitized title). Creation is deferred
+        #    until a download slot is acquired so large batches do not mkdir thousands of folders at once.
         safe_title = self.sanitize_filename(book_title)
         temp_dir = downloads_dir / safe_title
-        temp_dir.mkdir(parents=True, exist_ok=True)
 
         # 2. Build final library path using naming pattern
         if product:

@@ -80,6 +80,10 @@ Additional Cleanup:
 
 SETTINGS_FILE = Path(__file__).parent / "config" / "settings.json"
 
+# Concurrent download slots (Audible license + temp download + processing per slot)
+DEFAULT_MAX_CONCURRENT_DOWNLOADS = 3
+MAX_CONCURRENT_DOWNLOADS_CAP = 32
+
 
 class SettingsManager:
     """Manages application settings with file persistence."""
@@ -96,6 +100,8 @@ class SettingsManager:
                     # Ensure naming_pattern exists
                     if 'naming_pattern' not in settings:
                         settings['naming_pattern'] = DEFAULT_NAMING_PATTERN
+                    if 'max_concurrent_downloads' not in settings:
+                        settings['max_concurrent_downloads'] = DEFAULT_MAX_CONCURRENT_DOWNLOADS
                     return settings
             except (json.JSONDecodeError, IOError) as e:
                 print(f"Error loading settings: {e}. Using defaults.")
@@ -111,7 +117,8 @@ class SettingsManager:
         return {
             "naming_pattern": DEFAULT_NAMING_PATTERN,
             "selected_preset": "audiobookshelf",
-            "invitation_token": self._generate_token()
+            "invitation_token": self._generate_token(),
+            "max_concurrent_downloads": DEFAULT_MAX_CONCURRENT_DOWNLOADS,
         }
 
     def _generate_token(self) -> str:
@@ -150,13 +157,34 @@ class SettingsManager:
         """Get all available placeholders with descriptions."""
         return AVAILABLE_PLACEHOLDERS
 
+    def get_max_concurrent_downloads(self) -> int:
+        """Bounded concurrent download count (1..MAX_CONCURRENT_DOWNLOADS_CAP)."""
+        raw = self.settings.get('max_concurrent_downloads', DEFAULT_MAX_CONCURRENT_DOWNLOADS)
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            n = DEFAULT_MAX_CONCURRENT_DOWNLOADS
+        return max(1, min(n, MAX_CONCURRENT_DOWNLOADS_CAP))
+
+    def set_max_concurrent_downloads(self, n: int) -> None:
+        """Persist concurrent download limit."""
+        try:
+            value = int(n)
+        except (TypeError, ValueError):
+            value = DEFAULT_MAX_CONCURRENT_DOWNLOADS
+        value = max(1, min(value, MAX_CONCURRENT_DOWNLOADS_CAP))
+        self.settings['max_concurrent_downloads'] = value
+        self._save_settings(self.settings)
+
     def get_all_settings(self) -> Dict[str, Any]:
         """Get complete settings including presets and placeholders."""
         return {
             "naming_pattern": self.get_naming_pattern(),
             "selected_preset": self.settings.get('selected_preset', 'audiobookshelf'),
             "presets": NAMING_PRESETS,
-            "placeholders": AVAILABLE_PLACEHOLDERS
+            "placeholders": AVAILABLE_PLACEHOLDERS,
+            "max_concurrent_downloads": self.get_max_concurrent_downloads(),
+            "max_concurrent_downloads_cap": MAX_CONCURRENT_DOWNLOADS_CAP,
         }
 
     def validate_pattern(self, pattern: str) -> tuple[bool, Optional[str]]:

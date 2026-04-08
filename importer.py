@@ -183,11 +183,14 @@ class AudiobookImporter:
             raise ValueError(f"No authentication found for account '{account_name}'")
         
         # Initialize downloader for reusing methods
+        from settings import settings_manager
+
         self.downloader = AudiobookDownloader(
             account_name=account_name,
             region=region,
+            max_concurrent_downloads=settings_manager.get_max_concurrent_downloads(),
             library_path=str(library_path),
-            downloads_dir="downloads"
+            downloads_dir="downloads",
         )
         
         # Initialize queue manager

@@ -263,13 +263,15 @@ def preview_import_path():
         # Use a temporary importer instance to build the path
         # We don't need authentication for path building
         from downloader import AudiobookDownloader
-        
+        from settings import settings_manager
+
         # Create a minimal downloader instance for path building
         downloader = AudiobookDownloader(
             account_name="temp",
             region="us",
+            max_concurrent_downloads=settings_manager.get_max_concurrent_downloads(),
             library_path=library_path,
-            downloads_dir="downloads"
+            downloads_dir="downloads",
         )
         
         # Build the target path

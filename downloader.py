@@ -16,7 +16,7 @@ import time
 import hashlib
 import unicodedata
 from typing import Optional, Dict, List, Tuple, Any
-from settings import get_naming_pattern
+from settings import MAX_CONCURRENT_DOWNLOADS_CAP, get_naming_pattern, settings_manager
 from datetime import datetime
 from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
 from utils.constants import CONFIG_DIR, DOWNLOAD_QUEUE_FILE, get_auth_file_path
@@ -136,7 +136,12 @@ class AudiobookDownloader:
             self.downloads_dir = Path("downloads")
 
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
-        self.download_semaphore = Semaphore(max_concurrent_downloads)
+        try:
+            mc = int(max_concurrent_downloads)
+        except (TypeError, ValueError):
+            mc = 3
+        mc = max(1, min(mc, MAX_CONCURRENT_DOWNLOADS_CAP))
+        self.download_semaphore = Semaphore(mc)
         self.decrypt_semaphore = Semaphore(1)
 
         self.auth = self._load_authenticator()
@@ -474,11 +479,11 @@ class AudiobookDownloader:
         self._log(f"🎧 Starting: '{book_title}' (Quality: {quality})", book_asin)
         self.set_download_state(book_asin, DownloadState.PENDING, title=book_title)
 
-        paths['aaxc_file'].parent.mkdir(parents=True, exist_ok=True)
-
         for attempt in range(max_retries):
             try:
                 async with self.download_semaphore:
+                    # Temp dir creation is inside the slot so batches do not mkdir / request in parallel.
+                    paths["aaxc_file"].parent.mkdir(parents=True, exist_ok=True)
                     result = await self._process_book_download(
                         book_asin, book_title, quality, paths, cleanup_aax
                     )
@@ -667,7 +672,17 @@ def count_successful_batch_downloads(results: List[Any]) -> int:
     return sum(1 for r in results if r and not isinstance(r, BaseException))
 
 
-async def download_books(account_name, region, selected_books, quality="High", cleanup_aax=True, max_retries=3, library_path=None, downloads_dir=None):
+async def download_books(
+    account_name,
+    region,
+    selected_books,
+    quality="High",
+    cleanup_aax=True,
+    max_retries=3,
+    library_path=None,
+    downloads_dir=None,
+    max_concurrent_downloads=None,
+):
     """
     Download multiple audiobooks.
 
@@ -680,15 +695,20 @@ async def download_books(account_name, region, selected_books, quality="High", c
         max_retries: Maximum number of retry attempts
         library_path: Final library path where M4B files will be stored
         downloads_dir: Temporary download directory (defaults to 'downloads/')
+        max_concurrent_downloads: Parallel download slots; default from app settings.
     """
     if not library_path:
         raise ValueError("library_path is required. Please configure a library before downloading.")
 
+    if max_concurrent_downloads is None:
+        max_concurrent_downloads = settings_manager.get_max_concurrent_downloads()
+
     downloader = AudiobookDownloader(
         account_name,
         region,
+        max_concurrent_downloads=max_concurrent_downloads,
         library_path=library_path,
-        downloads_dir=downloads_dir
+        downloads_dir=downloads_dir,
     )
 
     # Log batch summary

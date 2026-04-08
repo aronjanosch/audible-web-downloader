@@ -10,6 +10,7 @@ from downloader import (
     download_books,
     serialize_batch_download_results,
 )
+from settings import settings_manager
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
 from utils.account_manager import get_account_or_404, get_library_config
@@ -183,7 +184,12 @@ def sync_library():
         library_config, library_path = get_library_config(library_name)
 
         # Create downloader instance and run sync
-        downloader = AudiobookDownloader(current_account, region, library_path=library_path)
+        downloader = AudiobookDownloader(
+            current_account,
+            region,
+            max_concurrent_downloads=settings_manager.get_max_concurrent_downloads(),
+            library_path=library_path,
+        )
         stats = downloader.sync_library()
 
         return success_response({

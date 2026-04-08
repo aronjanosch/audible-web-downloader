@@ -100,11 +100,23 @@ async function loadNamingSettings() {
         const data = await apiCall('/api/settings/naming');
         _namingSettings = data.settings;
         AppState.set('namingSettings', _namingSettings);
+        populateDownloadConcurrencyFromSettings();
         return _namingSettings;
     } catch (err) {
         console.error('loadNamingSettings failed:', err);
         return null;
     }
+}
+
+function populateDownloadConcurrencyFromSettings() {
+    if (!_namingSettings) return;
+    const el = document.getElementById('maxConcurrentDownloads');
+    if (!el) return;
+    const cap = _namingSettings.max_concurrent_downloads_cap ?? 32;
+    el.max = String(cap);
+    el.min = '1';
+    const v = _namingSettings.max_concurrent_downloads;
+    if (v != null && v !== '') el.value = String(v);
 }
 
 function populateNamingModal() {
@@ -160,6 +172,31 @@ function updatePresetDescription(presetKey) {
     if (!descEl || !_namingSettings?.presets) return;
     const preset = _namingSettings.presets[presetKey];
     if (preset) descEl.textContent = preset.description;
+}
+
+async function saveMaxConcurrentDownloads() {
+    const el = document.getElementById('maxConcurrentDownloads');
+    if (!el) return;
+    const n = parseInt(el.value, 10);
+    const cap = _namingSettings?.max_concurrent_downloads_cap ?? 32;
+    if (Number.isNaN(n) || n < 1) {
+        showToast('Enter a number between 1 and ' + cap, 'warning');
+        return;
+    }
+    if (n > cap) {
+        showToast('Maximum is ' + cap, 'warning');
+        return;
+    }
+    try {
+        await apiCall('/api/settings/max-concurrent-downloads', {
+            method: 'POST',
+            body: JSON.stringify({ max_concurrent_downloads: n })
+        });
+        showToast('Concurrent downloads saved', 'success');
+        await loadNamingSettings();
+    } catch (err) {
+        showToast('Failed to save: ' + err.message, 'danger');
+    }
 }
 
 async function saveNamingPattern() {
@@ -310,4 +347,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('cleanupAax')?.addEventListener('change', function () {
         AppState.set('cleanupAax', this.checked);
     });
+
+    document.getElementById('saveMaxConcurrentDownloadsBtn')?.addEventListener('click', saveMaxConcurrentDownloads);
 });

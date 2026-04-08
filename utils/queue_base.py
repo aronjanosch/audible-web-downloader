@@ -10,6 +10,7 @@ The legacy ``queue_file`` parameter is accepted but ignored — it is kept
 so existing call sites that pass it do not need to be updated.
 """
 
+import threading
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -44,6 +45,8 @@ class BaseQueueManager(ABC):
 
         self._initialized = True
         self._queue: Dict = {}
+        # Serialize download_queue / batch writes across Flask threads (download + progress SSE).
+        self._queue_persist_lock = threading.RLock()
 
         # Populate in-memory cache from DB
         self._load_queue()
@@ -88,9 +91,10 @@ class BaseQueueManager(ABC):
             return
 
         now = time.time()
-        with transaction() as conn:
-            conn.execute(
-                """
+        with self._queue_persist_lock:
+            with transaction() as conn:
+                conn.execute(
+                    """
                 INSERT INTO download_queue
                     (asin, title, download_state, batch_id,
                      progress_percent, downloaded_bytes, total_bytes,
@@ -143,9 +147,10 @@ class BaseQueueManager(ABC):
         if not batch_id:
             return
 
-        with transaction() as conn:
-            conn.execute(
-                """
+        with self._queue_persist_lock:
+            with transaction() as conn:
+                conn.execute(
+                    """
                 INSERT INTO download_batches (batch_id, is_complete, started_at)
                 VALUES (?,?,?)
                 ON CONFLICT(batch_id) DO UPDATE SET
@@ -154,12 +159,12 @@ class BaseQueueManager(ABC):
                                         THEN strftime('%s','now')
                                         ELSE completed_at END
                 """,
-                (
-                    batch_id,
-                    1 if batch_info.get("batch_complete") else 0,
-                    batch_info.get("batch_start_time", time.time()),
-                ),
-            )
+                    (
+                        batch_id,
+                        1 if batch_info.get("batch_complete") else 0,
+                        batch_info.get("batch_start_time", time.time()),
+                    ),
+                )
 
     # ------------------------------------------------------------------
     # Public API (identical signatures to the old JSON-based version)
@@ -211,8 +216,9 @@ class BaseQueueManager(ABC):
         """Remove an item from the queue."""
         if item_id in self._queue:
             del self._queue[item_id]
-            with transaction() as conn:
-                conn.execute("DELETE FROM download_queue WHERE asin=?", (item_id,))
+            with self._queue_persist_lock:
+                with transaction() as conn:
+                    conn.execute("DELETE FROM download_queue WHERE asin=?", (item_id,))
 
     def get_batch_info(self) -> Dict:
         """Return current batch metadata."""
@@ -242,9 +248,10 @@ class BaseQueueManager(ABC):
             del self._queue[item_id]
 
         if to_remove:
-            with transaction() as conn:
-                for item_id in to_remove:
-                    conn.execute("DELETE FROM download_queue WHERE asin=?", (item_id,))
+            with self._queue_persist_lock:
+                with transaction() as conn:
+                    for item_id in to_remove:
+                        conn.execute("DELETE FROM download_queue WHERE asin=?", (item_id,))
 
         return len(to_remove)
 
