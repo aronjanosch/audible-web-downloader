@@ -84,11 +84,10 @@ class DownloadQueueManager(BaseQueueManager):
             # Skip metadata entries
             if asin.startswith('_'):
                 continue
-                
-            # Only count downloads in current batch
-            if download.get('batch_id') != current_batch_id:
-                continue
-                
+
+            # Count all queue rows so UI stats match get_all_downloads(). Filtering by
+            # current_batch_id breaks the status bar when batch_id drifts (new batch
+            # started while older items still reference the previous batch id).
             stats['total_downloads'] += 1
             state = download.get('state', '')
             
@@ -429,9 +428,6 @@ class AudiobookDownloader:
             self.set_download_state(book_asin, DownloadState.ERROR, title=book_title, error=f"Authentication not loaded — auth file missing: {auth_file}", error_type="AuthenticationError")
             return None
 
-        # Track start time for this book
-        self.download_start_times[book_asin] = time.time()
-
         try:
             paths = self._get_file_paths(book_title, book_asin, product)
         except Exception as e:
@@ -482,6 +478,9 @@ class AudiobookDownloader:
         for attempt in range(max_retries):
             try:
                 async with self.download_semaphore:
+                    # Per-book timer starts when we actually take a slot (not when the coroutine
+                    # was scheduled, which can be hours earlier for large batches).
+                    self.download_start_times[book_asin] = time.time()
                     # Temp dir creation is inside the slot so batches do not mkdir / request in parallel.
                     paths["aaxc_file"].parent.mkdir(parents=True, exist_ok=True)
                     result = await self._process_book_download(

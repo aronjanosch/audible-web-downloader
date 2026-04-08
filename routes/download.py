@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, current_app, Response, render_template
+from flask import Blueprint, request, jsonify, session, current_app, Response, render_template, stream_with_context
 import asyncio
 import json
 import os
@@ -202,20 +202,31 @@ def sync_library():
     except Exception as e:
         return error_response(f'Sync error: {str(e)}', status_code=500)
 
+def _sse_json_payload(obj: dict) -> str:
+    """JSON for SSE; avoid NaN/Inf which break JSON.parse in the browser."""
+    try:
+        return json.dumps(obj, allow_nan=False)
+    except (ValueError, TypeError):
+        return json.dumps(obj, default=str)
+
+
 @download_bp.route('/api/download/progress-stream')
 def download_progress_stream():
     """Server-Sent Events endpoint for real-time progress updates"""
     queue_manager = DownloadQueueManager()
 
+    @stream_with_context
     def generate_progress_updates():
         """Generate progress updates as Server-Sent Events"""
-        
+        # Tell the browser to wait 15s before auto-reconnect (reduces reconnect storms when
+        # combined with our client-side backoff).
+        yield "retry: 15000\n\n"
         while True:
             try:
                 # Get all download states from shared manager
                 all_states = queue_manager.get_all_downloads()
                 stats = queue_manager.get_statistics()
-                
+
                 # Format progress data with all fields
                 progress_data = {}
                 for asin, state in all_states.items():
@@ -234,30 +245,29 @@ def download_progress_stream():
                         'downloaded_by_account': state.get('downloaded_by_account')
                     }
                     progress_data[asin] = progress_info
-                
-                # Send combined update with progress and statistics
+
                 update = {
                     'downloads': progress_data,
                     'stats': stats,
                     'timestamp': time.time()
                 }
-                
-                yield f"data: {json.dumps(update)}\n\n"
-                    
-                time.sleep(1)  # Send updates every second
-                
+
+                yield f"data: {_sse_json_payload(update)}\n\n"
+
+                time.sleep(1)
+
             except Exception as e:
-                # Send error as SSE event
                 error_data = {'error': str(e)}
-                yield f"data: {json.dumps(error_data)}\n\n"
+                yield f"data: {_sse_json_payload(error_data)}\n\n"
                 break
-    
+
     return Response(
         generate_progress_updates(),
         mimetype='text/event-stream',
         headers={
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache, no-transform',
             'Connection': 'keep-alive',
             'Access-Control-Allow-Origin': '*',
+            'X-Accel-Buffering': 'no',
         }
     )

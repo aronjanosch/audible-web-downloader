@@ -5,6 +5,7 @@
 let _eventSource = null;
 let _reconnectTimeout = null;
 let _disconnectedSince = null;
+let _sseReconnectAttempt = 0;
 
 // ── SSE Connection ──
 
@@ -14,8 +15,13 @@ function connectSSE() {
     _eventSource = new EventSource('/api/download/progress-stream');
 
     _eventSource.onmessage = function (event) {
-        try { AppState.updateDownloads(JSON.parse(event.data)); } catch (e) {}
+        try {
+            AppState.updateDownloads(JSON.parse(event.data));
+        } catch (e) {
+            console.warn('download progress-stream parse error', e, event.data?.slice?.(0, 200));
+        }
         _disconnectedSince = null;
+        _sseReconnectAttempt = 0;
         if (_reconnectTimeout) { clearTimeout(_reconnectTimeout); _reconnectTimeout = null; }
     };
 
@@ -27,12 +33,14 @@ function connectSSE() {
 
 function _scheduleReconnect() {
     if (_reconnectTimeout) return;
+    const delayMs = Math.min(60000, 3000 * Math.pow(2, _sseReconnectAttempt));
+    _sseReconnectAttempt += 1;
     _reconnectTimeout = setTimeout(() => {
         _reconnectTimeout = null;
         if (_disconnectedSince && Date.now() - _disconnectedSince > 10000)
             showToast('Download stream reconnecting…', 'warning', 3000);
         connectSSE();
-    }, 3000);
+    }, delayMs);
 }
 
 // ── Download Status Bar ──
@@ -42,7 +50,7 @@ document.addEventListener('appstate:downloadschange', function (e) {
     if (document.getElementById('inProgressList')) {
         _renderDownloadsPage(e.detail.downloads);
     }
-    _updateNavPill(e.detail.stats);
+    _updateNavPill(e.detail.stats, e.detail.downloads);
 });
 
 function _updateDownloadBar(downloads, stats) {
@@ -52,7 +60,8 @@ function _updateDownloadBar(downloads, stats) {
     const active = stats?.active || 0;
     const queued = stats?.queued || 0;
     const completed = stats?.completed || 0;
-    const hasActivity = (active + queued) > 0 || completed > 0;
+    const hasRows = downloads && Object.keys(downloads).length > 0;
+    const hasActivity = (active + queued) > 0 || completed > 0 || hasRows;
 
     if (hasActivity) {
         document.documentElement.style.setProperty('--download-bar-height', '44px');
@@ -80,10 +89,17 @@ function _updateDownloadBar(downloads, stats) {
     }
 }
 
-function _updateNavPill(stats) {
+function _updateNavPill(stats, downloads) {
     const pill = document.getElementById('downloadNavPill');
     if (!pill) return;
-    const total = (stats?.active || 0) + (stats?.queued || 0);
+    let total = (stats?.active || 0) + (stats?.queued || 0);
+    if (total === 0 && downloads && typeof downloads === 'object') {
+        const activeStates = new Set([
+            'pending', 'retrying', 'license_requested', 'license_granted',
+            'downloading', 'download_complete', 'decrypting'
+        ]);
+        total = Object.values(downloads).filter(d => activeStates.has(d.state || '')).length;
+    }
     const countEl = pill.querySelector('.pill-count');
     if (total > 0) {
         pill.classList.add('active');
