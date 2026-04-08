@@ -172,7 +172,8 @@ class BaseQueueManager(ABC):
 
     def get_all_items(self) -> Dict:
         """Return all queue items (excluding batch metadata)."""
-        return {k: v for k, v in self._queue.items() if not k.startswith("_")}
+        # Snapshot items to avoid RuntimeError if the download thread adds keys concurrently.
+        return {k: v for k, v in list(self._queue.items()) if not k.startswith("_")}
 
     def get_item(self, item_id: str) -> Optional[Dict]:
         """Return a specific item, or None if not found."""

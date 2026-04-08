@@ -80,7 +80,7 @@ class DownloadQueueManager(BaseQueueManager):
             'batch_id': current_batch_id
         }
         
-        for asin, download in self._queue.items():
+        for asin, download in list(self._queue.items()):
             # Skip metadata entries
             if asin.startswith('_'):
                 continue

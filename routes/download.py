@@ -257,8 +257,10 @@ def download_progress_stream():
                 time.sleep(1)
 
             except Exception as e:
-                error_data = {'error': str(e)}
-                yield f"data: {_sse_json_payload(error_data)}\n\n"
+                # Log server-side so we can diagnose, but don't send an error frame —
+                # the client would call AppState.updateDownloads({error: ...}) which wipes
+                # the downloads dict and blanks the UI.
+                print(f"[SSE] progress-stream error: {e!r}", flush=True)
                 break
 
     return Response(
