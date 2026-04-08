@@ -96,7 +96,7 @@ class DownloadQueueManager(BaseQueueManager):
             elif state in ['license_requested', 'license_granted', 'downloading', 'download_complete', 'decrypting']:
                 stats['active'] += 1
                 # Add up download speeds for active downloads
-                if 'speed' in download:
+                if download.get('speed'):
                     stats['total_speed'] += download['speed']
             elif state == 'converted':
                 stats['completed'] += 1
