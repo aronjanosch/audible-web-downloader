@@ -418,12 +418,22 @@ class AudiobookDownloader:
     
     async def download_book(self, book_asin: str, book_title: str, quality: str = "High", cleanup_aax: bool = True, max_retries: int = 3, product: Dict = None) -> Optional[str]:
         if not self.auth:
-            raise Exception("Authentication required.")
+            from utils.constants import get_auth_file_path
+            auth_file = get_auth_file_path(self.account_name)
+            self._log(f"❌ '{book_title}': authentication not loaded for account '{self.account_name}' (expected auth file: {auth_file})", book_asin)
+            self.set_download_state(book_asin, DownloadState.ERROR, title=book_title, error=f"Authentication not loaded — auth file missing: {auth_file}", error_type="AuthenticationError")
+            return None
 
         # Track start time for this book
         self.download_start_times[book_asin] = time.time()
 
-        paths = self._get_file_paths(book_title, book_asin, product)
+        try:
+            paths = self._get_file_paths(book_title, book_asin, product)
+        except Exception as e:
+            self._log(f"❌ '{book_title}': failed to build file paths: {e}", book_asin)
+            self.set_download_state(book_asin, DownloadState.ERROR, title=book_title, error=str(e), error_type=type(e).__name__)
+            return None
+
         m4b_file = paths['m4b_file']
 
         # Check if book already in library (using stored file_path from SQLite books table)
