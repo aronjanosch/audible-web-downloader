@@ -531,32 +531,44 @@ class AudiobookDownloader:
                 self.set_download_state(asin, DownloadState.CONVERTED, title=title, file_path=str(final_m4b_file))
                 return str(final_m4b_file)
 
-            # Download AAX file to temp directory if not already downloaded
-            if not aaxc_file.exists():
+            # Download AAX file and decrypt voucher if either is missing.
+            # We must re-request the license when the voucher is absent even if the
+            # audio file already exists — without the key/IV conversion cannot proceed.
+            simple_voucher_file = paths['simple_voucher_file']
+            need_download = not aaxc_file.exists() or not simple_voucher_file.exists()
+            if need_download:
                 self._log(f"🔐 Requesting download license...", asin)
                 self.set_download_state(asin, DownloadState.LICENSE_REQUESTED)
                 license_response = await self._get_download_license(client, asin, quality)
                 self.set_download_state(asin, DownloadState.LICENSE_GRANTED)
                 self._log(f"✓ License granted", asin)
 
-                self.set_download_state(asin, DownloadState.DOWNLOADING)
-                download_url = self._get_download_url(license_response)
-                await self._download_file(download_url, aaxc_file, asin, title)
+                if not aaxc_file.exists():
+                    self.set_download_state(asin, DownloadState.DOWNLOADING)
+                    download_url = self._get_download_url(license_response)
+                    await self._download_file(download_url, aaxc_file, asin, title)
 
-                if not aaxc_file.exists() or aaxc_file.stat().st_size == 0:
-                    raise Exception("Download failed: file is missing or empty.")
+                    if not aaxc_file.exists() or aaxc_file.stat().st_size == 0:
+                        raise Exception("Download failed: file is missing or empty.")
+                else:
+                    self._log(f"✓ AAX file already exists, skipping download", asin)
 
-                # Save license and decrypt voucher
+                # Save license and decrypt voucher.  If decryption fails, clean up so
+                # the next retry requests a fresh license rather than hitting the same wall.
                 paths['voucher_file'].write_text(json.dumps(license_response, indent=4))
                 decrypted_voucher = self._decrypt_voucher(asin, license_response)
                 if decrypted_voucher:
-                    paths['simple_voucher_file'].write_text(json.dumps(decrypted_voucher, indent=4))
+                    simple_voucher_file.write_text(json.dumps(decrypted_voucher, indent=4))
                     self._log(f"🔑 License decrypted successfully", asin)
+                else:
+                    aaxc_file.unlink(missing_ok=True)
+                    paths['voucher_file'].unlink(missing_ok=True)
+                    raise Exception(f"Failed to decrypt license voucher — cannot convert {title}")
 
                 await self._export_content_metadata(client, asin, aaxc_file.parent, license_response)
                 self.set_download_state(asin, DownloadState.DOWNLOAD_COMPLETE)
             else:
-                self._log(f"✓ AAX file already exists, skipping download", asin)
+                self._log(f"✓ File already downloaded with voucher, skipping", asin)
 
             # Convert AAX to M4B in temp directory
             if not temp_m4b_file.exists():
