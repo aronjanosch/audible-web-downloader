@@ -28,4 +28,4 @@ RUN mkdir -p /app/config /app/downloads /app/library
 
 EXPOSE 5505
 
-CMD ["uv", "run", "python", "run.py"]
+CMD ["uv", "run", "gunicorn", "-c", "gunicorn.conf.py", "app:create_app()"]

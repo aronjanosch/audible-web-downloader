@@ -16,4 +16,5 @@ dependencies = [
     "streamlit>=1.48.1",
     "wtforms>=3.2.1",
     "apscheduler>=3.10.0",
+    "gunicorn>=25.3.0",
 ]

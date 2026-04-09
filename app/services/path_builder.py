@@ -399,10 +399,11 @@ class PathBuilder:
             Dictionary of file paths for various stages of processing. The temp directory
             is not created on disk here; the downloader creates it when a download slot is acquired.
         """
-        # 1. Temporary download directory path (simple sanitized title). Creation is deferred
-        #    until a download slot is acquired so large batches do not mkdir thousands of folders at once.
+        # 1. Temporary download directory path. ASIN suffix prevents collisions when two
+        #    books share the same title (e.g. different editions). Creation is deferred until
+        #    a download slot is acquired so large batches don't mkdir thousands of folders.
         safe_title = self.sanitize_filename(book_title)
-        temp_dir = downloads_dir / safe_title
+        temp_dir = downloads_dir / f"{safe_title}_{asin}"
 
         # 2. Build final library path using naming pattern
         if product:

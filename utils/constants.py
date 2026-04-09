@@ -17,7 +17,6 @@ DB_FILE = CONFIG_DIR / "audible.db"
 ACCOUNTS_FILE = CONFIG_DIR / "accounts.json"
 LIBRARIES_FILE = CONFIG_DIR / "libraries.json"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
-DOWNLOAD_QUEUE_FILE = CONFIG_DIR / "download_queue.json"
 DOWNLOAD_STATES_FILE = DOWNLOADS_DIR / "download_states.json"
 
 # Auth directory

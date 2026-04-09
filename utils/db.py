@@ -223,6 +223,15 @@ def migrate() -> None:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         logger.info("Database migration complete (version %d)", SCHEMA_VERSION)
 
+        # Always reset books that were left in 'downloading' state — they can only
+        # reach that state via an active request and won't survive a process restart.
+        stale = conn.execute(
+            "UPDATE books SET status='wanted', updated_at=? WHERE status='downloading'",
+            (time.time(),)
+        ).rowcount
+        if stale:
+            logger.info("Reset %d stale 'downloading' book(s) to 'wanted'", stale)
+
     except Exception as e:
         logger.error("Database migration failed: %s", e)
         raise
