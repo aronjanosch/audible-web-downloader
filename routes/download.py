@@ -130,6 +130,8 @@ def download_progress():
         progress_info = {
             'state': state.get('state', 'unknown'),
             'title': state.get('title', 'Unknown'),
+            'author': state.get('author', ''),
+            'cover_url': state.get('cover_url', ''),
             'timestamp': state.get('timestamp', 0),
             'progress_percent': state.get('progress_percent', 0),
             'downloaded_bytes': state.get('downloaded_bytes', 0),
@@ -233,6 +235,8 @@ def download_progress_stream():
                     progress_info = {
                         'state': state.get('state', 'unknown'),
                         'title': state.get('title', 'Unknown'),
+                        'author': state.get('author', ''),
+                        'cover_url': state.get('cover_url', ''),
                         'timestamp': state.get('timestamp', 0),
                         'progress_percent': state.get('progress_percent', 0),
                         'downloaded_bytes': state.get('downloaded_bytes', 0),

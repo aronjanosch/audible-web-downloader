@@ -472,7 +472,10 @@ class AudiobookDownloader:
                 return match_path
 
         self._log(f"🎧 Starting: '{book_title}' (Quality: {quality})", book_asin)
-        self.set_download_state(book_asin, DownloadState.PENDING, title=book_title)
+        cover_url = product.get('cover_url', '') if product else ''
+        author = product.get('authors', '') if product else ''
+        self.set_download_state(book_asin, DownloadState.PENDING, title=book_title,
+                                cover_url=cover_url, author=author)
 
         for attempt in range(max_retries):
             try:
