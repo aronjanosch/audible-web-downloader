@@ -8,6 +8,8 @@ a one-time migration from existing JSON config files.
 Schema version history:
   1 — initial schema (accounts, libraries, books, download_queue,
                        download_batches, auto_download_rules, scan_cache)
+  2 — added library_cache table
+  3 — dropped download_queue and download_batches (queue is now in-memory only)
 """
 
 import json
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 _db_path: Optional[Path] = None
 _local = threading.local()
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA_DDL = """
 PRAGMA journal_mode=WAL;
@@ -80,39 +82,6 @@ CREATE TABLE IF NOT EXISTS books (
 );
 CREATE INDEX IF NOT EXISTS idx_books_status  ON books(status);
 CREATE INDEX IF NOT EXISTS idx_books_library ON books(library_name);
-
-CREATE TABLE IF NOT EXISTS download_queue (
-    asin                  TEXT PRIMARY KEY,
-    title                 TEXT NOT NULL,
-    download_state        TEXT NOT NULL
-        CHECK (download_state IN (
-            'pending','retrying','license_requested','license_granted',
-            'downloading','download_complete','decrypting','converted','error'
-        )),
-    batch_id              TEXT,
-    progress_percent      REAL,
-    downloaded_bytes      INTEGER,
-    total_bytes           INTEGER,
-    speed                 REAL,
-    eta                   REAL,
-    elapsed               REAL,
-    error                 TEXT,
-    error_type            TEXT,
-    attempts              INTEGER,
-    downloaded_by_account TEXT REFERENCES accounts(name) ON DELETE SET NULL,
-    file_path             TEXT,
-    added_at              REAL NOT NULL,
-    updated_at            REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_dq_batch ON download_queue(batch_id);
-CREATE INDEX IF NOT EXISTS idx_dq_state ON download_queue(download_state);
-
-CREATE TABLE IF NOT EXISTS download_batches (
-    batch_id     TEXT PRIMARY KEY,
-    is_complete  INTEGER NOT NULL DEFAULT 0,
-    started_at   REAL NOT NULL,
-    completed_at REAL
-);
 
 CREATE TABLE IF NOT EXISTS scan_cache (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,7 +202,6 @@ def migrate() -> None:
                 _migrate_accounts(conn)
                 _migrate_libraries(conn)
                 _migrate_books(conn)
-                _migrate_download_queue(conn)
                 _migrate_scan_cache(conn)
 
         if current_version < 2:
@@ -245,6 +213,11 @@ def migrate() -> None:
                     books_json   TEXT NOT NULL
                 );
             """)
+
+        if current_version < 3:
+            # v2 → v3: drop ephemeral download tables (queue is now in-memory only)
+            conn.execute("DROP TABLE IF EXISTS download_queue")
+            conn.execute("DROP TABLE IF EXISTS download_batches")
 
         # user_version cannot be set inside a normal transaction via parameter binding
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -370,71 +343,6 @@ def _migrate_books(conn: sqlite3.Connection) -> None:
         count += 1
 
     logger.info("Migrated %d books", count)
-
-
-def _migrate_download_queue(conn: sqlite3.Connection) -> None:
-    """Import config/download_queue.json → download_queue + download_batches."""
-    from utils.constants import DOWNLOAD_QUEUE_FILE
-    queue = _load_json(DOWNLOAD_QUEUE_FILE)
-
-    now = time.time()
-    batch_info = queue.get("_batch_info", {})
-    batch_id = batch_info.get("current_batch_id")
-
-    if batch_id:
-        conn.execute(
-            "INSERT OR IGNORE INTO download_batches (batch_id, is_complete, started_at) VALUES (?,?,?)",
-            (
-                batch_id,
-                1 if batch_info.get("batch_complete") else 0,
-                batch_info.get("batch_start_time", now),
-            ),
-        )
-
-    count = 0
-    for asin, data in queue.items():
-        if asin.startswith("_") or not isinstance(data, dict):
-            continue
-        state = data.get("state", "pending")
-        # Validate state value; fall back to 'pending' if unknown
-        valid_states = {
-            "pending", "retrying", "license_requested", "license_granted",
-            "downloading", "download_complete", "decrypting", "converted", "error",
-        }
-        if state not in valid_states:
-            state = "pending"
-
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO download_queue
-                (asin, title, download_state, batch_id,
-                 progress_percent, downloaded_bytes, total_bytes,
-                 speed, eta, elapsed, error,
-                 downloaded_by_account, file_path,
-                 added_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                asin,
-                data.get("title", ""),
-                state,
-                data.get("batch_id"),
-                data.get("progress_percent"),
-                data.get("downloaded_bytes"),
-                data.get("total_bytes"),
-                data.get("speed"),
-                data.get("eta"),
-                data.get("elapsed"),
-                data.get("error"),
-                data.get("downloaded_by_account"),
-                data.get("file_path"),
-                data.get("added_at", data.get("timestamp", now)),
-                data.get("last_updated", now),
-            ),
-        )
-        count += 1
-
-    logger.info("Migrated %d download queue entries", count)
 
 
 def _migrate_scan_cache(conn: sqlite3.Connection) -> None:

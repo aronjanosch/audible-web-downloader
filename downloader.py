@@ -19,7 +19,7 @@ from typing import Optional, Dict, List, Tuple, Any
 from settings import MAX_CONCURRENT_DOWNLOADS_CAP, get_naming_pattern, settings_manager
 from datetime import datetime
 from utils.fuzzy_matching import normalize_for_matching, calculate_similarity
-from utils.constants import CONFIG_DIR, DOWNLOAD_QUEUE_FILE, get_auth_file_path
+from utils.constants import CONFIG_DIR, get_auth_file_path
 from app.models import DownloadState, BookStatus
 from app.services import PathBuilder, AudioConverter, MetadataEnricher, LibraryManager
 from utils.queue_base import BaseQueueManager
@@ -32,8 +32,7 @@ class DownloadQueueManager(BaseQueueManager):
     """
     
     def __init__(self):
-        # Initialize base class with queue file path
-        super().__init__(DOWNLOAD_QUEUE_FILE)
+        super().__init__()
     
     def _generate_batch_id(self) -> str:
         """Generate a unique batch ID for downloads"""
