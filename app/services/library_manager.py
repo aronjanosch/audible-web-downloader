@@ -140,6 +140,11 @@ class LibraryManager:
             )
         self._invalidate_cache()
 
+        # ABS scans asynchronously. A later reconciliation records whether it
+        # indexed the file; its availability cannot invalidate this download.
+        from .audiobookshelf import trigger_scan_after_download
+        trigger_scan_after_download()
+
     def remove_from_library(self, asin: str) -> None:
         """Remove a book from the library."""
         with transaction() as conn:

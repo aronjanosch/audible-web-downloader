@@ -3,6 +3,7 @@ from utils.config_manager import get_config_manager
 from utils.errors import success_response, AccountNotFoundError, ValidationError
 from utils.scheduler import update_job, trigger_now, get_next_run_time
 from utils.auto_downloader import ROUTABLE_FIELDS
+from utils.security import current_user
 
 scheduler_bp = Blueprint('scheduler', __name__)
 config_manager = get_config_manager()
@@ -12,6 +13,9 @@ config_manager = get_config_manager()
 def get_auto_download_status():
     """Return auto-download config and next_run_time for all accounts."""
     accounts = config_manager.get_accounts()
+    user = current_user()
+    if user['role'] == 'member':
+        accounts = {name: value for name, value in accounts.items() if name == user['account_name']}
     result = {}
     for account_name, account_data in accounts.items():
         auto_download = account_data.get('auto_download', {})
@@ -57,9 +61,11 @@ def configure_auto_download(account_name: str):
             raise ValidationError(f'rule[{i}].library_name must not be empty')
 
     if enabled and not rules and not default_library_name:
-        raise ValidationError(
-            'Add at least one rule or a default library before enabling auto-download'
-        )
+        libraries = config_manager.get_libraries()
+        if len(libraries) != 1:
+            raise ValidationError(
+                'Add a default library or routing rule before enabling auto-download'
+            )
 
     existing = account.get('auto_download', {})
     auto_download_config = {

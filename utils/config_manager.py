@@ -96,19 +96,31 @@ class ConfigManager:
         Raises:
             ConfigurationError: If the account does not exist.
         """
-        existing = self.get_account(account_name)
-        if existing is None:
-            raise ConfigurationError(f"Account '{account_name}' not found")
-
-        # Deep-merge the auto_download sub-dict if present
-        if "auto_download" in updates and "auto_download" in existing:
-            merged_auto = {**existing["auto_download"], **updates["auto_download"]}
-            updates = {**updates, "auto_download": merged_auto}
-
-        merged = {**existing, **updates}
-
         with transaction() as conn:
+            row = conn.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+            if row is None:
+                raise ConfigurationError(f"Account '{account_name}' not found")
+            existing = self._row_to_account(row, conn)
+            if "auto_download" in updates:
+                updates = {
+                    **updates,
+                    "auto_download": {**existing["auto_download"], **updates["auto_download"]},
+                }
+            merged = {**existing, **updates}
             self._upsert_account(conn, account_name, merged)
+
+    def create_account(self, account_name: str, data: Dict[str, Any]) -> None:
+        """Create one account without replacing or deleting any other account."""
+        auto = data.get("auto_download") or {}
+        with transaction() as conn:
+            conn.execute(
+                "INSERT INTO accounts (name,region,authenticated,auto_dl_enabled,auto_dl_interval_hours) "
+                "VALUES (?,?,?,?,?)",
+                (account_name, data.get("region", "us"),
+                 1 if data.get("authenticated") else 0,
+                 1 if auto.get("enabled") else 0,
+                 auto.get("interval_hours", 6)),
+            )
 
     def delete_account(self, account_name: str) -> None:
         """

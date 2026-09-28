@@ -195,7 +195,8 @@ class AudiobookDownloader:
         """Loads the authenticator object from file."""
         auth_file = get_auth_file_path(self.account_name)
         if auth_file.exists():
-            return audible.Authenticator.from_file(auth_file)
+            from utils.token_lifecycle import load_authenticator
+            return load_authenticator(self.account_name)
         return None
 
     def _load_auth_details(self) -> Optional[Dict]:
@@ -489,6 +490,14 @@ class AudiobookDownloader:
                         book_asin, book_title, quality, paths, cleanup_aax
                     )
             except Exception as e:
+                from utils.token_lifecycle import mark_auth_rejected
+                if mark_auth_rejected(self.account_name, e):
+                    self.set_download_state(
+                        book_asin, DownloadState.ERROR,
+                        error="Audible authorization expired or was revoked; reconnect your account",
+                        error_type="AuthenticationError",
+                    )
+                    return None
                 self._log(f"❌ Error on attempt {attempt + 1}/{max_retries}: {e}", book_asin)
                 if attempt < max_retries - 1:
                     self._log(f"⏳ Retrying in 5 seconds...", book_asin)

@@ -17,10 +17,54 @@ from flask import Blueprint, request, jsonify, session
 from app.models import BookStatus
 from utils.db import get_db, transaction
 from utils.config_manager import get_config_manager
+from app.services.audiobookshelf import AudiobookshelfClient, AudiobookshelfError, reconcile_items
 
 books_bp = Blueprint("books", __name__)
 logger = logging.getLogger(__name__)
 config_manager = get_config_manager()
+
+
+@books_bp.route("/api/audiobookshelf/status", methods=["GET"])
+def audiobookshelf_status():
+    """Local book state alongside the last successfully reconciled ABS state."""
+    try:
+        configured = bool(AudiobookshelfClient.from_environment())
+    except (AudiobookshelfError, ValueError):
+        configured = False
+    rows = get_db().execute(
+        """SELECT b.asin, b.title, b.status AS local_status, a.item_id,
+                  a.match_method, a.status AS abs_status, a.last_synced
+           FROM books b LEFT JOIN abs_items a ON a.asin=b.asin
+           ORDER BY b.title"""
+    ).fetchall()
+    return jsonify({"configured": configured,
+                    "books": [dict(row) for row in rows]})
+
+
+@books_bp.route("/api/audiobookshelf/scan", methods=["POST"])
+def audiobookshelf_scan():
+    """Ask ABS to begin scanning shared folders."""
+    try:
+        client = AudiobookshelfClient.from_environment()
+        if not client:
+            return jsonify({"error": "Audiobookshelf is not configured"}), 409
+        client.trigger_scan()
+    except (AudiobookshelfError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"success": True, "message": "Audiobookshelf scan requested"}), 202
+
+
+@books_bp.route("/api/audiobookshelf/sync", methods=["POST"])
+def audiobookshelf_sync():
+    """Read the full ABS catalog after indexing finishes and update match state."""
+    try:
+        client = AudiobookshelfClient.from_environment()
+        if not client:
+            return jsonify({"error": "Audiobookshelf is not configured"}), 409
+        counts = reconcile_items(client.list_items())
+    except (AudiobookshelfError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"success": True, "counts": counts})
 
 
 # ---------------------------------------------------------------------------

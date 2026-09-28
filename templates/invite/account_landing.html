@@ -38,11 +38,15 @@
                         </div>
                     </div>
 
-                    <div class="d-grid">
-                        <a href="/invite/account/{{ token }}/auth/login" class="btn btn-primary btn-lg">
-                            <i class="fas fa-arrow-right me-2"></i>Continue to Authentication
-                        </a>
-                    </div>
+                    <form id="claimForm">
+                        <label for="username" class="form-label">Household username</label>
+                        <input id="username" name="username" class="form-control mb-3" minlength="3" maxlength="80" autocomplete="username" required>
+                        <label for="password" class="form-label">Household password</label>
+                        <input id="password" name="password" type="password" class="form-control mb-3" minlength="12" autocomplete="new-password" required>
+                        <p class="small text-muted">Use this login to reconnect Audible yourself if your authorization expires.</p>
+                        <button type="submit" class="btn btn-primary btn-lg w-100">Create login and connect Audible</button>
+                        <p id="claimError" class="text-danger mt-2" role="alert"></p>
+                    </form>
 
                     <div class="mt-4 text-center">
                         <small class="text-muted">
@@ -54,4 +58,26 @@
         </div>
     </div>
 </div>
+<script>
+document.getElementById('claimForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const response = await fetch({{ url_for('invite.account_claim', token=token)|tojson }}, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value
+        })
+    });
+    const result = await response.json();
+    if (response.ok && result.auth_url) {
+        window.location.assign(result.auth_url);
+    } else {
+        document.getElementById('claimError').textContent = result.error || 'Could not create login';
+    }
+});
+</script>
 {% endblock %}

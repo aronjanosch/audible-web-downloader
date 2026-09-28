@@ -3,6 +3,7 @@ APScheduler wrapper for the auto-download feature.
 The BackgroundScheduler runs jobs in daemon threads alongside Flask.
 """
 import logging
+import asyncio
 from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ _scheduler: BackgroundScheduler | None = None
 def init_scheduler(app) -> None:
     """
     Create and start the BackgroundScheduler, then register one interval job
-    for every account that has auto_download.enabled == True.
+    for every linked account. Disabled downloads still record new purchases.
     Stores the scheduler on app.scheduler for later use.
     """
     global _scheduler
@@ -22,23 +23,56 @@ def init_scheduler(app) -> None:
     _scheduler.start()
     app.scheduler = _scheduler
 
+    # ABS scans are asynchronous, so reconcile the indexed catalog separately.
+    from app.services.audiobookshelf import AudiobookshelfClient, AudiobookshelfError
+    try:
+        abs_enabled = AudiobookshelfClient.from_environment() is not None
+    except (AudiobookshelfError, ValueError):
+        abs_enabled = False
+    if abs_enabled:
+        _scheduler.add_job(
+            _sync_audiobookshelf, trigger='interval', minutes=15,
+            id='audiobookshelf_status_sync', replace_existing=True,
+            max_instances=1, coalesce=True,
+        )
+
     from utils.config_manager import get_config_manager
     config_manager = get_config_manager()
     accounts = config_manager.get_accounts()
 
     for account_name, account_data in accounts.items():
         auto_download = account_data.get('auto_download', {})
-        if auto_download.get('enabled') and account_data.get('authenticated'):
+        if account_data.get('authenticated'):
             update_job(app, account_name, auto_download)
 
     logger.info("Scheduler started (%d auto-download job(s) registered)", len(_scheduler.get_jobs()))
 
 
+def _sync_audiobookshelf():
+    """Keep last good state when ABS is unavailable or its API shape changes."""
+    from app.services.audiobookshelf import (
+        AudiobookshelfClient, AudiobookshelfError, reconcile_items,
+    )
+    try:
+        client = AudiobookshelfClient.from_environment()
+        if client:
+            reconcile_items(client.list_items())
+    except (AudiobookshelfError, ValueError):
+        logger.warning("Audiobookshelf status sync failed", exc_info=True)
+
+
+def _probe_audible(account_name):
+    from utils.token_lifecycle import probe_authenticator
+    try:
+        asyncio.run(probe_authenticator(account_name))
+    except Exception:
+        logger.warning("Audible credential probe failed for '%s'", account_name, exc_info=True)
+
+
 def update_job(app, account_name: str, auto_download_config: dict) -> None:
     """
-    Add, replace, or remove the interval job for *account_name* based on whether
-    auto_download is enabled. Library routing is resolved at runtime inside the job,
-    so no library path is needed here.
+    Poll every authenticated account. Automatic download remains optional; a
+    disabled account still records purchases for attribution.
     """
     from utils.auto_downloader import run_auto_download
     from utils.config_manager import get_config_manager
@@ -48,10 +82,9 @@ def update_job(app, account_name: str, auto_download_config: dict) -> None:
 
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
-
-    if not auto_download_config.get('enabled'):
-        logger.info("Auto-download disabled for '%s', job removed", account_name)
-        return
+    probe_id = f'audible_probe_{account_name}'
+    if scheduler.get_job(probe_id):
+        scheduler.remove_job(probe_id)
 
     config_manager = get_config_manager()
     account = config_manager.get_account(account_name)
@@ -65,11 +98,9 @@ def update_job(app, account_name: str, auto_download_config: dict) -> None:
     interval_hours = int(auto_download_config.get('interval_hours', 6))
 
     if not rules and not default_library_name:
-        logger.warning(
-            "Auto-download for '%s': no rules and no default library — job not scheduled",
-            account_name
-        )
-        return
+        libraries = config_manager.get_libraries()
+        if len(libraries) == 1:
+            default_library_name = next(iter(libraries))
 
     scheduler.add_job(
         run_auto_download,
@@ -83,8 +114,16 @@ def update_job(app, account_name: str, auto_download_config: dict) -> None:
             'rules': rules,
             'default_library_name': default_library_name,
             'app': app,
+            'downloads_enabled': bool(auto_download_config.get('enabled')),
         },
         misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _probe_audible, trigger='interval', hours=24,
+        id=probe_id, replace_existing=True,
+        kwargs={'account_name': account_name}, max_instances=1, coalesce=True,
     )
 
     rule_summary = f"{len(rules)} rule(s)" + (f" + default '{default_library_name}'" if default_library_name else "")
@@ -109,7 +148,11 @@ def trigger_now(app, account_name: str) -> None:
     default_library_name = auto_download.get('default_library_name') or None
 
     if not rules and not default_library_name:
-        raise ValueError("No library rules configured. Add at least one rule or a default library.")
+        libraries = config_manager.get_libraries()
+        if len(libraries) == 1:
+            default_library_name = next(iter(libraries))
+        else:
+            raise ValueError("No library rules configured. Add at least one rule or a default library.")
 
     scheduler = _get_scheduler(app)
     scheduler.add_job(

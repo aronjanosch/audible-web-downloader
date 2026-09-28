@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _db_path: Optional[Path] = None
 _local = threading.local()
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA_DDL = """
 PRAGMA journal_mode=WAL;
@@ -106,6 +106,32 @@ CREATE TABLE IF NOT EXISTS library_cache (
     fetched_at   REAL NOT NULL,
     books_json   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin','member')),
+    account_name TEXT UNIQUE REFERENCES accounts(name) ON DELETE SET NULL,
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS account_books (
+    account_name TEXT NOT NULL REFERENCES accounts(name) ON DELETE CASCADE,
+    asin TEXT NOT NULL,
+    first_seen_at REAL NOT NULL,
+    last_seen_at REAL NOT NULL,
+    PRIMARY KEY (account_name, asin)
+);
+CREATE INDEX IF NOT EXISTS idx_account_books_asin ON account_books(asin);
+
+CREATE TABLE IF NOT EXISTS abs_items (
+    asin TEXT PRIMARY KEY REFERENCES books(asin) ON DELETE CASCADE,
+    item_id TEXT,
+    match_method TEXT,
+    status TEXT NOT NULL,
+    last_synced REAL NOT NULL
+);
 """
 
 
@@ -158,7 +184,7 @@ def transaction() -> Iterator[sqlite3.Connection]:
     """
     conn = get_db()
     try:
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
         yield conn
         conn.execute("COMMIT")
     except Exception:
@@ -175,21 +201,23 @@ def migrate() -> None:
     Ensure the database schema is at the current version.
 
     Idempotent: if PRAGMA user_version already equals SCHEMA_VERSION,
-    this function returns immediately without touching anything.
+    schema migration is skipped. Stale in-progress downloads are still reset.
 
     On a fresh database (user_version == 0):
       1. Creates all tables and indexes.
       2. Imports data from any existing JSON config files.
       3. Sets PRAGMA user_version = SCHEMA_VERSION.
 
-    All work is done in a single transaction so any failure rolls back
-    completely; the JSON files are left untouched as a backup.
+    Legacy JSON import is transactional. SQLite DDL is idempotent but may be
+    committed separately by executescript; user_version is advanced only after
+    every step succeeds. The JSON files are left untouched as a backup.
     """
     conn = get_db()
     current_version = conn.execute("PRAGMA user_version").fetchone()[0]
 
     if current_version >= SCHEMA_VERSION:
-        logger.info("Database schema already at version %d — skipping migration", current_version)
+        logger.info("Database schema already at version %d — skipping schema migration", current_version)
+        _reset_stale_downloads(conn)
         return
 
     logger.info("Running database migration %d → %d ...", current_version, SCHEMA_VERSION)
@@ -219,34 +247,66 @@ def migrate() -> None:
             conn.execute("DROP TABLE IF EXISTS download_queue")
             conn.execute("DROP TABLE IF EXISTS download_batches")
 
-        # user_version cannot be set inside a normal transaction via parameter binding
+        if current_version < 4:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK (role IN ('admin','member')),
+                    account_name TEXT UNIQUE REFERENCES accounts(name) ON DELETE SET NULL,
+                    created_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS account_books (
+                    account_name TEXT NOT NULL REFERENCES accounts(name) ON DELETE CASCADE,
+                    asin TEXT NOT NULL,
+                    first_seen_at REAL NOT NULL,
+                    last_seen_at REAL NOT NULL,
+                    PRIMARY KEY (account_name, asin)
+                );
+                CREATE INDEX IF NOT EXISTS idx_account_books_asin ON account_books(asin);
+                CREATE TABLE IF NOT EXISTS abs_items (
+                    asin TEXT PRIMARY KEY REFERENCES books(asin) ON DELETE CASCADE,
+                    item_id TEXT,
+                    match_method TEXT,
+                    status TEXT NOT NULL,
+                    last_synced REAL NOT NULL
+                );
+            """)
+
+        # PRAGMA assignments cannot use parameter binding.
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         logger.info("Database migration complete (version %d)", SCHEMA_VERSION)
 
-        # Always reset books that were left in 'downloading' state — they can only
-        # reach that state via an active request and won't survive a process restart.
-        stale = conn.execute(
-            "UPDATE books SET status='wanted', updated_at=? WHERE status='downloading'",
-            (time.time(),)
-        ).rowcount
-        if stale:
-            logger.info("Reset %d stale 'downloading' book(s) to 'wanted'", stale)
+        conn.commit()
+        _reset_stale_downloads(conn)
 
     except Exception as e:
+        conn.rollback()
         logger.error("Database migration failed: %s", e)
         raise
 
 
+def _reset_stale_downloads(conn: sqlite3.Connection) -> None:
+    """The process queue is empty after startup; release orphaned DB claims."""
+    stale = conn.execute(
+        "UPDATE books SET status='wanted', updated_at=? WHERE status='downloading'",
+        (time.time(),),
+    ).rowcount
+    conn.commit()
+    if stale:
+        logger.info("Reset %d stale 'downloading' book(s) to 'wanted'", stale)
+
+
 def _load_json(path: Path) -> dict:
-    """Load a JSON file, returning {} if missing or corrupt."""
+    """Load a legacy JSON file; never treat a corrupt backup as empty data."""
     if not path.exists():
         return {}
     try:
         with open(path, "r", encoding="utf-8") as fh:
             return json.load(fh)
     except (json.JSONDecodeError, IOError) as e:
-        logger.warning("Could not read %s for migration: %s", path, e)
-        return {}
+        raise RuntimeError(f"Cannot migrate unreadable legacy file {path}: {e}") from e
 
 
 def _migrate_accounts(conn: sqlite3.Connection) -> None:
@@ -333,16 +393,24 @@ def _migrate_books(conn: sqlite3.Connection) -> None:
         conn.execute(
             """
             INSERT OR IGNORE INTO books
-                (asin, title, status, file_path,
+                (asin, title, authors, series, narrator, publisher, language,
+                 runtime_length_min, status, file_path, file_size_bytes,
                  library_name, downloaded_by_account,
                  added_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 asin,
                 data.get("title", ""),
+                _legacy_text(data.get("authors")),
+                _legacy_text(data.get("series")),
+                _legacy_text(data.get("narrator") or data.get("narrators")),
+                _legacy_text(data.get("publisher")),
+                _legacy_text(data.get("language")),
+                data.get("runtime_length_min") or data.get("length_mins"),
                 status,
                 data.get("file_path"),
+                data.get("file_size_bytes"),
                 data.get("library_name"),
                 data.get("downloaded_by_account"),
                 data.get("timestamp", now),
@@ -352,6 +420,17 @@ def _migrate_books(conn: sqlite3.Connection) -> None:
         count += 1
 
     logger.info("Migrated %d books", count)
+
+
+def _legacy_text(value) -> str | None:
+    """Flatten common old Audible metadata shapes into searchable text."""
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return ", ".join(filter(None, (_legacy_text(item) for item in value)))
+    if isinstance(value, dict):
+        return value.get("name") or value.get("title") or json.dumps(value, ensure_ascii=False)
+    return str(value)
 
 
 def _migrate_scan_cache(conn: sqlite3.Connection) -> None:

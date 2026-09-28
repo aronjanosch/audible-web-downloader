@@ -24,7 +24,8 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY . .
 RUN uv sync --locked --no-dev
 
-RUN mkdir -p /app/config /app/downloads /app/library
+RUN mkdir -p /app/config /app/downloads /app/library /app/library_data && \
+    chown -R 1000:1000 /app/library_data
 
 EXPOSE 5505
 

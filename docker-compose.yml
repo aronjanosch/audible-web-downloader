@@ -1,6 +1,6 @@
 services:
   audible-web-downloader:
-    build: .
+    image: ${AUDIBLE_IMAGE:-ghcr.io/aronjanosch/audible-web-downloader:latest}
     container_name: audible-web-downloader
     user: "1000:1000"
     ports:
@@ -12,9 +12,12 @@ services:
       - ./downloads:/app/downloads
       # Mount library directory for final organized M4B audiobooks
       - ./library:/app/library
+      - ./library_data:/app/library_data
     environment:
       - TZ=Europe/Berlin
-      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY:?Set a random SECRET_KEY in your environment or .env before starting}
       - FLASK_ENV=${FLASK_ENV:-production}
+      - ABS_URL=${ABS_URL:-}
+      - ABS_API_TOKEN=${ABS_API_TOKEN:-}
+      - ABS_LIBRARY_ID=${ABS_LIBRARY_ID:-}
     restart: unless-stopped
-

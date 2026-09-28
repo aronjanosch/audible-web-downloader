@@ -6,12 +6,14 @@ regular auth and invitation routes.
 """
 
 from pathlib import Path
+import secrets
 from threading import Event, Thread
 from typing import Dict, Any, Callable, Optional, Tuple
 import audible
 from audible.localization import Locale
 from utils.constants import get_account_auth_dir
 from utils.config_manager import get_config_manager
+from utils.token_lifecycle import save_authenticator
 
 
 class OAuthSession:
@@ -89,10 +91,7 @@ class OAuthSession:
             )
 
             # Save authenticator to expected location
-            config_dir = get_account_auth_dir(self.account_name)
-            config_dir.mkdir(parents=True, exist_ok=True)
-            auth_file = config_dir / "auth.json"
-            auth.to_file(auth_file, encryption=False)
+            save_authenticator(self.account_name, auth)
 
             self.login_result['success'] = True
 
@@ -146,7 +145,7 @@ def start_oauth_login(
         ... )
     """
     # Create unique session ID
-    session_id = f"{session_id_prefix}{account_name}_{len(sessions_storage)}"
+    session_id = f"{session_id_prefix}{secrets.token_urlsafe(32)}"
 
     # Create and start OAuth session
     oauth_session = OAuthSession(
@@ -259,9 +258,14 @@ def check_oauth_status(
         if result['success']:
             # Mark account as authenticated in config
             config_manager = get_config_manager()
-            accounts = config_manager.get_accounts()
-            accounts[account_name]['authenticated'] = True
-            config_manager.save_accounts(accounts)
+            config_manager.update_account(account_name, {'authenticated': True})
+            # The account may have been linked after scheduler startup.
+            from flask import current_app
+            from utils.scheduler import update_job
+            update_job(
+                current_app._get_current_object(), account_name,
+                config_manager.get_account(account_name).get('auto_download', {}),
+            )
 
             return {
                 'success': True,

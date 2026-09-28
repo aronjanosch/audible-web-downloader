@@ -34,6 +34,12 @@
                     <i class="fas fa-robot me-2"></i>Auto-Download
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-audiobookshelf" data-bs-toggle="tab"
+                        data-bs-target="#pane-audiobookshelf" type="button" role="tab">
+                    Audiobookshelf
+                </button>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -149,12 +155,25 @@
                 <div class="app-card p-4 mb-3">
                     <h5 class="mb-1">Automatic Downloads</h5>
                     <p class="text-muted small mb-4">
-                        Polls each account's Audible library on a schedule and downloads any new purchases automatically.
+                        Checks each linked account for new purchases. Turn on automatic downloads to send new titles to a configured library; when off, purchases remain in the tracked book list.
                     </p>
 
                     <div id="autoDownloadAccountList">
                         <p class="text-muted small">Loading…</p>
                     </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pane-audiobookshelf" role="tabpanel" aria-labelledby="tab-audiobookshelf">
+                <div class="app-card p-4 mb-3">
+                    <h2 class="h5">Audiobookshelf status</h2>
+                    <p class="text-muted small">Matching uses ASIN first, then a unique title and author. A scan can take time to finish in Audiobookshelf.</p>
+                    <p id="absSummary" role="status" aria-live="polite">Loading integration status…</p>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button id="absScanButton" type="button" class="btn btn-outline-primary btn-sm">Request scan</button>
+                        <button id="absSyncButton" type="button" class="btn btn-outline-secondary btn-sm">Refresh matches</button>
+                    </div>
+                    <ul id="absBookStatus" class="list-group" aria-label="Audiobookshelf book status"></ul>
                 </div>
             </div>
 
@@ -164,6 +183,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/audiobookshelf-settings.js') }}"></script>
 <script>
 // ── Auto-Download ──────────────────────────────────────────────
 let _autoDownloadData = {};

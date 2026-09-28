@@ -30,8 +30,8 @@ uv run gunicorn -c gunicorn.conf.py "app:create_app()"
 # Tests
 uv run pytest                 # there is currently no pytest config / conftest; add one if useful
 
-# Docker
-docker compose up -d --build
+# Docker (published image)
+docker compose pull && docker compose up -d
 ```
 
 Python `3.13` (see `.python-version`). ffmpeg is required at runtime for AAX→M4B.
@@ -71,9 +71,8 @@ Python `3.13` (see `.python-version`). ffmpeg is required at runtime for AAX→M
 ## Conventions
 
 - Dependencies via `uv`; keep `uv.lock` in sync (`uv sync`).
-- `.cursor/rules/python-flask.mdc` lists some aspirational tooling (Flask-RESTful,
-  SQLAlchemy, Alembic, Marshmallow, JWT) that the code does **not** currently use. Treat
-  it as intent, not description; update it if the stack actually changes.
+- Keep setup guidance in this file and `README.md`; editor-specific instruction
+  folders are not part of this project.
 - Prefer small, reviewable changes with a test or a runnable check for each.
 
 ## Parallel workstreams

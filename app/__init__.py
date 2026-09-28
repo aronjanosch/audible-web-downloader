@@ -42,6 +42,31 @@ def create_app():
     init_db(DB_FILE)
     migrate()
 
+    from utils.security import bootstrap_admin, install_security
+    bootstrap_admin()
+    app.extensions['login_attempts'] = install_security(app, csrf)
+
+    @app.context_processor
+    def household_identity():
+        from utils.security import current_user
+        return {'household_user': current_user()}
+
+    @app.cli.command('create-admin')
+    def create_admin_command():
+        """Create the first household admin, preserving existing Audible data."""
+        import click
+        from utils.db import get_db
+        from utils.security import create_user
+        if get_db().execute("SELECT 1 FROM users WHERE role='admin' LIMIT 1").fetchone():
+            raise click.ClickException('An admin already exists')
+        username = click.prompt('Admin username', default='admin')
+        password = click.prompt('Admin password', hide_input=True, confirmation_prompt=True)
+        try:
+            create_user(username, password, 'admin')
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo('Admin created')
+
     # Register blueprints
     from routes.main import main_bp
     from routes.auth import auth_bp
@@ -51,6 +76,7 @@ def create_app():
     from routes.importer import importer_bp
     from routes.scheduler import scheduler_bp
     from routes.books import books_bp
+    from routes.security import security_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -60,6 +86,7 @@ def create_app():
     app.register_blueprint(importer_bp)
     app.register_blueprint(scheduler_bp)
     app.register_blueprint(books_bp)
+    app.register_blueprint(security_bp)
 
     from utils.scheduler import init_scheduler
     init_scheduler(app)

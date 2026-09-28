@@ -25,7 +25,14 @@ ENV/
 # Data directories (will be mounted as volumes)
 config/
 downloads/
+library/
+library_data/
 .audible_*/
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
 
 # Git
 .git/
@@ -44,4 +51,3 @@ test_*.py
 
 # Lock files
 # uv.lock is intentionally included — required for reproducible Docker builds
-

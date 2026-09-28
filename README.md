@@ -1,10 +1,30 @@
 # Audible Book Downloader
 
+## Household sign in and first start
+
+Set a long random `SECRET_KEY` before starting the app. For Docker Compose, put
+`SECRET_KEY=<a random value>` in a private `.env` file (which is ignored by Git),
+then run `docker compose pull && docker compose up -d`. A quick way to generate one is
+`python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+
+On first boot, the app creates an admin. If `ADMIN_PASSWORD` is unset, read the
+random initial credentials from `config/initial-admin-credentials.json` on the
+host (mode 0600); remove that file after signing in and storing the password
+privately. You can set `ADMIN_USERNAME` and `ADMIN_PASSWORD` before first boot
+to supply your own credentials instead, then remove `ADMIN_PASSWORD` from the
+environment. Existing Audible accounts, books and tokens remain in place. An
+admin can issue invites; each member creates a household password and manages
+their own Audible connection.
+
+Put the app behind HTTPS when exposing it publicly. Session cookies are Secure
+by default; set `SESSION_COOKIE_SECURE=0` only for local HTTP development.
+Keep `config/` private and backed up: it contains the database and Audible tokens.
+
 A simple cross-platform Flask web application for downloading and converting Audible audiobooks to M4B format.
 
 ## Features
 
-- 🔐 **Secure Authentication**: Uses Audible's official authentication system
+- 🔐 **Household sign in**: Private admin and member accounts; each member reconnects their own Audible account
 - 📚 **Library Management**: Browse and search your entire Audible library
 - ⬇️ **Batch Downloads**: Download multiple books at once
 - 🔄 **Format Conversion**: Automatically converts AAX to M4B format
@@ -14,7 +34,7 @@ A simple cross-platform Flask web application for downloading and converting Aud
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.13 or higher
 - FFmpeg (for audio conversion)
 - uv (recommended) or pip for dependency management
 
@@ -39,7 +59,7 @@ Download from [FFmpeg official website](https://ffmpeg.org/download.html)
 1. **Clone the repository:**
 ```bash
 git clone <repository-url>
-cd audible-streamlit
+cd audible-web-downloader
 ```
 
 2. **Install dependencies using uv (recommended):**
@@ -56,9 +76,10 @@ pip install -r requirements.txt
 
 ### Docker Deployment (Recommended for Production)
 
-1. **Build and start the container:**
+1. **Pull and start the published container:**
 ```bash
-docker-compose up -d
+docker compose pull
+docker compose up -d
 ```
 
 2. **Access the application:**
@@ -68,20 +89,26 @@ http://localhost:5505
 
 3. **View logs:**
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 4. **Stop the container:**
 ```bash
-docker-compose down
+docker compose down
 ```
 
 **Benefits of Docker deployment:**
 - Persistent configuration via mounted `config/` volume (includes auth tokens)
 - Persistent downloads via mounted `downloads/` volume
-- Easy updates: rebuild and restart the container
+- Easy updates: pull a tested GHCR image and restart the container
 - Isolated environment with all dependencies included
 - Simple backup: backup the `config/` directory (includes `audible.db`, `settings.json`, and `auth/`) and the `downloads/` folder
+
+GitHub Actions runs the test suite before publishing branch and commit SHA tags
+to `ghcr.io/aronjanosch/audible-web-downloader`. Set `AUDIBLE_IMAGE` to a tested
+tag in your private `.env` when you need a specific version. Keep host-specific
+mounts, networks, proxy labels, and credentials in a Compose file outside this
+public repository.
 
 ### Starting the Application (Local Development)
 
@@ -97,7 +124,7 @@ uv run python run.py
 
 2. **Open your browser and navigate to:**
 ```
-http://localhost:5000
+http://localhost:5505
 ```
 
 ### Using the Application
@@ -122,6 +149,19 @@ http://localhost:5000
    - Select books you want to download
    - Choose download settings (cleanup AAX files)
    - Click "Download Selected"
+
+### Audiobookshelf
+
+Mount the same library folder in Audiobookshelf and configure `ABS_URL`,
+`ABS_API_TOKEN`, and `ABS_LIBRARY_ID` to enable scan requests and status matching.
+See [Audiobookshelf integration](docs/audiobookshelf.md) for setup, matching
+rules, admin endpoints, and offline behavior.
+
+### Automatic household downloads
+
+Linked accounts are checked for new purchases on a schedule. Shared ASINs are
+downloaded once and each owner's purchase is retained for attribution. See
+[household automation](docs/household-automation.md) for routing and retry rules.
 
 ### File Locations
 

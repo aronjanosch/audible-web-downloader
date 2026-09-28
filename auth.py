@@ -2,6 +2,8 @@ import asyncio
 import audible
 from pathlib import Path
 import json
+from utils.token_lifecycle import load_authenticator, mark_auth_rejected, save_authenticator
+from utils.errors import AuthenticationError
 
 class AudibleAuth:
     def __init__(self, account_name, region="us"):
@@ -17,7 +19,7 @@ class AudibleAuth:
         try:
             # Try to load existing auth
             if self.auth_file.exists():
-                auth = audible.Authenticator.from_file(self.auth_file)
+                auth = load_authenticator(self.account_name)
                 # Test the authentication
                 async with audible.AsyncClient(auth=auth) as client:
                     # Try to make a simple API call to verify auth works
@@ -59,7 +61,7 @@ class AudibleAuth:
             )
             
             # Save the authentication
-            auth.to_file(self.auth_file, encryption=False)
+            save_authenticator(self.account_name, auth)
             
             return auth
             
@@ -147,6 +149,8 @@ class AudibleAuth:
                 return books
                                 
         except Exception as e:
+            if mark_auth_rejected(self.account_name, e):
+                raise AuthenticationError("Audible authorization expired or was revoked") from e
             print(f"Failed to fetch library: {str(e)}")
             return []
     
@@ -157,7 +161,7 @@ class AudibleAuth:
     def load_auth(self):
         """Load existing authentication"""
         if self.auth_file.exists():
-            return audible.Authenticator.from_file(self.auth_file)
+            return load_authenticator(self.account_name)
         return None
 
 async def authenticate_account(account_name, region):
