@@ -170,3 +170,20 @@ def test_invite_creates_scoped_member_login(household, monkeypatch):
     assert set(client.get("/api/accounts").json) == {"charlie"}
     assert client.get("/auth/login/bob").status_code == 403
     assert client.post("/invite/bad-invite/add-account", json={}, headers=_csrf(client)).status_code == 403
+
+
+def test_account_invite_is_revoked_after_claim(household):
+    _, client, _, _ = household
+    from utils.config_manager import get_config_manager
+
+    get_config_manager().update_account('bob', {'pending_invitation_token': 'one-time-token'})
+    assert client.get('/invite/account/one-time-token').status_code == 200
+    response = client.post('/invite/account/one-time-token/claim', json={
+        'username': 'bob', 'password': 'bob-password-123',
+    }, headers=_csrf(client))
+    assert response.status_code == 200
+    assert set(client.get('/api/accounts').json) == {'bob'}
+    assert client.get('/invite/account/one-time-token').status_code == 403
+    assert client.post('/invite/account/one-time-token/claim', json={
+        'username': 'another', 'password': 'another-password-123',
+    }, headers=_csrf(client)).status_code == 403
