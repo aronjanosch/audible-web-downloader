@@ -35,8 +35,8 @@ a current-state audit, not a claim that v1 is done.
 ## IMPROVED BUT APPROXIMATE
 
 - **Experience:** Members have a focused responsive library page, reconnect action,
-  skip link and visible keyboard focus. These are implementation checks, not a
-  browser accessibility pass or visual proof.
+  skip link, visible keyboard focus, and named buttons before JavaScript runs.
+  These are implementation checks, not a browser accessibility pass or visual proof.
 - **Performance proxy:** `scripts/benchmark.py` measured baseline and current
   local Flask response times against an empty install. Both meet the p95 budget
   in `docs/performance.md`; network and browser rendering are excluded.

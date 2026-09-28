@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% set auto_config = account.auto_download if account else {} %}
+{% set interval_hours = auto_config.interval_hours|default(6, true)|int %}
 {% block title %}My books · Audible Downloader{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/member.css') }}">{% endblock %}
 {% block content %}
@@ -24,8 +26,8 @@
     {% endif %}
   </section>
   <section class="member-automation" aria-labelledby="automation-title">
-    <div><h2 id="automation-title">New purchases</h2><p>We check for new books every six hours. Automatic downloads use your household's configured library.</p></div>
-    <button id="autoToggle" type="button" class="member-button member-button-secondary"></button>
+    <div><h2 id="automation-title">New purchases</h2><p>We check for new books every {{ interval_hours }} {{ 'hour' if interval_hours == 1 else 'hours' }}. Automatic downloads use your household's configured library.</p></div>
+    <button id="autoToggle" type="button" class="member-button member-button-secondary">{{ 'Pause downloads' if auto_config.enabled else 'Enable downloads' }}</button>
     <p id="autoStatus" role="status" aria-live="polite"></p>
   </section>
   <section class="member-library" aria-labelledby="library-title">
@@ -39,7 +41,7 @@
 <script>
 (function () {
   const accountName = {{ account_name|tojson }};
-  const autoConfig = {{ (account.auto_download if account else {})|tojson }};
+  const autoConfig = {{ auto_config|tojson }};
   const toggle = document.getElementById('autoToggle');
   const autoStatus = document.getElementById('autoStatus');
   function showAutomation() { toggle.textContent = autoConfig.enabled ? 'Pause downloads' : 'Enable downloads'; }
