@@ -15,6 +15,7 @@ services:
       - ./library_data:/app/library_data
     environment:
       - TZ=Europe/Berlin
+      - HOME=/tmp
       - SECRET_KEY=${SECRET_KEY:?Set a random SECRET_KEY in your environment or .env before starting}
       - FLASK_ENV=${FLASK_ENV:-production}
       - ABS_URL=${ABS_URL:-}

@@ -28,6 +28,9 @@ a current-state audit, not a claim that v1 is done.
 - **Local gates:** `uv sync --locked --dev`, `uv run --no-sync python -m pytest -q`
   (33 passed), `python -m compileall`, `node --check` for the new ABS settings UI,
   and `git diff --check` passed on 2026-09-28.
+- **Hosted CI and image:** The `test` and `image` jobs in
+  `.github/workflows/ci.yml` passed on 2026-09-28. The image job published to
+  GHCR and booted the image as UID 1000 before checking `/login`.
 
 ## IMPROVED BUT APPROXIMATE
 
@@ -49,10 +52,7 @@ a current-state audit, not a claim that v1 is done.
   empty (`browsers: []`); opening the in-app browser returned “Browser is not
   available: iab.”
 - Full browser end-to-end test from invite link through rendering the library.
-- Live Audible token lifecycle and purchase polling against a linked household
-  account. No user credentials were provided to this workspace.
-- Live Audiobookshelf version/scan smoke test against an available server.
-- Hosted CI success for `.github/workflows/ci.yml`; only its local command sequence
-  has run because these changes are still in the worktree.
+- Live expired/revoked Audible credential and member reconnect exercise.
+- Authenticated Audiobookshelf scan and reconciliation against a live server.
 - Visual refinement of the admin interface and browser verification of its phone
   layout. The existing admin interface still uses the older Bootstrap structure.
