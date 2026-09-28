@@ -17,6 +17,8 @@ jobs:
         run: uv run --no-sync python -m compileall -q app routes utils tests auth.py downloader.py importer.py library_scanner.py library_storage.py settings.py
       - name: Test
         run: uv run --no-sync python -m pytest -q
+      - name: Check browser code escaping
+        run: node --test tests/dom_escaping.test.cjs
       - name: Verify patch whitespace
         run: git diff --check
 

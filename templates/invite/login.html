@@ -58,8 +58,8 @@
 </div>
 
 <script>
-const token = '{{ token }}';
-const sessionId = '{{ session_id }}';
+const token = {{ token|tojson }};
+const sessionId = {{ session_id|tojson }};
 let checkStatusInterval;
 
 function submitLogin() {
@@ -134,7 +134,10 @@ function checkStatus() {
 function showStatus(message, type) {
     const statusDiv = document.getElementById('statusMessage');
     statusDiv.className = `alert alert-${type}`;
-    statusDiv.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2"></i>${message}`;
+    statusDiv.replaceChildren();
+    const icon = document.createElement('i');
+    icon.className = `fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'} me-2`;
+    statusDiv.append(icon, document.createTextNode(message));
     statusDiv.classList.remove('d-none');
 }
 

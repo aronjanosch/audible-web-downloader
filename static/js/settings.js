@@ -32,13 +32,18 @@ function _renderLibraryList(libraries) {
         item.className = 'd-flex justify-content-between align-items-start py-2 border-bottom';
         item.innerHTML = `
             <div class="flex-grow-1 me-2 min-width-0">
-                <div class="fw-semibold small">${name}</div>
-                <div class="text-muted small text-truncate" title="${lib.path}">${lib.path}</div>
+                <div class="fw-semibold small library-name"></div>
+                <div class="text-muted small text-truncate library-path"></div>
             </div>
-            <button class="btn btn-sm btn-outline-danger delete-lib-btn flex-shrink-0" data-name="${name}" title="Remove library">
+            <button class="btn btn-sm btn-outline-danger delete-lib-btn flex-shrink-0" type="button" aria-label="Remove library">
                 <i class="fas fa-trash"></i>
             </button>
         `;
+        item.querySelector('.library-name').textContent = name;
+        const path = item.querySelector('.library-path');
+        path.textContent = lib.path;
+        path.title = lib.path;
+        item.querySelector('.delete-lib-btn').dataset.name = name;
         container.appendChild(item);
     });
 
@@ -83,7 +88,7 @@ async function deleteLibrary(libraryName) {
     if (!confirm(`Remove library "${libraryName}"?\n\nFiles are NOT deleted.`)) return;
 
     try {
-        await apiCall(`/api/libraries/${libraryName}`, { method: 'DELETE' });
+        await apiCall(`/api/libraries/${encodeURIComponent(libraryName)}`, { method: 'DELETE' });
         showToast('Library removed', 'success');
         await loadLibraries();
     } catch (err) {

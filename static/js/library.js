@@ -303,7 +303,11 @@ function _populateSelect(id, values, placeholder) {
     const select = document.getElementById(id);
     if (!select) return;
     const current = select.value;
-    select.innerHTML = `<option value="">${placeholder}</option>`;
+    select.replaceChildren();
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = placeholder;
+    select.appendChild(empty);
     values.forEach(v => {
         const opt = document.createElement('option');
         opt.value = v;

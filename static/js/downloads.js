@@ -170,7 +170,9 @@ function _createDownloadItemEl(d) {
 
 function _updateDownloadItemEl(el, d) {
     const state = d.state || 'pending';
-    const pct = d.progress_percent || 0;
+    const safeState = Object.hasOwn({ pending: 1, retrying: 1, license_requested: 1, license_granted: 1, downloading: 1, download_complete: 1, decrypting: 1, converting: 1, converted: 1, completed: 1, error: 1 }, state) ? state : 'pending';
+    const rawPct = Number(d.progress_percent);
+    const pct = Number.isFinite(rawPct) ? Math.max(0, Math.min(100, rawPct)) : 0;
     const isDone = ['converted', 'completed', 'error'].includes(state);
 
     const stateLabel = {
@@ -181,18 +183,18 @@ function _updateDownloadItemEl(el, d) {
         converted: 'Done', completed: 'Done', error: 'Error'
     }[state] || state;
 
-    el.className = `download-item state-${state}`;
+    el.className = `download-item state-${safeState}`;
     el.innerHTML = `
         <div class="download-item-inner">
             ${d.cover_url
-                ? `<img src="${d.cover_url}" class="download-cover" alt="">`
+                ? `<img src="${escapeHtml(d.cover_url)}" class="download-cover" alt="">`
                 : `<div class="download-cover-placeholder"><i class="fas fa-headphones"></i></div>`}
             <div class="download-info">
                 <div class="d-flex justify-content-between align-items-start mb-1">
-                    <div class="download-title flex-grow-1 me-2">${d.title || d.asin}</div>
-                    <span class="state-badge state-${state}">${stateLabel}</span>
+                    <div class="download-title flex-grow-1 me-2">${escapeHtml(d.title || d.asin)}</div>
+                    <span class="state-badge state-${safeState}">${escapeHtml(stateLabel)}</span>
                 </div>
-                ${d.author ? `<div class="download-author">${d.author}</div>` : ''}
+                ${d.author ? `<div class="download-author">${escapeHtml(d.author)}</div>` : ''}
                 ${!isDone ? `
                 <div class="download-progress-bar-track">
                     <div class="download-progress-bar-fill" style="width:${pct}%"></div>
@@ -202,7 +204,7 @@ function _updateDownloadItemEl(el, d) {
                     ${d.speed ? `<span class="download-stat">${formatSpeed(d.speed)}</span>` : ''}
                     ${d.eta ? `<span class="download-stat">ETA ${formatDuration(d.eta)}</span>` : ''}
                 </div>` : ''}
-                ${d.error ? `<div class="download-error"><i class="fas fa-exclamation-triangle me-1"></i>${d.error}</div>` : ''}
+                ${d.error ? `<div class="download-error"><i class="fas fa-exclamation-triangle me-1"></i>${escapeHtml(d.error)}</div>` : ''}
             </div>
         </div>
     `;

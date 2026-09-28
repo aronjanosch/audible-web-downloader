@@ -53,7 +53,7 @@
 </div>
 
 <script>
-let sessionId = '{{ session_id }}';
+let sessionId = {{ session_id|tojson }};
 let checkStatusInterval;
 
 function submitLogin() {

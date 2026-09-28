@@ -7,7 +7,8 @@ a current-state audit, not a claim that v1 is done.
 
 - **Safety implementation:** `tests/test_security.py` enumerates private GET and
   mutating routes, checks unauthenticated denial, member scoping, hashed passwords, session expiry,
-  login throttling, headers, CSRF, and one-time invite replay. The threat mapping is in
+  login throttling, headers, CSRF, and one-time invite replay. A Node DOM-sink
+  test checks escaping of hostile stored text in legacy admin views. The threat mapping is in
   `docs/threat-model.md`. `SECRET_KEY=test-only-key docker compose config --quiet`
   succeeds; the same command without `SECRET_KEY` fails.
 - **Token behavior under simulation:** `tests/test_token_lifecycle.py` covers
@@ -27,7 +28,7 @@ a current-state audit, not a claim that v1 is done.
   OAuth simulated. An isolated source copy booted with 87 routes and one admin.
 - **Local gates:** `uv sync --locked --dev`, `uv run --no-sync python -m pytest -q`
   (34 passed), `python -m compileall`, `node --check` for the new ABS settings UI,
-  and `git diff --check` passed on 2026-09-28.
+  `node --test tests/dom_escaping.test.cjs`, and `git diff --check` passed on 2026-09-28.
 - **Hosted CI and image:** The `test` and `image` jobs in
   `.github/workflows/ci.yml` passed on 2026-09-28. The image job published to
   GHCR and booted the image as UID 1000 before checking `/login`.

@@ -58,7 +58,7 @@ function authenticateAccount(accountName) {
         showToast('Select an account first', 'warning');
         return;
     }
-    window.location.href = `/auth/login/${name}`;
+    window.location.href = `/auth/login/${encodeURIComponent(name)}`;
 }
 
 /**
