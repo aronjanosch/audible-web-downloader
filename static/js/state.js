@@ -20,7 +20,11 @@ window.AppState = (function () {
         namingSettings: null,
         cleanupAax: true,
 
-        viewMode: 'card',          // 'card' | 'list'
+        viewMode: 'card',          // 'card' | 'list' | 'series'
+
+        household: {},             // { [asin]: { status, location, added_by, added_at, abs } } from /api/library/household
+        absConfigured: false,
+        lastSyncedAt: null,
 
         filters: {
             search: '',
@@ -31,7 +35,9 @@ window.AppState = (function () {
             series: '',
             publisher: '',
             year: '',
-            hideDownloaded: false
+            hideDownloaded: false,
+            status: '',            // '' | new | downloaded | queued | duplicate  (tab, not counted as a filter)
+            sort: ''               // '' | title | author | release | length
         },
 
         downloads: {},             // live data from SSE: { [asin]: downloadState }
@@ -85,9 +91,11 @@ window.AppState = (function () {
     function updateDownloads(data) {
         _state.downloads = data.downloads || {};
         _state.downloadStats = data.stats || {};
+        _state.paused = !!data.paused;
         _emit('appstate:downloadschange', {
             downloads: _state.downloads,
-            stats: _state.downloadStats
+            stats: _state.downloadStats,
+            paused: _state.paused
         });
     }
 

@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: What problem does this solve }
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes: { label: Proposed behavior }
+  - type: markdown
+    attributes:
+      value: This project is scoped to backing up books you own for your own household. Requests for redistribution or DRM circumvention beyond the existing flow will be declined.

@@ -1,7 +1,7 @@
 [project]
-name = "audible-streamlit"
-version = "0.1.0"
-description = "Add your description here"
+name = "audible-web-downloader"
+version = "1.0.0"
+description = "Self-hosted household web app that backs up Audible purchases into a shared Audiobookshelf/Plex library"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -13,17 +13,30 @@ dependencies = [
     "pydantic>=2.0.0",
     "python-dotenv>=1.1.1",
     "requests>=2.32.5",
-    "streamlit>=1.48.1",
     "wtforms>=3.2.1",
     "apscheduler>=3.10.0",
     "gunicorn>=25.3.0",
+    "flask-compress>=1.25",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.6.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["scripts/browser", ".venv"]
+
+[tool.ruff.lint]
+# Correctness-only baseline (syntax errors, undefined names, redefinitions); style churn is out of scope.
+select = ["E9", "F63", "F7", "F82", "F811"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F811"]  # pytest fixtures are re-declared as arguments

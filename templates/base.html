@@ -18,82 +18,68 @@
     })();
     </script>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    {# Everything is self-hosted (static/vendor): no third-party requests, works offline / behind strict CSPs. #}
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-400-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='vendor/fonts/dm-sans-latin-500-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/icons.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/queue-drawer.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
 <body class="{% if hide_sidebar %}page-solo{% endif %}" data-role="{{ household_user.role if household_user else '' }}">
 <a class="skip-link" href="#main-content">Skip to main content</a>
 
 {% if not hide_sidebar %}
-<!-- ── Navbar ── -->
-<nav class="app-navbar">
-    <div class="navbar-inner">
-        <div class="navbar-left">
-            <a href="/" class="navbar-brand" aria-label="Audible Downloader home">
-                <i class="fas fa-headphones" aria-hidden="true"></i>
-                <span> Audible Downloader</span>
-            </a>
-        </div>
+<!-- ── Top bar ── -->
+{% set ep = request.endpoint or '' %}
+{% set is_admin = household_user and household_user.role == 'admin' %}
+{% set uname = (household_user.username if household_user else '') %}
+<header class="topbar">
+    <a href="/" class="topbar-brand" aria-label="Audible Downloader home">
+        <span class="brand-mark" aria-hidden="true">A</span>
+        <span class="brand-name">Audible Downloader</span>
+    </a>
 
-        <div class="navbar-right">
+    <nav class="topbar-nav" aria-label="Main">
+        <a href="/" class="topbar-link{% if ep == 'main.index' %} active{% endif %}"{% if ep == 'main.index' %} aria-current="page"{% endif %}>Library</a>
+        {% if is_admin %}
+        <a href="/downloads" class="topbar-link{% if ep == 'main.downloads_page' or request.path == '/downloads' %} active{% endif %}" id="downloadNavPill"{% if request.path == '/downloads' %} aria-current="page"{% endif %}>Downloads<span class="topbar-badge pill-count" hidden>0</span></a>
+        <a href="/import" class="topbar-link{% if ep == 'main.importer' %} active{% endif %}"{% if ep == 'main.importer' %} aria-current="page"{% endif %}>Import</a>
+        <a href="/household" class="topbar-link{% if request.path == '/household' %} active{% endif %}" id="householdNavLink"{% if request.path == '/household' %} aria-current="page"{% endif %}>Household<span class="topbar-badge attn" id="householdNavBadge" hidden>0</span></a>
+        <a href="/settings" class="topbar-link{% if ep == 'main.settings' %} active{% endif %}"{% if ep == 'main.settings' %} aria-current="page"{% endif %}>Settings</a>
+        {% endif %}
+    </nav>
+
+    {% if is_admin %}
+    <button type="button" class="topbar-search" id="jumpBtn" aria-label="Search or jump to">Search or jump to <kbd>⌘K</kbd></button>
+    <button type="button" class="queue-pill idle" id="queuePill" aria-haspopup="dialog" aria-controls="queueDrawer" title="Open download queue">
+        <span class="queue-pill-track" aria-hidden="true"><span class="queue-pill-fill"></span></span>
+        <span class="queue-pill-label" id="downloadNavLabel">Queue empty</span>
+    </button>
+    {% endif %}
+
+    <div class="topbar-menu">
+        <button type="button" class="avatar" id="userMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">{{ (uname[:2] if uname else '·') }}</button>
+        <div class="topbar-menu-panel" id="userMenu" hidden>
+            <div class="menu-who"><b>{{ uname or 'Signed in' }}</b>{{ household_user.role|capitalize if household_user else '' }}</div>
             {% if household_user and household_user.role == 'member' %}
-            <a href="{{ url_for('auth.start_login', account_name=household_user.account_name) }}" class="navbar-icon-btn" title="Reconnect Audible">Reconnect Audible</a>
+            <a class="menu-item" href="{{ url_for('auth.start_login', account_name=household_user.account_name) }}">Reconnect Audible</a>
             {% endif %}
-            {% if household_user and household_user.role == 'admin' %}
-            <!-- Download status pill -->
-            <a href="/downloads" class="download-pill" id="downloadNavPill" title="View downloads">
-                <i class="fas fa-download"></i>
-                <span id="downloadNavLabel">Downloads</span>
-                <span class="pill-count" style="display:none">0</span>
-            </a>
-
-            <!-- Import -->
-            <a href="/import" class="navbar-icon-btn{% if request.endpoint == 'main.importer' %} active{% endif %}" title="Import M4B files">
-                <i class="fas fa-file-import"></i>
-            </a>
-
-            <!-- Theme -->
-            <button type="button" class="navbar-icon-btn" id="themeToggleBtn" title="Toggle dark mode" aria-label="Toggle dark mode">
-                <i class="fas fa-moon" aria-hidden="true"></i>
-            </button>
-
-            <!-- Settings -->
-            <a href="/settings" class="navbar-icon-btn{% if request.endpoint == 'main.settings' %} active{% endif %}" title="Settings">
-                <i class="fas fa-cog"></i>
-            </a>
-
-            <!-- Add Account (class hooks all triggers; id kept for tests / bookmarks) -->
-            <button type="button" class="navbar-icon-btn js-open-add-account-modal" id="addAccountBtn" title="Add Audible Account">
-                <i class="fas fa-user-plus"></i>
-            </button>
+            {% if is_admin %}
+            <button type="button" class="menu-item js-open-add-account-modal" id="addAccountBtn">Add Audible account</button>
             {% endif %}
+            <button type="button" class="menu-item" id="themeToggleBtn" aria-label="Toggle dark mode"><i class="fas fa-moon" aria-hidden="true"></i> Toggle dark mode</button>
             <form action="{{ url_for('security.logout') }}" method="post" class="m-0">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="navbar-icon-btn" title="Sign out">Sign out</button>
+                <button type="submit" class="menu-item">Sign out</button>
             </form>
         </div>
     </div>
-</nav>
+</header>
 
-<!-- ── Download Status Bar ── -->
-<div class="download-status-bar" id="downloadStatusBar" inert>
-    <div class="download-bar-inner">
-        <div class="download-bar-stats">
-            <span class="download-bar-stat">Active <strong class="bar-active">0</strong></span>
-            <span class="download-bar-stat">Queued <strong class="bar-queued">0</strong></span>
-            <span class="download-bar-stat">Done <strong class="bar-completed">0</strong></span>
-        </div>
-        <div class="download-bar-progress">
-            <span class="download-bar-meta" id="barSpeedEta">
-                <span class="bar-speed"></span>
-                <span class="bar-eta ms-2"></span>
-            </span>
-        </div>
-        <a href="/downloads" class="download-bar-link">View All →</a>
-    </div>
-</div>
+<!-- Queue drawer (markup + behaviour: queue-drawer.js) -->
+<div id="queueDrawerRoot"></div>
 {% endif %}
 
 <!-- ── Content ── -->
@@ -102,7 +88,7 @@
 </main>
 
 <!-- ── Toast Container ── -->
-<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1060"></div>
+<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
 
 {% if not hide_sidebar %}
 <!-- ── Modals ── -->
@@ -312,7 +298,7 @@
 {% endif %}
 
 <!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 
 <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 
@@ -323,6 +309,9 @@
 <script src="{{ url_for('static', filename='js/accounts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/downloads.js') }}"></script>
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/topbar.js') }}"></script>
+{% if household_user and household_user.role == 'admin' and not hide_sidebar %}<script src="{{ url_for('static', filename='js/queue-drawer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/household-badge.js') }}"></script>{% endif %}
 
 {% block extra_js %}{% endblock %}
 

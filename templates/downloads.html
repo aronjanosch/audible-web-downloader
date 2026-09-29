@@ -7,31 +7,22 @@
 {% endblock %}
 
 {% block content %}
-
-<div class="d-flex align-items-center justify-content-between mb-4">
-    <div class="d-flex align-items-center gap-3">
-        <a href="/" class="btn btn-sm btn-outline-secondary" aria-label="Back to library">
-            <i class="fas fa-arrow-left" aria-hidden="true"></i>
-        </a>
-        <h4 class="mb-0">Downloads</h4>
+<div class="page-head">
+    <h1 class="page-title">Downloads</h1>
+    <div class="actions">
+        <button type="button" class="chip-btn strong" id="pauseAllBtn" data-queue-pause aria-pressed="false">Pause all</button>
+        <button type="button" class="chip-btn strong" id="clearFinishedBtn">Clear finished</button>
     </div>
-    <button class="btn btn-sm btn-outline-secondary" id="clearDoneBtn">
-        <i class="fas fa-trash-alt me-1"></i>Clear done
-    </button>
 </div>
 
-<!-- In Progress -->
-<div class="dl-section-label">
-    <span>In Progress</span>
-    <span class="dl-count" id="inProgressCount">0</span>
-</div>
-<div id="inProgressList"></div>
+<section class="dl-stats" aria-label="Queue summary">
+    <div class="dl-stat"><div class="dl-stat-label">ACTIVE</div><div class="dl-stat-value" id="statActive">0</div></div>
+    <div class="dl-stat"><div class="dl-stat-label">SPEED</div><div class="dl-stat-value" id="statSpeed">–</div></div>
+    <div class="dl-stat"><div class="dl-stat-label">TIME LEFT</div><div class="dl-stat-value" id="statEta">–</div></div>
+    <div class="dl-stat"><div class="dl-stat-label">TODAY</div><div class="dl-stat-value" id="statToday">0 books</div></div>
+</section>
 
-<!-- Done -->
-<div class="dl-section-label mt-4">
-    <span>Done</span>
-    <span class="dl-count" id="doneCount">0</span>
-</div>
-<div id="doneList"></div>
-
+<section class="dl-list" id="downloadList" aria-live="polite">
+    <div class="downloads-empty">Nothing in the queue. Pick books in the library to start downloading.</div>
+</section>
 {% endblock %}

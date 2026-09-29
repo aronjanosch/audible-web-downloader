@@ -1,0 +1,69 @@
+/* Settings (design 1e) */
+.settings-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; padding: 36px var(--page-pad) 0; }
+.settings-title { font-size: 44px; margin-bottom: 24px; }
+.settings-nav { display: flex; flex-direction: column; gap: 2px; }
+.settings-nav-item {
+  text-align: left; padding: 10px 14px; border: 0; background: transparent; border-radius: 10px;
+  font: inherit; font-size: 14.5px; font-weight: 500; color: var(--ink-2); cursor: pointer;
+}
+.settings-nav-item:hover { background: var(--surface-2); color: var(--ink); }
+.settings-nav-item.active { background: var(--green); color: var(--green-ink); font-weight: 700; }
+.settings-content { min-width: 0; }
+.settings-content > .tab-pane { display: none; flex-direction: column; gap: 20px; }
+.settings-content > .tab-pane.active { display: flex; }
+
+.section-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.section-head > div:first-child { flex: 1; min-width: 240px; }
+.section-title { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: 0; }
+.section-sub { font-size: 14px; color: var(--muted); margin: 4px 0 0; max-width: 62ch; }
+.foot-note { font-size: 12.5px; color: var(--muted); margin: 0; max-width: 70ch; }
+
+/* Account cards */
+.acct-list { display: flex; flex-direction: column; gap: 20px; }
+.acct-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 20px; align-items: center;
+}
+.acct-line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.acct-name { font-size: 17px; font-weight: 700; }
+.acct-meta { font-size: 12px; color: var(--muted); }
+.acct-track { margin: 14px 0 8px; max-width: 520px; }
+.acct-detail { font-size: 12.5px; color: var(--muted); }
+.acct-actions { display: flex; gap: 8px; align-items: center; }
+.acct-primary { min-height: 38px; border-radius: 19px; font-size: 13px; }
+.acct-primary.is-warn { background: var(--orange); border-color: var(--orange); color: #fff; }
+.acct-primary.is-warn:hover { background: var(--orange-hover); color: #fff; }
+.acct-primary.is-err { background: var(--err-fg); border-color: var(--err-fg); color: #fff; }
+.acct-primary.is-err:hover { filter: brightness(.9); color: #fff; }
+.acct-more { min-height: 38px; width: 38px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 18px; }
+.acct-more:hover { background: var(--surface-2); color: var(--ink); }
+.dropdown-menu { border-radius: 12px; border-color: var(--line); background: var(--surface); box-shadow: var(--shadow-card); padding: 6px; }
+.dropdown-item { border-radius: 8px; font-size: 14px; color: var(--ink-2); padding: 8px 12px; }
+.dropdown-item:hover { background: var(--surface-2); color: var(--ink); }
+
+/* Libraries + ABS lists */
+#configuredLibraryList > div { border-bottom: 1px solid var(--line); }
+#configuredLibraryList > div:last-child { border-bottom: 0; }
+.abs-list { list-style: none; margin: 0; padding: 0; }
+.abs-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.abs-list li:last-child { border-bottom: 0; }
+.abs-list .badge { align-self: center; }
+
+/* Segmented control */
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 22px; padding: 4px; font-size: 13px; font-weight: 600; }
+.seg-btn { padding: 8px 18px; border: 0; border-radius: 18px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.seg-btn.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+
+@media (max-width: 900px) {
+  .settings-shell { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .settings-side { min-width: 0; }
+  .settings-title { font-size: 40px; margin-bottom: 16px; }
+  .settings-nav { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: none; }
+  .settings-nav-item { white-space: nowrap; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 19px; padding: 8px 14px; }
+  .settings-nav-item.active { border-color: var(--green); }
+}
+@media (max-width: 600px) {
+  .acct-card { grid-template-columns: auto minmax(0, 1fr); padding: 18px; gap: 14px; }
+  .acct-actions { grid-column: 1 / -1; }
+  .acct-primary { flex: 1; }
+}

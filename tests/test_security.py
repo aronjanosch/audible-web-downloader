@@ -61,7 +61,7 @@ def test_every_private_route_rejects_unauthenticated(household):
     checked = []
     csrf_headers = _csrf(client)
     for rule in app.url_map.iter_rules():
-        if rule.endpoint in {"static", "security.login", "security.login_page"}:
+        if rule.endpoint in {"static", "security.login", "security.login_page", "health.healthz"}:
             continue
         for method in sorted(rule.methods & {"GET", "POST", "PUT", "PATCH", "DELETE"}):
             response = client.open(_path(rule), method=method, headers=csrf_headers)
@@ -96,7 +96,7 @@ def test_every_admin_route_rejects_member(household):
     }
     checked = []
     for rule in app.url_map.iter_rules():
-        if rule.endpoint in allowed or rule.endpoint == "static" or rule.endpoint.startswith(("security.", "invite.")):
+        if rule.endpoint in allowed or rule.endpoint in {"static", "health.healthz"} or rule.endpoint.startswith(("security.", "invite.")):
             continue
         method = next((m for m in ("POST", "PUT", "PATCH", "DELETE", "GET") if m in rule.methods), None)
         if method:

@@ -1,18 +1,27 @@
 {% extends "base.html" %}
 {% set hide_sidebar = true %}
 {% block title %}Sign in · Audible Downloader{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">{% endblock %}
 {% block content %}
-<div class="container py-5" style="max-width: 28rem">
-  <h1 class="h3 mb-4">Household sign in</h1>
-  <form method="post" action="{{ url_for('security.login') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="next" value="{{ next }}">
-    <label for="username" class="form-label">Username</label>
-    <input id="username" name="username" autocomplete="username" class="form-control mb-3" required autofocus>
-    <label for="password" class="form-label">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" class="form-control mb-3" required>
-    <button class="btn btn-primary w-100" type="submit">Sign in</button>
-  </form>
-  <p class="small text-muted mt-4">Setting up your household? The host owner can find first-start credentials in <code>config/initial-admin-credentials.json</code> on the server.</p>
+<div class="auth-stage">
+  <div class="auth-card">
+    <div class="brand-mark" aria-hidden="true">A</div>
+    <h1 class="auth-title">Welcome back</h1>
+    <form method="post" action="{{ url_for('security.login') }}" class="d-flex flex-column gap-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="auth-field">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" class="form-control" required autofocus>
+      </div>
+      <div class="auth-field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" class="form-control" required>
+      </div>
+      <button class="btn btn-primary auth-submit" type="submit">Sign in</button>
+    </form>
+    <p class="auth-note">Accounts are by invitation only. Ask your household admin.</p>
+    <p class="auth-note">Setting up your household? The host owner can find first-start credentials in <code>config/initial-admin-credentials.json</code> on the server.</p>
+  </div>
 </div>
 {% endblock %}

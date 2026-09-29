@@ -1,7 +1,10 @@
-"""Measure Flask page and API latency with an isolated empty installation.
+"""Measure Flask page and API latency with an isolated installation.
 
 Run with PYTHONPATH pointing at the source tree to compare revisions. Results
 are local test-client medians, not network or browser paint times.
+
+  uv run python scripts/benchmark.py              # empty install + populated household (BENCH_BOOKS, default 1500)
+  BENCH_BOOKS=0 uv run python scripts/benchmark.py  # empty install only
 """
 import json
 import os
@@ -25,6 +28,33 @@ def measure(client, path, samples=51):
     return {'median_ms': round(statistics.median(timings), 3),
             'p95_ms': round(ordered[int(.95 * (samples - 1))], 3),
             'bytes': size}
+
+
+def populate(root, books):
+    """3 authenticated accounts sharing a fake purchase list, some titles downloaded. Fake data only."""
+    import utils.library_cache as library_cache
+    from utils.config_manager import get_config_manager
+    from utils.db import get_db
+    manager = get_config_manager()
+    names = ['member-a', 'member-b', 'member-c']
+    for name in names:
+        manager.create_account(name, {'region': 'us', 'authenticated': True})
+        auth = root / 'auth' / name
+        auth.mkdir(parents=True, exist_ok=True)
+        (auth / 'auth.json').write_text('{}')
+    catalog = [{'asin': f'B0BENCH{i:05d}', 'title': f'Benchmark Title {i}', 'authors': f'Author {i % 40}',
+                'series': f'Series {i % 60}', 'narrator': f'Narrator {i % 25}', 'publisher': 'Bench Press',
+                'language': 'english', 'length_mins': 300 + i % 600, 'release_year': str(2000 + i % 25),
+                'cover_url': ''} for i in range(books)]
+    for index, name in enumerate(names):
+        library_cache.write_library_cache(name, [dict(b, account_name=name) for b in catalog[index::2] + catalog[:books // 4]])
+    db = get_db()
+    now = time.time()
+    with db:
+        for i, book in enumerate(catalog[:books // 3]):
+            db.execute("INSERT OR IGNORE INTO books (asin,title,status,added_at,updated_at,file_path,downloaded_by_account)"
+                       " VALUES (?,?,'downloaded',?,?,?,?)", (book['asin'], book['title'], now, now,
+                                                            f"/library/{book['authors']}/{book['title']}/book.m4b", names[i % 3]))
 
 
 def main():
@@ -55,6 +85,13 @@ def main():
                 sess['login_at'] = time.time()
         result = {'revision': os.environ.get('BENCH_REVISION', 'working-tree'),
                   'page': measure(client, '/'), 'api': measure(client, '/api/accounts')}
+        books = int(os.environ.get('BENCH_BOOKS', '1500'))
+        if books:
+            populate(root, books)
+            result['populated_books'] = books
+            for path in ('/api/library/all', '/api/library/household', '/api/household/overview',
+                         '/api/session', '/', '/household', '/settings', '/downloads'):
+                result[path] = measure(client, path, samples=21)
         print(json.dumps(result, sort_keys=True))
 
 

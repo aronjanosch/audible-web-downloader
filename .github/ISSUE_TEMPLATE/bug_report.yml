@@ -1,0 +1,23 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste tokens, `config/` contents, or unredacted logs.** Logs contain Audible account labels and book titles; remove anything private.
+  - type: input
+    id: version
+    attributes: { label: Version / image tag, placeholder: "1.0.0 or edge" }
+    validations: { required: true }
+  - type: dropdown
+    id: install
+    attributes: { label: How do you run it, options: [Docker Compose, Docker run, uv / python run.py, Other] }
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: Expected vs actual behavior and steps to reproduce }
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes: { label: Relevant log lines (redacted), render: text }

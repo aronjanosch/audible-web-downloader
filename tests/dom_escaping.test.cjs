@@ -16,6 +16,9 @@ function harness() {
             innerHTML: '', textContent: '', className: '', dataset: {}, title: '',
             children: [],
             appendChild(child) { this.children.push(child); },
+            style: {},
+            append(...kids) { this.children.push(...kids); },
+            replaceChildren(...kids) { this.children = kids; },
             addEventListener() {},
             querySelector(selector) {
                 if (!matches.has(selector)) matches.set(selector, makeElement());
@@ -88,20 +91,21 @@ test('download and import text is escaped before HTML parsing', () => {
 test('automation card and account list escape stored names and status', () => {
     const h = harness();
     h.load('static/js/ui.js');
-    const template = fs.readFileSync(path.join(root, 'templates/settings.html'), 'utf8');
-    const script = template.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
+    const script = fs.readFileSync(path.join(root, 'static/js/settings-page.js'), 'utf8');
     vm.runInContext(script, h.context);
     h.context._renderRulesRows = () => {};
     const card = h.context._buildAccountCard(payload, { region: payload }, {
         last_run_result: payload, rules: [],
     }, [payload]);
-    assert.doesNotMatch(card.innerHTML, /<img src=x onerror/);
-    assert.match(card.innerHTML, /&lt;img/);
+    // Stored text is either set as textContent or HTML-escaped; never parsed as markup.
+    assert.ok(h.created.every(n => !/<img src=x onerror/.test(n.innerHTML)));
+    assert.ok(h.created.some(n => n.textContent.includes(payload) || /&lt;img/.test(n.innerHTML)));
 
     h.context.AppState.get = (key) => key === 'accountData'
         ? { [payload]: { region: 'us', authenticated: true } } : null;
     h.context._renderSettingsAccounts();
     const account = h.elements.get('settingsAccountList').children[0];
-    assert.doesNotMatch(account.innerHTML, /<img src=x onerror/);
-    assert.match(account.innerHTML, /&lt;img/);
+    assert.ok(account, 'account card rendered');
+    assert.ok(h.created.every(n => !/<img src=x onerror/.test(n.innerHTML)));
+    assert.ok(h.created.some(n => n.textContent.includes(payload) || /&lt;img/.test(n.innerHTML)));
 });

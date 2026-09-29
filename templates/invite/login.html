@@ -1,62 +1,31 @@
 {% extends "base.html" %}
 {% set hide_sidebar = true %}
-
 {% block title %}Audible Login - {{ account_name }}{% endblock %}
-
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow-lg">
-                <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0"><i class="fas fa-sign-in-alt me-2"></i>Audible Login - {{ account_name }}</h4>
-                </div>
-                <div class="card-body p-4">
-                    <div id="step1" class="mb-4">
-                        <h5><span class="badge bg-primary">Step 1</span> Login to Amazon/Audible</h5>
-                        <p>Click the button below to open the Audible login page in a new tab:</p>
-                        <a href="{{ oauth_url }}" target="_blank" class="btn btn-primary btn-lg">
-                            <i class="fas fa-external-link-alt me-2"></i>Open Audible Login
-                        </a>
-                        <div class="alert alert-info mt-3">
-                            <i class="fas fa-info-circle me-2"></i>
-                            <small>
-                                After clicking, you'll be redirected to Amazon's login page.
-                                Complete the login process in the new tab (including 2FA if enabled).
-                            </small>
-                        </div>
-                    </div>
-
-                    <div id="step2" class="mb-4">
-                        <h5><span class="badge bg-success">Step 2</span> Copy the Result URL</h5>
-                        <p>After logging in, you'll see an error page. <strong>This is normal!</strong> Copy the entire URL from the address bar and paste it below:</p>
-                        <div class="mb-3">
-                            <label for="responseUrl" class="form-label fw-bold">Response URL:</label>
-                            <input type="text" class="form-control form-control-lg" id="responseUrl"
-                                   placeholder="https://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=...">
-                            <div class="form-text">
-                                <i class="fas fa-key me-1"></i>The URL should contain "openid.oa2.authorization_code" parameter
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-success btn-lg" onclick="submitLogin()">
-                            <i class="fas fa-check me-2"></i>Complete Login
-                        </button>
-                    </div>
-
-                    <div id="status" class="mt-4">
-                        <div class="alert d-none" id="statusMessage" role="alert"></div>
-                        <div class="text-center">
-                            <div class="spinner-border text-primary d-none" id="loadingSpinner" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="sheet-stage">
+  <div class="sheet" style="max-width:680px">
+    <div class="step-bars" aria-hidden="true"><i class="on"></i><i class="now"></i><i></i></div>
+    <div class="eyebrow">Step 2 · Connect</div>
+    <h1 class="sheet-title">Sign in to Audible</h1>
+    <p class="sheet-lead">“{{ account_name }}” needs a one-time login with Amazon. You come back here afterwards.</p>
+    <div class="sheet-note">Your password never reaches this app. Only a revocable token is stored, and it stays on your server.</div>
+    <div id="step1">
+      <a href="{{ oauth_url }}" target="_blank" rel="noopener" class="btn btn-accent btn-lg w-100">Continue to Amazon</a>
+      <p class="auth-note mt-2">Opens Amazon in a new tab. Complete the login there, including 2FA if enabled.</p>
     </div>
+    <div id="step2" class="auth-field">
+      <label for="responseUrl">After logging in you'll see an error page. This is normal. Paste the full address-bar URL here:</label>
+      <input type="text" class="form-control mb-2" id="responseUrl" placeholder="https://www.amazon.com/ap/maplanding?openid.oa2.authorization_code=...">
+      <div class="form-text mb-3">The URL should contain the "openid.oa2.authorization_code" parameter.</div>
+      <button type="button" class="btn btn-primary btn-lg w-100" onclick="submitLogin()">Complete login</button>
+    </div>
+    <div id="status">
+      <div class="alert d-none" id="statusMessage" role="alert"></div>
+      <div class="text-center"><div class="spinner-border text-primary d-none" id="loadingSpinner" role="status"><span class="visually-hidden">Loading...</span></div></div>
+    </div>
+  </div>
 </div>
-
 <script>
 const token = {{ token|tojson }};
 const sessionId = {{ session_id|tojson }};

@@ -7,6 +7,8 @@ import os
 from app import create_app
 
 if __name__ == '__main__':
+    # This entry point is for local development; production uses gunicorn (see docs/deployment.md).
+    os.environ.setdefault('FLASK_ENV', 'development')
     app = create_app()
     port = int(os.environ.get('PORT', 5505))
     print("🚀 Starting Audible Book Downloader...")

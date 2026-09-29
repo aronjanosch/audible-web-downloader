@@ -1,81 +1,51 @@
 {% extends "base.html" %}
 {% set hide_sidebar = true %}
 
-{% block title %}Add Your Audible Account{% endblock %}
+{% block title %}Join the household library{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-6">
-            <div class="card shadow-lg">
-                <div class="card-header bg-primary text-white">
-                    <h1 class="h4 mb-0"><i class="fas fa-users me-2" aria-hidden="true"></i>Join your household library</h1>
-                </div>
-                <div class="card-body p-4">
-                    <div class="text-center mb-4">
-                        <i class="fas fa-headphones fa-4x text-primary mb-3"></i>
-                        <h2 class="h5">Add your Audible account</h2>
-                        <p class="text-muted">You've been invited to share your Audible library. Add your account below to get started.</p>
-                    </div>
+<div class="sheet-stage">
+  <form class="sheet" id="accountForm" style="max-width:620px">
+    <div class="eyebrow">Household invitation</div>
+    <h1 class="sheet-title">Join the household library</h1>
+    <p class="sheet-lead">Create a password, then connect your own Audible account. You see and manage only your own books.</p>
 
-                    <form id="accountForm">
-                        <div class="mb-3">
-                            <label for="accountName" class="form-label fw-bold">Account Name</label>
-                            <input type="text" class="form-control form-control-lg" id="accountName"
-                                   placeholder="e.g., john_audible" required
-                                   pattern="[a-zA-Z0-9_\-]+"
-                                   title="Only letters, numbers, hyphens, and underscores are allowed">
-                            <div class="form-text">
-                                <i class="fas fa-info-circle me-1"></i>Choose a unique name to identify your account (letters, numbers, hyphens, and underscores only)
-                            </div>
-                        </div>
-
-                        <div class="mb-4">
-                            <label for="username" class="form-label fw-bold">Household Username</label>
-                            <input type="text" class="form-control form-control-lg" id="username" minlength="3" maxlength="80" autocomplete="username" required>
-                            <label for="password" class="form-label fw-bold mt-3">Household Password</label>
-                            <input type="password" class="form-control form-control-lg" id="password" minlength="12" autocomplete="new-password" required>
-                            <div class="form-text">Use this login to manage and reconnect your Audible account later.</div>
-                        </div>
-
-                        <div class="mb-4">
-                            <label for="region" class="form-label fw-bold">Audible Region</label>
-                            <select class="form-select form-select-lg" id="region" required>
-                                {% for region in regions %}
-                                <option value="{{ region.code }}" {% if region.code == 'us' %}selected{% endif %}>
-                                    {{ region.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">
-                                <i class="fas fa-info-circle me-1"></i>Select the region where your Audible account is registered
-                            </div>
-                        </div>
-
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="fas fa-arrow-right me-2"></i>Continue to Login
-                            </button>
-                        </div>
-                    </form>
-
-                    <div id="status" class="mt-3">
-                        <div class="alert d-none" id="statusMessage" role="alert"></div>
-                        <div class="text-center">
-                            <div class="spinner-border text-primary d-none" id="loadingSpinner" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer text-muted text-center">
-                    <small><i class="fas fa-lock me-1"></i>Your login credentials are never shared and remain secure</small>
-                </div>
-            </div>
-        </div>
+    <div class="auth-field">
+      <label for="accountName">Display name</label>
+      <input type="text" class="form-control" id="accountName" placeholder="e.g. anna_audible" required
+             pattern="[a-zA-Z0-9_\-]+" title="Only letters, numbers, hyphens, and underscores are allowed">
+      <div class="form-text">Letters, numbers, hyphens and underscores.</div>
     </div>
-</div>
+    <div class="auth-field">
+      <label for="username">Username</label>
+      <input type="text" class="form-control" id="username" minlength="3" maxlength="80" autocomplete="username" required>
+    </div>
+    <div class="auth-field">
+      <label for="password">Password</label>
+      <input type="password" class="form-control" id="password" minlength="12" autocomplete="new-password" required data-pw-meter="#pwMeter">
+      <div class="pw-meter" id="pwMeter"><span></span></div><div class="pw-meter-label" aria-live="polite"></div>
+      <div class="form-text">At least 12 characters. You use this login to reconnect Audible later.</div>
+    </div>
+    <div class="auth-field">
+      <label for="region">Audible region</label>
+      <select class="form-select" id="region" required>
+        {% for region in regions %}
+        <option value="{{ region.code }}" {% if region.code == 'us' %}selected{% endif %}>{{ region.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
+    <div id="status">
+      <div class="alert d-none" id="statusMessage" role="alert"></div>
+      <div class="text-center"><div class="spinner-border text-primary d-none" id="loadingSpinner" role="status"><span class="visually-hidden">Loading...</span></div></div>
+    </div>
+    <div class="sheet-actions" style="margin-top:auto">
+      <button type="submit" class="btn btn-primary">Create account and connect Audible</button>
+    </div>
+  </form>
+</div>
+<script src="{{ url_for('static', filename='js/pw-meter.js') }}"></script>
 <script>
 const token = {{ token|tojson }};
 

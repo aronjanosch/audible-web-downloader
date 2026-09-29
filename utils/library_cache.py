@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 
 from utils.db import get_db
@@ -49,3 +50,37 @@ def invalidate_cache(account_name: str) -> None:
         conn.commit()
     except Exception:
         pass
+
+
+# ── merged /api/library/all response cache ──
+# The merged household catalog is a pure function of each account's cached library, so it is keyed
+# by (account, cache write time). Any refetch, invalidation or expiry changes the key; nothing needs
+# explicit invalidation. Bounded so a household with many member-scoped views cannot grow it.
+_MERGED_MAX = 8
+_merged: dict[tuple, bytes] = {}
+_merged_lock = threading.Lock()
+
+
+def cache_stamp(account_name: str) -> float | None:
+    """fetched_at of a fresh cache entry without parsing the (large) JSON payload, else None."""
+    try:
+        row = get_db().execute(
+            "SELECT fetched_at FROM library_cache WHERE account_name = ?", (account_name,)).fetchone()
+    except Exception:
+        return None
+    if row is None or time.time() - row['fetched_at'] > CACHE_TTL_SECONDS:
+        return None
+    return row['fetched_at']
+
+
+def merged_get(key: tuple) -> bytes | None:
+    with _merged_lock:
+        return _merged.get(key)
+
+
+def merged_put(key: tuple, body: bytes) -> None:
+    with _merged_lock:
+        _merged.pop(key, None)
+        _merged[key] = body
+        while len(_merged) > _MERGED_MAX:
+            _merged.pop(next(iter(_merged)))

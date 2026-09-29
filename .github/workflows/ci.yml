@@ -1,26 +1,44 @@
 name: CI
 on:
   push:
+    branches: [master, main]
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - name: Install Python and locked dependencies
+          python-version: ${{ matrix.python-version }}
+      - name: Install locked dependencies
         run: uv sync --locked --dev
+      - name: Lint (bug-class rules)
+        run: uv run --no-sync ruff check .
       - name: Compile Python modules
         run: uv run --no-sync python -m compileall -q app routes utils tests auth.py downloader.py importer.py library_scanner.py library_storage.py settings.py
       - name: Test
         run: uv run --no-sync python -m pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Check browser code escaping
         run: node --test tests/dom_escaping.test.cjs
       - name: Verify patch whitespace
-        run: git diff --check
+        if: github.event_name == 'pull_request'
+        run: git diff --check origin/${{ github.base_ref }}...HEAD
 
   image:
     needs: test
@@ -31,49 +49,54 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - name: Build image (loaded locally for the smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: audible-smoke:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test as the unprivileged service user, read-only rootfs
+        run: |
+          mkdir -p "$RUNNER_TEMP/cfg" "$RUNNER_TEMP/dl"
+          chmod 0777 "$RUNNER_TEMP/cfg" "$RUNNER_TEMP/dl"
+          docker run -d --name smoke --user 1000:1000 --read-only --tmpfs /tmp \
+            -e SECRET_KEY=ci-smoke-only-not-a-real-secret-0123456789 -e ADMIN_PASSWORD=ci-password-123 \
+            -v "$RUNNER_TEMP/cfg:/app/config" -v "$RUNNER_TEMP/dl:/app/downloads" audible-smoke:ci
+          trap 'docker rm -f smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 40); do
+            if docker exec smoke python -c "import urllib.request,json; r=urllib.request.urlopen('http://127.0.0.1:5505/healthz', timeout=2); assert r.status == 200 and json.load(r)['status'] == 'ok'"; then
+              echo "healthy after ${attempt}s"; exit 0
+            fi
+            [ "$(docker inspect -f '{{.State.Running}}' smoke)" = true ] || break
+            sleep 1
+          done
+          docker logs smoke
+          exit 1
+      - name: Refuses to start without SECRET_KEY
+        run: |
+          if docker run --rm -e SECRET_KEY= audible-smoke:ci python -c "from app import create_app; create_app()" >/dev/null 2>&1; then
+            echo "expected create_app() to fail without SECRET_KEY" >&2; exit 1
+          fi
+          echo "fail-fast OK"
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set image tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=branch
-            type=sha,format=long
-            type=raw,value=latest,enable={{is_default_branch}}
-      - name: Build and publish image
+      - name: Publish edge image (default branch only)
+        if: github.event_name == 'push'
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:edge
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          build-args: |
+            VERSION=edge
+            REVISION=${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Smoke test published image as service user
-        if: github.event_name != 'pull_request'
-        run: |
-          mkdir -p "$RUNNER_TEMP/audible-smoke-config"
-          chmod 0777 "$RUNNER_TEMP/audible-smoke-config"
-          image="ghcr.io/${{ github.repository }}:sha-${{ github.sha }}"
-          docker run -d --name audible-smoke --user 1000:1000 \
-            -e SECRET_KEY=ci-smoke-only -e ADMIN_PASSWORD=ci-password-123 \
-            -v "$RUNNER_TEMP/audible-smoke-config:/app/config" "$image"
-          trap 'docker rm -f audible-smoke >/dev/null 2>&1 || true' EXIT
-          for attempt in $(seq 1 30); do
-            if docker exec audible-smoke python -c "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:5505/login', timeout=2).status == 200"; then
-              exit 0
-            fi
-            if [ "$(docker inspect -f '{{.State.Running}}' audible-smoke)" != true ]; then
-              break
-            fi
-            sleep 1
-          done
-          docker logs audible-smoke
-          exit 1

@@ -7,227 +7,120 @@
 {% endblock %}
 
 {% block content %}
-
-<!-- Back -->
-<div class="mb-3">
-    <a href="/" class="btn btn-sm btn-outline-secondary">
-        <i class="fas fa-arrow-left me-2"></i>Back to Library
-    </a>
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Import M4B files</h1>
+        <div class="page-sub">Bring existing M4B files into the library and match them with Audible metadata.</div>
+    </div>
 </div>
 
-<div class="mb-4">
-    <h2 class="mb-1"><i class="fas fa-file-import me-2"></i>Import M4B Books</h2>
-    <p class="text-muted mb-0">Import existing M4B files and match them with Audible metadata</p>
-</div>
-
+<div class="page-body">
 <!-- Step Indicator -->
-<div class="step-indicator mb-4">
-    <div class="step-item active" id="stepItem1">
-        <div class="step-circle">1</div>
-        <div class="step-label">Select Source</div>
-    </div>
+<div class="step-indicator" aria-label="Import progress">
+    <div class="step-item active" id="stepItem1"><div class="step-circle">1</div><div class="step-label">Source</div></div>
     <div class="step-line" id="stepLine1"></div>
-    <div class="step-item" id="stepItem2">
-        <div class="step-circle">2</div>
-        <div class="step-label">Review Matches</div>
-    </div>
+    <div class="step-item" id="stepItem2"><div class="step-circle">2</div><div class="step-label">Review matches</div></div>
     <div class="step-line" id="stepLine2"></div>
-    <div class="step-item" id="stepItem3">
-        <div class="step-circle">3</div>
-        <div class="step-label">Import</div>
-    </div>
+    <div class="step-item" id="stepItem3"><div class="step-circle">3</div><div class="step-label">Import</div></div>
 </div>
 
 <!-- ── Step 1: Select Source ── -->
 <div id="importStep1">
-    <div class="import-step">
-        <div class="import-step-header">
-            <h4><i class="fas fa-folder-open me-2"></i>Step 1: Select Source</h4>
+    <div class="panel">
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label class="form-label" for="sourcePath">Source directory</label>
+                <input type="text" class="form-control" id="sourcePath" placeholder="/path/to/m4b/files">
+                <div class="form-text">Directory containing M4B files (scanned recursively)</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="targetLibrary">Target library</label>
+                <select class="form-select" id="targetLibrary" aria-label="Target library">
+                    <option value="">Select library…</option>
+                </select>
+                <div class="form-text">Where imported books will be organized</div>
+            </div>
         </div>
-        <div class="import-step-body">
-            <div class="row g-3 mb-4">
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold">Source Directory</label>
-                    <input type="text" class="form-control" id="sourcePath"
-                           placeholder="/path/to/m4b/files">
-                    <div class="form-text">Directory containing M4B files (scanned recursively)</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold">Target Library</label>
-                    <select class="form-select" id="targetLibrary" aria-label="Target library">
-                        <option value="">Select library…</option>
-                    </select>
-                    <div class="form-text">Where imported books will be organized</div>
-                </div>
-            </div>
-            <button class="btn btn-primary" id="scanDirectoryBtn">
-                <i class="fas fa-search me-2"></i>Scan Directory
-            </button>
+        <button class="btn btn-primary" id="scanDirectoryBtn">Scan directory</button>
+    </div>
 
-            <!-- Scan results -->
-            <div id="scanResults" hidden>
-                <hr class="my-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h6 class="mb-0">Found <strong id="fileCount">0</strong> M4B file(s)
-                            <span class="text-muted small ms-1">(<span id="totalSize">0</span> total)</span>
-                        </h6>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-primary" id="selectAllScannedBtn">
-                            <i class="fas fa-check-square me-1"></i>All
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" id="deselectAllScannedBtn">
-                            <i class="fas fa-square me-1"></i>None
-                        </button>
-                    </div>
-                </div>
-
-                <div class="table-responsive" style="max-height: 360px; overflow-y: auto;">
-                    <table class="table table-sm table-hover scan-table">
-                        <thead class="sticky-top">
-                            <tr>
-                                <th class="file-checkbox"></th>
-                                <th>File</th>
-                                <th>Title</th>
-                                <th>Author</th>
-                                <th>Size</th>
-                            </tr>
-                        </thead>
-                        <tbody id="scannedFilesTable"></tbody>
-                    </table>
-                </div>
-
-                <div class="mt-3">
-                    <button class="btn btn-success" id="matchFilesBtn">
-                        <i class="fas fa-arrow-right me-2"></i>Match Selected
-                        (<span id="selectedForMatchCount">0</span>)
-                    </button>
-                </div>
-            </div>
+    <!-- Scan results -->
+    <div id="scanResults" hidden>
+        <div class="imp-summary">
+            <span><b id="fileCount">0</b> M4B file(s)</span>
+            <span class="dim">(<span id="totalSize">0</span> total)</span>
+            <span class="imp-summary-actions">
+                <button class="btn btn-sm btn-outline-secondary" id="selectAllScannedBtn">All</button>
+                <button class="btn btn-sm btn-outline-secondary" id="deselectAllScannedBtn">None</button>
+            </span>
+        </div>
+        <div class="imp-table scan-table-wrap">
+            <div class="imp-head imp-scan-cols"><span></span><span>FILE</span><span>TITLE</span><span>AUTHOR</span><span>SIZE</span></div>
+            <div id="scannedFilesTable"></div>
+        </div>
+        <div class="imp-actions">
+            <button class="btn btn-primary" id="matchFilesBtn">Match selected (<span id="selectedForMatchCount">0</span>)</button>
         </div>
     </div>
 </div>
 
 <!-- ── Step 2: Review Matches ── -->
 <div id="importStep2" hidden>
-    <div class="import-step">
-        <div class="import-step-header">
-            <h4><i class="fas fa-sync-alt me-2"></i>Step 2: Review Matches</h4>
-            <button class="btn btn-sm btn-light" id="backToStep1Btn">
-                <i class="fas fa-arrow-left me-1"></i>Back
-            </button>
+    <div id="matchingProgress" class="loading-state">
+        <div class="spinner-border text-primary mb-3" role="status"><span class="visually-hidden">Matching…</span></div>
+        <p class="text-muted">Matching files with Audible metadata…</p>
+    </div>
+
+    <div id="matchResults" hidden>
+        <div class="imp-summary">
+            <b id="sumFileCount">0 files</b>
+            <span class="dim">from <span id="sumSource" class="imp-mono"></span> →</span>
+            <b id="sumLibrary"></b>
+            <span class="imp-summary-actions imp-pills">
+                <span class="imp-pill ok"><span id="matchedCount">0</span> confident</span>
+                <span class="imp-pill warn"><span id="uncertainCount">0</span> to check</span>
+                <span class="imp-pill err"><span id="notFoundCount">0</span> no match</span>
+                <span class="imp-pill err" id="dupPill"><span id="duplicatesCount">0</span> duplicates</span>
+            </span>
         </div>
-        <div class="import-step-body">
 
-            <!-- Matching progress -->
-            <div id="matchingProgress" class="text-center py-4">
-                <div class="spinner-border text-primary mb-3" role="status">
-                    <span class="visually-hidden">Matching…</span>
-                </div>
-                <p class="text-muted">Matching files with Audible metadata…</p>
+        <div class="imp-table">
+            <div class="imp-head imp-match-cols">
+                <span></span><span>FILE</span><span></span><span>AUDIBLE MATCH</span><span>CONFIDENCE</span><span></span>
             </div>
-
-            <!-- Match results -->
-            <div id="matchResults" hidden>
-                <!-- Stats -->
-                <div class="match-stats mb-4">
-                    <div class="match-stat-card matched">
-                        <div class="stat-value" id="matchedCount">0</div>
-                        <div class="stat-label">Matched</div>
-                    </div>
-                    <div class="match-stat-card uncertain">
-                        <div class="stat-value" id="uncertainCount">0</div>
-                        <div class="stat-label">Uncertain</div>
-                    </div>
-                    <div class="match-stat-card duplicate">
-                        <div class="stat-value" id="duplicatesCount">0</div>
-                        <div class="stat-label">Duplicates</div>
-                    </div>
-                    <div class="match-stat-card not-found">
-                        <div class="stat-value" id="notFoundCount">0</div>
-                        <div class="stat-label">Not Found</div>
-                    </div>
-                </div>
-
-                <!-- File list -->
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0">Select books to import</h6>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-primary" id="selectAllMatchedBtn">
-                            <i class="fas fa-check-square me-1"></i>All
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" id="deselectAllBtn">
-                            <i class="fas fa-square me-1"></i>None
-                        </button>
-                    </div>
-                </div>
-
-                <div id="matchedFilesList" class="mb-4"></div>
-
-                <button class="btn btn-success" id="startImportBtn">
-                    <i class="fas fa-arrow-right me-2"></i>Import Selected
-                    (<span id="selectedForImportCount">0</span>)
-                </button>
-            </div>
+            <div id="matchedFilesList"></div>
         </div>
+        <div class="imp-toolbar">
+            <button class="btn btn-sm btn-outline-secondary" id="selectAllMatchedBtn">Select all</button>
+            <button class="btn btn-sm btn-outline-secondary" id="deselectAllBtn">Select none</button>
+            <button class="btn btn-sm btn-outline-secondary" id="backToStep1Btn">Back</button>
+        </div>
+    </div>
+
+    <div class="imp-bar" id="importBar" hidden>
+        <span class="dim">Books are copied, tagged and placed by your naming pattern.</span>
+        <button class="btn btn-accent btn-lg" id="startImportBtn">Import <span id="selectedForImportCount">0</span> books</button>
     </div>
 </div>
 
 <!-- ── Step 3: Import Progress ── -->
 <div id="importStep3" hidden>
-    <div class="import-step">
-        <div class="import-step-header">
-            <h4><i class="fas fa-cog fa-spin me-2"></i>Step 3: Importing</h4>
-            <button class="btn btn-sm btn-light" id="backToStep2Btn">
-                <i class="fas fa-arrow-left me-1"></i>Back
-            </button>
-        </div>
-        <div class="import-step-body">
-
-            <!-- Stats -->
-            <div class="row g-3 mb-4">
-                <div class="col-4">
-                    <div class="text-center p-3 bg-light rounded">
-                        <div class="fw-bold fs-4 text-primary" id="importStatActive">0</div>
-                        <div class="text-muted small">Active</div>
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div class="text-center p-3 bg-light rounded">
-                        <div class="fw-bold fs-4 text-success" id="importStatCompleted">0</div>
-                        <div class="text-muted small">Completed</div>
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div class="text-center p-3 bg-light rounded">
-                        <div class="fw-bold fs-4 text-danger" id="importStatFailed">0</div>
-                        <div class="text-muted small">Failed</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Overall progress bar -->
-            <div class="progress mb-4" style="height: 24px;">
-                <div id="importOverallBar"
-                     class="progress-bar progress-bar-striped progress-bar-animated"
-                     role="progressbar" style="width: 0%">0%</div>
-            </div>
-
-            <!-- Per-file list -->
-            <div id="importProgressList"></div>
-
-            <!-- Completion message -->
-            <div id="importCompleteMsg" class="alert alert-success mt-4" hidden>
-                <i class="fas fa-check-circle me-2"></i>
-                <strong>Import complete!</strong>
-                <a href="/" class="btn btn-sm btn-success ms-3">Go to Library</a>
-            </div>
-
-        </div>
+    <div class="imp-stats">
+        <div><div class="eyebrow">Active</div><div class="imp-stat-val" id="importStatActive">0</div></div>
+        <div><div class="eyebrow">Completed</div><div class="imp-stat-val" id="importStatCompleted">0</div></div>
+        <div><div class="eyebrow">Failed</div><div class="imp-stat-val" id="importStatFailed">0</div></div>
     </div>
+    <div class="track thick mb-4" role="progressbar" aria-label="Overall import progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="importOverallTrack">
+        <div id="importOverallBar" class="fill" style="width:0%"></div>
+    </div>
+    <div id="importProgressList"></div>
+    <div id="importCompleteMsg" class="imp-done" hidden>
+        <b>Import complete.</b>
+        <a href="/" class="btn btn-primary">Go to library</a>
+    </div>
+    <div class="imp-toolbar"><button class="btn btn-sm btn-outline-secondary" id="backToStep2Btn">Back</button></div>
 </div>
-
+</div>
 {% endblock %}
 
 {% block extra_js %}

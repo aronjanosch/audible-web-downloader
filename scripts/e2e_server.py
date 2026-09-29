@@ -27,6 +27,13 @@ BOOKS = [
         ("A Quiet Harbour", "C. Novelist"), ("Clockwork Garden", "D. Storyteller"),
     ])
 ]
+# E2E_BOOKS=N pads the fake purchase list (used by scripts/browser/perf.mjs for large libraries).
+BOOKS += [
+    {"asin": f"B0PAD{i:05d}", "title": f"Padding Title {i}", "authors": f"Author {i % 40}",
+     "series": f"Series {i % 60}", "language": "english", "length_mins": 300 + i % 600,
+     "release_year": str(2000 + i % 25)}
+    for i in range(int(os.environ.get("E2E_BOOKS", "0")))
+]
 token_file = root / "auth.json"
 token_file.write_text("{}")
 scheduler.init_scheduler = lambda app: None

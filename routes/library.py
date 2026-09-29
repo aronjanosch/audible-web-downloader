@@ -17,6 +17,51 @@ logger = logging.getLogger(__name__)
 # Initialize storage
 storage = LibraryStorage()
 
+@library_bp.route('/household', methods=['GET'])
+def household_books():
+    """Per-ASIN household state for the library UI: on-disk status, who added it,
+    a short folder hint (never the absolute path) and the Audiobookshelf match state."""
+    from utils.db import get_db
+    rows = get_db().execute(
+        """SELECT b.asin, b.status, b.file_path, b.file_size_bytes, b.downloaded_by_account,
+                  b.added_at, b.updated_at, a.status AS abs_status
+           FROM books b LEFT JOIN abs_items a ON a.asin = b.asin
+           WHERE b.status IN ('downloaded', 'downloading', 'missing')"""
+    ).fetchall()
+    books = {}
+    for row in rows:
+        parts = [p for p in (row['file_path'] or '').replace('\\', '/').split('/') if p]
+        folder = parts[:-1] if parts and '.' in parts[-1] else parts
+        books[row['asin']] = {
+            'status': row['status'],
+            'location': '/'.join(folder[-2:]),
+            'size_bytes': row['file_size_bytes'],
+            'added_by': row['downloaded_by_account'],
+            'added_at': row['updated_at'] or row['added_at'],
+            'abs': row['abs_status'],
+        }
+    try:
+        from app.services.audiobookshelf import AudiobookshelfClient, AudiobookshelfError
+        abs_configured = bool(AudiobookshelfClient.from_environment())
+    except Exception:
+        abs_configured = False
+    return jsonify({'success': True, 'books': books, 'abs_configured': abs_configured})
+
+
+@library_bp.route('/duplicates-skipped', methods=['POST'])
+def duplicates_skipped():
+    """Record titles the admin chose not to download again (feeds 'duplicates avoided')."""
+    from utils.events import record_duplicate_avoided
+    data = request.get_json(silent=True) or {}
+    account = str(data.get('account_name') or 'household')[:120]
+    recorded = 0
+    for item in (data.get('items') or [])[:200]:
+        asin = str((item or {}).get('asin') or '')[:32]
+        if asin and record_duplicate_avoided(account, asin, str((item or {}).get('title') or '')[:200]):
+            recorded += 1
+    return jsonify({'success': True, 'recorded': recorded})
+
+
 @library_bp.route('/scan-local', methods=['POST'])
 def scan_local_library():
     """Scan local audiobook library directory."""

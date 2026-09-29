@@ -226,3 +226,11 @@ config/
 library/
 scripts/browser/node_modules/
 scripts/browser/out/
+
+# Release hygiene: never track runtime state or secrets
+.env.*
+!.env.example
+backups/
+*.tar.gz
+.DS_Store
+initial-admin-credentials.json

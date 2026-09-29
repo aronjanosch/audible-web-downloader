@@ -30,8 +30,10 @@ uv run gunicorn -c gunicorn.conf.py "app:create_app()"
 # Tests
 uv run pytest                 # there is currently no pytest config / conftest; add one if useful
 
-# Docker (published image)
+# Docker (published image; needs SECRET_KEY in .env — see docs/deployment.md)
 docker compose pull && docker compose up -d
+ruff check .                  # correctness lint (bug-class rules only)
+node --test tests/dom_escaping.test.cjs
 ```
 
 Python `3.13` (see `.python-version`). ffmpeg is required at runtime for AAX→M4B.
@@ -39,9 +41,12 @@ Python `3.13` (see `.python-version`). ffmpeg is required at runtime for AAX→M
 ## Current architecture (as-is)
 
 - **Flask** app factory in `app/__init__.py`; blueprints in `routes/`
-  (`main`, `auth`, `download`, `library`, `invite`, `importer`, `scheduler`, `books`).
+  (`main`, `auth`, `download`, `library`, `invite`, `importer`, `scheduler`, `books`,
+  `security`, `household`, `health`). UI: design tokens + shared components in
+  `static/css/app.css` ("Audible Redesign" system, DM Sans, warm paper/green/amber), page CSS/JS
+  beside it; top bar + queue drawer live in `templates/base.html` / `static/js/queue-drawer.js`.
 - **Persistence:** raw `sqlite3` in `utils/db.py`, WAL mode, thread-local connections,
-  hand-rolled migrations keyed on `PRAGMA user_version` (currently `SCHEMA_VERSION = 3`).
+  hand-rolled migrations keyed on `PRAGMA user_version` (currently `SCHEMA_VERSION = 5`).
   Legacy JSON (`accounts.json`, `libraries.json`, `library.json`) is imported once on
   first migrate.
 - **Queues:** in-memory, process-level singletons in `utils/queue_base.py`
