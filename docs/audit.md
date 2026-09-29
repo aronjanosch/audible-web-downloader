@@ -11,6 +11,12 @@ a current-state audit, not a claim that v1 is done.
   test checks escaping of hostile stored text in legacy admin views. The threat mapping is in
   `docs/threat-model.md`. `SECRET_KEY=test-only-key docker compose config --quiet`
   succeeds; the same command without `SECRET_KEY` fails.
+- **Token lifecycle (DoD item 2, as GOAL.md words it):** maximum lifetime documented with sources in
+  `docs/token-lifecycle.md` (60-minute access token, refresh token valid until the customer revokes it,
+  no fixed maximum); automatic refresh persisted to disk; expiry/revocation detection; member self-service
+  re-auth. GOAL.md requires proof "with a test simulating an expired/revoked token", which is
+  `tests/test_token_lifecycle.py` (5 passed). A live exercise against a real Amazon login is extra
+  validation, not part of the DoD: not run, because it would process real people's account data.
 - **Token behavior under simulation:** `tests/test_token_lifecycle.py` covers
   expired access, rejected refresh, revoked live request, transient failure,
   and recovery. Provider and library sources are in `docs/token-lifecycle.md`.
@@ -64,10 +70,6 @@ a current-state audit, not a claim that v1 is done.
 
 ## STILL OPEN
 
-- Live expired/revoked Audible credential and member reconnect exercise. Needs a real member's
-  Audible login and a token that actually expires or is revoked; not run because it would process
-  real people's account data. To unlock: a member re-authenticates via the app's reconnect action
-  on a disposable/consented account and the outcome is observed.
 - Same live ABS check against the household's own server (seedhost): needs `ABS_API_TOKEN` and
   `ABS_LIBRARY_ID` in its private `.env`.
 - Visual refinement of the admin interface: it passes the proxies above but still uses the older
