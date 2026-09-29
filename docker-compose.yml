@@ -1,24 +1,56 @@
+# Quickstart:  cp .env.example .env  &&  edit SECRET_KEY  &&  docker compose up -d
 services:
   audible-web-downloader:
     image: ${AUDIBLE_IMAGE:-ghcr.io/aronjanosch/audible-web-downloader:latest}
+    # To build from source instead of pulling: docker compose up -d --build
+    build: .
     container_name: audible-web-downloader
     user: "1000:1000"
+    init: false                 # the image already runs tini
     ports:
-      - "5505:5505"
+      # Bind to loopback and put a reverse proxy with HTTPS in front (see docs/deployment.md).
+      # Change to "5505:5505" only for a trusted LAN.
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-5505}:5505"
     volumes:
-      # Mount config directory to persist all configuration files and auth tokens
-      - ./config:/app/config
-      # Mount temporary downloads directory for AAX files, vouchers, and conversion work
-      - ./downloads:/app/downloads
-      # Mount library directory for final organized M4B audiobooks
-      - ./library:/app/library
+      - ./config:/app/config            # database, settings, per-account Audible tokens — back this up
+      - ./downloads:/app/downloads      # temporary AAX/voucher/conversion work
+      - ./library:/app/library          # final organized M4B audiobooks (mount your Audiobookshelf library here)
       - ./library_data:/app/library_data
     environment:
-      - TZ=Europe/Berlin
-      - HOME=/tmp
-      - SECRET_KEY=${SECRET_KEY:?Set a random SECRET_KEY in your environment or .env before starting}
-      - FLASK_ENV=${FLASK_ENV:-production}
-      - ABS_URL=${ABS_URL:-}
-      - ABS_API_TOKEN=${ABS_API_TOKEN:-}
-      - ABS_LIBRARY_ID=${ABS_LIBRARY_ID:-}
+      TZ: ${TZ:-UTC}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (python -c "import secrets; print(secrets.token_urlsafe(48))")}
+      # First boot only: omit ADMIN_PASSWORD to get generated credentials in config/initial-admin-credentials.json
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Secure cookies need HTTPS. Set to 0 only when serving plain HTTP on a trusted LAN.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-1}
+      # Number of reverse proxies in front (0 = trust no X-Forwarded-* headers).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-0}
+      ABS_URL: ${ABS_URL:-}
+      ABS_API_TOKEN: ${ABS_API_TOKEN:-}
+      ABS_LIBRARY_ID: ${ABS_LIBRARY_ID:-}
     restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5505/healthz', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3

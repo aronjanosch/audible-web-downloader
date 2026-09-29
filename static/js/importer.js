@@ -14,6 +14,8 @@ function _showStep(n) {
         const el = document.getElementById(`importStep${i}`);
         if (el) el.hidden = i !== n;
     });
+    const bar = document.getElementById('importBar');
+    if (bar && n !== 2) bar.hidden = true;
     _updateStepIndicator(n);
 }
 
@@ -23,6 +25,8 @@ function _updateStepIndicator(activeStep) {
         if (!item) return;
         item.classList.toggle('active', i === activeStep);
         item.classList.toggle('done', i < activeStep);
+        const circle = item.querySelector('.step-circle');
+        if (circle) circle.textContent = i < activeStep ? '✓' : String(i);
     });
     const line1 = document.getElementById('stepLine1');
     const line2 = document.getElementById('stepLine2');
@@ -73,15 +77,16 @@ function _renderScanResults(files, count, totalSize) {
 
     tbody.innerHTML = '';
     files.forEach((f, idx) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><input type="checkbox" class="form-check-input scan-file-cb" data-idx="${idx}" checked></td>
-            <td class="small text-truncate" style="max-width:200px" title="${escapeHtml(f.file_path)}">${escapeHtml(_basename(f.file_path))}</td>
-            <td class="small">${escapeHtml(f.title || '—')}</td>
-            <td class="small">${escapeHtml(f.author || '—')}</td>
-            <td class="small text-nowrap">${_formatSize(f.file_size)}</td>
+        const row = document.createElement('div');
+        row.className = 'imp-row scan';
+        row.innerHTML = `
+            <input type="checkbox" class="imp-check scan-file-cb" data-idx="${idx}" checked aria-label="Select ${escapeHtml(_basename(f.file_path))}">
+            <div class="imp-file" title="${escapeHtml(f.file_path)}">${escapeHtml(_basename(f.file_path))}</div>
+            <div>${escapeHtml(f.title || '—')}</div>
+            <div class="dim">${escapeHtml(f.author || '—')}</div>
+            <div class="dim">${_formatSize(f.file_size)}</div>
         `;
-        tbody.appendChild(tr);
+        tbody.appendChild(row);
     });
 
     _updateMatchCount();
@@ -136,61 +141,212 @@ async function matchFiles() {
     }
 }
 
+function _coverClass(text) {
+    let h = 0;
+    for (const ch of String(text || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return `cover-c${h % 12}`;
+}
+
 function _renderMatchResults(files, stats) {
-    // Update stat cards
     document.getElementById('matchedCount').textContent  = stats?.matched  || 0;
     document.getElementById('uncertainCount').textContent = stats?.uncertain || 0;
     document.getElementById('duplicatesCount').textContent = stats?.duplicates || 0;
     document.getElementById('notFoundCount').textContent  = stats?.not_found  || 0;
+    const dupPill = document.getElementById('dupPill');
+    if (dupPill) dupPill.hidden = !(stats?.duplicates > 0);
+
+    const n = files.length;
+    document.getElementById('sumFileCount').textContent = `${n} file${n === 1 ? '' : 's'}`;
+    document.getElementById('sumSource').textContent = document.getElementById('sourcePath')?.value?.trim() || '';
+    document.getElementById('sumLibrary').textContent = document.getElementById('targetLibrary')?.value || '';
 
     const container = document.getElementById('matchedFilesList');
     if (!container) return;
-
     container.innerHTML = '';
 
     files.forEach((item, idx) => {
-        const match = item.match_result;
-        const confidence = match?.confidence || 0;
-        const isDuplicate = item.duplicate_status === 'duplicate';
-        const isNotFound = !match || match.no_match;
-
-        const card = document.createElement('div');
-        card.className = `match-item mb-3 ${isDuplicate ? 'duplicate' : isNotFound ? 'not-found' : confidence < 0.8 ? 'uncertain' : ''}`;
-        card.innerHTML = `
-            <div class="match-item-header">
-                <div class="d-flex align-items-center gap-2">
-                    <input type="checkbox" class="form-check-input match-file-cb" data-idx="${idx}" ${item.selected !== false && !isDuplicate && !isNotFound ? 'checked' : ''}>
-                    <strong class="small">${escapeHtml(_basename(item.file_info?.file_path || ''))}</strong>
-                </div>
-                <div class="d-flex gap-2 align-items-center">
-                    ${isDuplicate ? '<span class="badge bg-danger">Duplicate</span>' : ''}
-                    ${isNotFound  ? '<span class="badge bg-secondary">Not Found</span>' : ''}
-                    ${!isNotFound && !isDuplicate ? `<span class="match-confidence ${confidence >= 0.9 ? 'high' : confidence >= 0.7 ? 'medium' : 'low'}">${Math.round(confidence * 100)}%</span>` : ''}
-                </div>
-            </div>
-            <div class="match-item-body">
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <div class="small text-muted fw-bold mb-1">Local File</div>
-                        <div class="small">${escapeHtml(item.file_info?.title || '—')}</div>
-                        <div class="small text-muted">${escapeHtml(item.file_info?.author || '')}</div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="small text-muted fw-bold mb-1">Audible Match</div>
-                        ${match && !match.no_match ? `
-                            <div class="small">${escapeHtml(match.title || '—')}</div>
-                            <div class="small text-muted">${escapeHtml(match.authors || '')}</div>
-                        ` : '<div class="small text-muted">No match found</div>'}
-                    </div>
-                </div>
-            </div>
-        `;
-        container.appendChild(card);
+        item.chosen = _bestProduct(item);
+        const row = _buildMatchRow(item, idx);
+        container.appendChild(row);
+        container.appendChild(_buildPicker(idx));
     });
 
+    const bar = document.getElementById('importBar');
+    if (bar) bar.hidden = false;
+
     _updateImportCount();
-    container.querySelectorAll('.match-file-cb').forEach(cb => {
-        cb.addEventListener('change', _updateImportCount);
+}
+
+/** The catalog product currently chosen for a file: auto-selected match, else best candidate. */
+function _bestProduct(item) {
+    const result = item.match_result || {};
+    return result.selected_match || (result.matches || [])[0] || null;
+}
+
+function _authorNames(product) {
+    const a = product && product.authors;
+    if (Array.isArray(a)) return a.map(x => (x && x.name) || x).filter(Boolean).join(', ');
+    return a || '';
+}
+
+function _confidenceFor(item) {
+    if (item.manual) return 1;
+    const result = item.match_result || {};
+    const product = item.chosen;
+    if (product && result.match_confidences && product.asin in result.match_confidences) {
+        return result.match_confidences[product.asin];
+    }
+    return result.confidence || 0;
+}
+
+function _buildMatchRow(item, idx, keepChecked) {
+    const product = item.chosen;
+    const confidence = product ? _confidenceFor(item) : 0;
+    const isDuplicate = !item.manual && !!item.duplicate_status;
+    const isNotFound = !product;
+    const confident = !isDuplicate && !isNotFound && confidence >= 0.8;
+    const checked = keepChecked !== undefined ? keepChecked : (item.selected !== false && !isDuplicate && confident);
+    const filePath = item.file_info?.file_path || '';
+    const fileSize = item.file_info?.file_size;
+
+    const row = document.createElement('div');
+    row.className = 'imp-row match';
+    row.dataset.idx = idx;
+    const title = isNotFound ? 'No match found' : (product.title || '—');
+    const author = isNotFound ? 'Search Audible' : _authorNames(product);
+    const confClass = isNotFound || isDuplicate ? 'none' : confidence >= 0.8 ? '' : 'mid';
+    const confText = isNotFound ? '–' : isDuplicate ? 'Duplicate' : Math.round(confidence * 100) + '%';
+    const actLabel = isNotFound ? 'Search' : isDuplicate ? 'Skip' : confident ? 'Change' : 'Confirm';
+    row.innerHTML = `
+        <input type="checkbox" class="imp-check match-file-cb" data-idx="${idx}" ${checked ? 'checked' : ''} ${isNotFound ? 'disabled' : ''} aria-label="Import ${escapeHtml(_basename(filePath))}">
+        <div><div class="imp-file">${escapeHtml(_basename(filePath))}</div><div class="imp-sub">${escapeHtml(_formatSize(fileSize))}</div></div>
+        <span class="imp-arrow" aria-hidden="true">→</span>
+        <div class="imp-match">
+            <div class="imp-cover ${isNotFound ? 'none' : _coverClass(title)}"></div>
+            <div><div class="imp-match-title">${escapeHtml(title)}</div><div class="imp-sub">${escapeHtml(author)}</div></div>
+        </div>
+        <div class="imp-conf ${confClass}">${escapeHtml(confText)}</div>
+        <button type="button" class="imp-act" data-act="${actLabel.toLowerCase()}">${actLabel}</button>
+    `;
+    row.querySelector('.match-file-cb').addEventListener('change', _updateImportCount);
+    row.querySelector('.imp-act').addEventListener('click', () => _onRowAction(row, idx));
+    return row;
+}
+
+function _onRowAction(row, idx) {
+    const act = row.querySelector('.imp-act').dataset.act;
+    const cb = row.querySelector('.match-file-cb');
+    if (act === 'confirm') {
+        cb.checked = true;
+        _refreshRow(idx, true);
+    } else if (act === 'skip') {
+        cb.checked = false;
+        _updateImportCount();
+    } else {
+        // 'change' and 'search' both open the picker: candidates + free-text Audible search.
+        _togglePicker(idx);
+    }
+    _updateImportCount();
+}
+
+function _refreshRow(idx, checked) {
+    const old = document.querySelector(`#matchedFilesList .imp-row[data-idx="${idx}"]`);
+    if (!old) return;
+    const item = _matchedFiles[idx];
+    const wasChecked = checked !== undefined ? checked : old.querySelector('.match-file-cb').checked;
+    const fresh = _buildMatchRow(item, idx, wasChecked);
+    old.replaceWith(fresh);
+    _updateImportCount();
+}
+
+function _buildPicker(idx) {
+    const item = _matchedFiles[idx];
+    const box = document.createElement('div');
+    box.className = 'imp-picker';
+    box.dataset.idx = idx;
+    box.hidden = true;
+    const stem = _basename(item.file_info?.file_path || '').replace(/\.m4b$/i, '').replace(/[_\-.]+/g, ' ').trim();
+    box.innerHTML = `
+        <form class="imp-picker-form">
+            <input type="search" class="form-control form-control-sm" aria-label="Search Audible" value="${escapeHtml(stem)}">
+            <button type="submit" class="btn btn-sm btn-primary">Search Audible</button>
+        </form>
+        <div class="imp-picker-results" role="list"></div>`;
+    box.querySelector('form').addEventListener('submit', e => {
+        e.preventDefault();
+        _runPickerSearch(idx, box);
+    });
+    return box;
+}
+
+function _togglePicker(idx) {
+    const box = document.querySelector(`#matchedFilesList .imp-picker[data-idx="${idx}"]`);
+    if (!box) return;
+    box.hidden = !box.hidden;
+    if (box.hidden) return;
+    const item = _matchedFiles[idx];
+    const results = box.querySelector('.imp-picker-results');
+    if (!results.children.length) {
+        const candidates = (item.match_result?.matches || []).slice(0, 5);
+        if (candidates.length) _renderPickerResults(idx, box, candidates);
+        else _runPickerSearch(idx, box);
+    }
+    box.querySelector('input').focus();
+}
+
+async function _runPickerSearch(idx, box) {
+    const query = box.querySelector('input').value.trim();
+    const results = box.querySelector('.imp-picker-results');
+    if (!query) return;
+    const account = AppState.get('currentAccount');
+    const region = ((AppState.get('accountData') || {})[account] || {}).region || 'us';
+    results.textContent = 'Searching…';
+    try {
+        const data = await apiCall('/api/importer/search-manual', {
+            method: 'POST',
+            body: JSON.stringify({
+                file_path: _matchedFiles[idx].file_info?.file_path,
+                search_query: query,
+                account_name: account,
+                region,
+                library_path: document.getElementById('targetLibrary')?.value
+            })
+        });
+        _renderPickerResults(idx, box, data.results || []);
+    } catch (err) {
+        results.textContent = 'Search failed: ' + err.message;
+    }
+}
+
+function _renderPickerResults(idx, box, products) {
+    const results = box.querySelector('.imp-picker-results');
+    results.replaceChildren();
+    if (!products.length) { results.textContent = 'No results. Try a different title or author.'; return; }
+    products.forEach(product => {
+        const line = document.createElement('div');
+        line.className = 'imp-picker-item';
+        line.setAttribute('role', 'listitem');
+        const info = document.createElement('div');
+        const t = document.createElement('div');
+        t.className = 'imp-match-title';
+        t.textContent = product.title || '—';
+        const a = document.createElement('div');
+        a.className = 'imp-sub';
+        a.textContent = [_authorNames(product), product.release_date ? String(product.release_date).slice(0, 4) : ''].filter(Boolean).join(' · ');
+        info.append(t, a);
+        const use = document.createElement('button');
+        use.type = 'button';
+        use.className = 'imp-act';
+        use.textContent = 'Use this';
+        use.addEventListener('click', () => {
+            const item = _matchedFiles[idx];
+            item.chosen = product;
+            item.manual = true;
+            box.hidden = true;
+            _refreshRow(idx, true);
+        });
+        line.append(info, use);
+        results.append(line);
     });
 }
 
@@ -211,7 +367,7 @@ async function executeImport() {
         const item = _matchedFiles[idx];
         return {
             file_path: item.file_info.file_path,
-            audible_product: item.match_result
+            audible_product: item.chosen
         };
     });
 
@@ -267,7 +423,8 @@ async function _pollImportProgress() {
         const bar = document.getElementById('importOverallBar');
         if (bar) {
             bar.style.width = pct + '%';
-            bar.textContent = `${pct}%`;
+            const track = document.getElementById('importOverallTrack');
+            if (track) track.setAttribute('aria-valuenow', pct);
         }
 
         _renderImportItems(imports);
@@ -287,17 +444,18 @@ function _renderImportItems(imports) {
     if (!container) return;
 
     container.innerHTML = '';
+    const pillFor = { pending: 'pill-queued', importing: 'pill-active', organizing: 'pill-active', completed: 'pill-done', error: 'pill-err', skipped: 'pill' };
     Object.entries(imports).forEach(([key, item]) => {
         const el = document.createElement('div');
         const safeState = ['pending', 'importing', 'organizing', 'completed', 'error', 'skipped'].includes(item.state) ? item.state : 'pending';
-        el.className = `import-progress-item state-${safeState}`;
+        el.className = `imp-item state-${safeState}`;
         el.innerHTML = `
-            <div class="import-progress-info">
-                <div class="import-progress-title">${escapeHtml(item.title || key)}</div>
-                <div class="import-progress-sub">${escapeHtml(_stateLabel(item.state))}</div>
-                ${item.error ? `<div class="text-danger small mt-1"><i class="fas fa-exclamation-triangle me-1"></i>${escapeHtml(item.error)}</div>` : ''}
+            <div>
+                <div class="imp-item-title">${escapeHtml(item.title || key)}</div>
+                <div class="imp-item-sub">${escapeHtml(_stateLabel(item.state))}</div>
+                ${item.error ? `<div class="imp-item-err">${escapeHtml(item.error)}</div>` : ''}
             </div>
-            <span class="state-badge state-${safeState}">${escapeHtml(_stateLabel(item.state))}</span>
+            <span class="pill ${pillFor[safeState]}">${escapeHtml(_stateLabel(item.state))}</span>
         `;
         container.appendChild(el);
     });

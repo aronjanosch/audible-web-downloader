@@ -1,0 +1,64 @@
+/* auth.css — solo pages: sign in, invitation, Audible login steps, result + error pages */
+
+/* Full-bleed green stage (sign in, errors) */
+.auth-stage {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+  background: var(--green); box-sizing: border-box;
+}
+[data-bs-theme="dark"] .auth-stage { background: #163127; }
+.auth-card {
+  width: 100%; max-width: 380px; background: var(--surface); border-radius: var(--radius-xl);
+  padding: 36px; display: flex; flex-direction: column; gap: 18px; box-shadow: var(--shadow-card);
+}
+.auth-card.wide { max-width: 480px; }
+.auth-card .brand-mark { width: 34px; height: 34px; border-radius: 9px; font-size: 22px; }
+.auth-title { font-weight: 500; letter-spacing: -.02em; font-size: 38px; line-height: 1; margin: 0; }
+.auth-field label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+.auth-field .form-control, .auth-field .form-select { background-color: #fff; }
+[data-bs-theme="dark"] .auth-field .form-control, [data-bs-theme="dark"] .auth-field .form-select { background-color: var(--bg); }
+.auth-card .form-control:focus { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); border-width: 1px; }
+.auth-submit { height: 48px; border-radius: 24px; font-size: 15px; width: 100%; }
+.auth-note { font-size: 12.5px; color: var(--muted); text-align: center; margin: 0; }
+.auth-error { font-size: 13px; color: var(--err-fg); background: var(--err-bg); border-radius: 12px; padding: 10px 14px; margin: 0; }
+.auth-error:empty { display: none; }
+
+/* Light sheet (invitation, Audible steps, results) */
+.sheet-stage { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; background: var(--bg); box-sizing: border-box; }
+.sheet {
+  width: 100%; max-width: 620px; background: var(--bg); border-radius: 12px; padding: 48px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.sheet-stage .sheet { background: var(--surface); box-shadow: var(--shadow-card); }
+.sheet-title { font-weight: 500; letter-spacing: -.02em; font-size: 50px; line-height: 1; margin: 0; }
+.sheet-lead { font-size: 15px; color: var(--ink-2); line-height: 1.5; margin: 0; }
+.sheet .form-control, .sheet .form-select { background-color: var(--bg); }
+.sheet .step-bars { display: flex; gap: 8px; }
+.sheet .step-bars > i { flex: 1; height: 4px; border-radius: 2px; background: var(--line-strong); }
+.sheet .step-bars > i.on { background: var(--green); }
+.sheet .step-bars > i.now { background: var(--orange); }
+.sheet-note { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 18px 20px; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+.sheet-stage .sheet-note { background: var(--bg); }
+.sheet-actions { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.sheet-actions .btn { height: 52px; border-radius: 26px; font-size: 15px; }
+.kv { background: var(--bg); border-radius: 8px; padding: 14px 16px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.kv > div { display: flex; gap: 12px; }
+.kv .k { color: var(--muted); }
+.kv .v { margin-left: auto; text-align: right; word-break: break-all; }
+.result-icon { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; font-weight: 700; background: var(--ok-bg); color: var(--ok-fg); }
+.result-icon.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.result-icon.err { background: var(--err-bg); color: var(--err-fg); }
+.steps-list { margin: 0; padding-left: 20px; font-size: 14px; color: var(--ink-2); line-height: 1.6; }
+
+/* Password strength meter */
+.pw-meter { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 8px; overflow: hidden; }
+.pw-meter > span { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--err); transition: width .25s, background .25s; }
+.pw-meter-label { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+@media (max-width: 480px) {
+  .auth-card { padding: 28px 22px; }
+  .auth-title { font-size: 32px; }
+  .sheet { padding: 28px 20px; }
+  .sheet-title { font-size: 36px; }
+}
+
+.auth-card code, .sheet code { color: var(--ink-2); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; word-break: break-all; }

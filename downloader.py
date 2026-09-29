@@ -76,7 +76,8 @@ class DownloadQueueManager(BaseQueueManager):
             'total_speed': 0,
             'total_downloads': 0,
             'batch_complete': batch_info.get('batch_complete', False),
-            'batch_id': current_batch_id
+            'batch_id': current_batch_id,
+            'paused': self.is_paused(),
         }
         
         for asin, download in list(self._queue.items()):
@@ -264,6 +265,9 @@ class AudiobookDownloader:
             'state': state.value,
             'timestamp': time.time(),
             'asin': asin,
+            # Server-side context that lets a failed row be retried later.
+            'region': self.region,
+            'library_path': str(self.library_path),
             **metadata
         }
 
@@ -470,6 +474,8 @@ class AudiobookDownloader:
                 self._log(f"⚠️  Potential duplicate in this library (similarity: {similarity:.0%})", book_asin)
                 self._log(f"    '{book_title}' may already exist as '{Path(match_path).name}'", book_asin)
                 self._log(f"    Skipping download. Different libraries won't trigger this check.", book_asin)
+                from utils.events import record_duplicate_avoided
+                record_duplicate_avoided(self.account_name, book_asin, book_title)
                 return match_path
 
         self._log(f"🎧 Starting: '{book_title}' (Quality: {quality})", book_asin)
@@ -480,6 +486,9 @@ class AudiobookDownloader:
 
         for attempt in range(max_retries):
             try:
+                # Queue pause: hold jobs that have not taken a slot yet.
+                while self.queue_manager.is_paused():
+                    await asyncio.sleep(1)
                 async with self.download_semaphore:
                     # Per-book timer starts when we actually take a slot (not when the coroutine
                     # was scheduled, which can be hours earlier for large batches).

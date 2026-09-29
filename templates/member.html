@@ -1,38 +1,49 @@
 {% extends "base.html" %}
 {% set auto_config = account.auto_download if account else {} %}
 {% set interval_hours = auto_config.interval_hours|default(6, true)|int %}
+{% set health = token_health(account_name) %}
 {% block title %}My books · Audible Downloader{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/member.css') }}">{% endblock %}
 {% block content %}
 <div class="member-shell">
   <header class="member-header">
-    <a class="member-brand" href="/" aria-label="My books home">Audible <span>household</span></a>
-    <form action="{{ url_for('security.logout') }}" method="post">
+    <a class="member-brand" href="/" aria-label="My books home">Audible <i>household</i></a>
+    <form action="{{ url_for('security.logout') }}" method="post" class="member-who">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <span>{{ household_user.username }}</span><span aria-hidden="true">·</span>
       <button class="member-signout" type="submit">Sign out</button>
     </form>
   </header>
+
   <section class="member-hero" aria-labelledby="member-title">
-    <p class="member-eyebrow">{{ account_name }}</p>
-    <h1 id="member-title">Your books, at home.</h1>
-    <p>Your Audible purchases appear here when your connection is active. Your household keeps one library copy of a shared title.</p>
-    {% if not account or not account.authenticated %}
-    <div class="member-alert" role="status">Your Audible connection needs attention. <a href="{{ url_for('auth.start_login', account_name=account_name) }}">Connect Audible</a></div>
-    {% else %}
-    <div class="member-actions">
-      <a class="member-button" href="{{ url_for('auth.start_login', account_name=account_name) }}">Reconnect Audible</a>
-      <button id="refreshBooks" class="member-button member-button-secondary" type="button">Refresh books</button>
+    <div>
+      <p class="eyebrow">{{ account_name }}{% if account and account.region %} · {{ account.region|upper }}{% endif %}</p>
+      <h1 id="member-title" class="member-title">Your books, at home.</h1>
     </div>
-    {% endif %}
+
+    <div class="member-card" role="region" aria-label="Audible connection">
+      <div class="member-status">
+        <span class="dot {{ health.state }}" aria-hidden="true"></span>
+        <b>{% if health.state == 'ok' %}Audible is connected{% elif health.state == 'warn' %}Connection needs a refresh{% elif health.label == 'Not connected' %}Connect your Audible account{% else %}Your connection expired{% endif %}</b>
+      </div>
+      <p class="member-note">{% if health.state == 'ok' %}New purchases keep arriving automatically. {{ health.detail }}.{% else %}Reconnect now so new purchases keep arriving. It takes about a minute.{% endif %}</p>
+      <a class="btn {% if health.state == 'ok' %}btn-outline-secondary{% else %}btn-primary{% endif %} member-cta" href="{{ url_for('auth.start_login', account_name=account_name) }}">{% if health.label == 'Not connected' %}Connect Audible{% else %}Reconnect Audible{% endif %}</a>
+      <div class="member-auto">
+        <div class="grow"><b id="autoLabel">Auto-download new purchases</b>
+          <div class="member-note-sm">Checked every {{ interval_hours }} {{ 'hour' if interval_hours == 1 else 'hours' }}</div></div>
+        <button id="autoToggle" type="button" class="switch" role="switch" aria-checked="{{ 'true' if auto_config.enabled else 'false' }}" aria-labelledby="autoLabel"><span class="knob"></span></button>
+      </div>
+      <p id="autoStatus" class="member-note-sm" role="status" aria-live="polite"></p>
+    </div>
   </section>
-  <section class="member-automation" aria-labelledby="automation-title">
-    <div><h2 id="automation-title">New purchases</h2><p>We check for new books every {{ interval_hours }} {{ 'hour' if interval_hours == 1 else 'hours' }}. Automatic downloads use your household's configured library.</p></div>
-    <button id="autoToggle" type="button" class="member-button member-button-secondary">{{ 'Pause downloads' if auto_config.enabled else 'Enable downloads' }}</button>
-    <p id="autoStatus" role="status" aria-live="polite"></p>
-  </section>
+
   <section class="member-library" aria-labelledby="library-title">
-    <div class="member-library-heading"><h2 id="library-title">My library</h2><span id="bookCount" aria-live="polite"></span></div>
-    <p id="libraryStatus" role="status" aria-live="polite">Loading your library…</p>
+    <div class="member-library-heading">
+      <h2 id="library-title" class="member-h2">Recently added</h2>
+      <span id="bookCount" class="member-count" aria-live="polite"></span>
+      <button id="refreshBooks" type="button" class="member-link">Refresh</button>
+    </div>
+    <p id="libraryStatus" role="status" aria-live="polite" class="member-count">Loading your library…</p>
     <ul id="memberBooks" class="member-grid" aria-label="Audible books"></ul>
   </section>
 </div>
@@ -44,7 +55,8 @@
   const autoConfig = {{ auto_config|tojson }};
   const toggle = document.getElementById('autoToggle');
   const autoStatus = document.getElementById('autoStatus');
-  function showAutomation() { toggle.textContent = autoConfig.enabled ? 'Pause downloads' : 'Enable downloads'; }
+  const COVERS = ['#2f5d50','#c9761a','#8a3b2e','#3d4a6b','#b89b5e','#5b3f5e','#2d6a73','#a4553b','#6b7a3a','#1e1b16','#9a6b7e','#48627a'];
+  function showAutomation() { toggle.setAttribute('aria-checked', String(!!autoConfig.enabled)); }
   showAutomation();
   toggle.addEventListener('click', async () => {
     toggle.disabled = true;
@@ -63,6 +75,46 @@
   const list = document.getElementById('memberBooks');
   const status = document.getElementById('libraryStatus');
   const count = document.getElementById('bookCount');
+  function whenAdded(book) {
+    const t = Date.parse(book.purchase_date || '');
+    if (!t) return book.release_year && book.release_year !== 'Unknown' ? book.release_year : '';
+    const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const days = Math.round((startOfDay(new Date()) - startOfDay(new Date(t))) / 86400000);
+    if (days <= 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 14) return days + ' days ago';
+    if (days < 60) return Math.round(days / 7) + ' weeks ago';
+    return new Date(t).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  }
+  function bookTile(book, index) {
+    const item = document.createElement('li');
+    item.className = 'member-book';
+    const cover = document.createElement('div');
+    cover.className = 'member-cover';
+    cover.style.background = COVERS[index % COVERS.length];
+    if (book.cover_url && /^https:\/\//.test(book.cover_url)) {
+      const img = document.createElement('img');
+      img.src = book.cover_url; img.alt = ''; img.loading = 'lazy';
+      cover.append(img);
+    } else {
+      const t = document.createElement('span');
+      t.textContent = book.title || 'Untitled book';
+      cover.append(t);
+    }
+    const title = document.createElement('h3');
+    title.textContent = book.title || 'Untitled book';
+    const author = document.createElement('p');
+    author.textContent = book.authors || 'Author unknown';
+    item.append(cover, title, author);
+    const added = whenAdded(book);
+    if (added) {
+      const when = document.createElement('div');
+      when.className = 'member-when';
+      when.textContent = added;
+      item.append(when);
+    }
+    return item;
+  }
   async function load(force) {
     status.hidden = false;
     status.textContent = 'Loading your library…';
@@ -71,18 +123,9 @@
       const response = await fetch('/api/library/all' + (force ? '?force=true' : ''), {credentials: 'same-origin'});
       if (!response.ok) throw new Error('Could not load your library. Please try again.');
       const data = await response.json();
-      const books = data.library || [];
-      count.textContent = books.length + (books.length === 1 ? ' book' : ' books');
-      for (const book of books) {
-        const item = document.createElement('li');
-        item.className = 'member-book';
-        const title = document.createElement('h3');
-        title.textContent = book.title || 'Untitled book';
-        const author = document.createElement('p');
-        author.textContent = book.authors || 'Author unknown';
-        item.append(title, author);
-        list.append(item);
-      }
+      const books = (data.library || []).slice().sort((a, b) => (b.purchase_date || '').localeCompare(a.purchase_date || ''));
+      count.textContent = books.length + (books.length === 1 ? ' book in total' : ' books in total');
+      books.slice(0, 12).forEach((book, i) => list.append(bookTile(book, i)));
       status.textContent = books.length ? '' : 'No books yet. Connect Audible, then refresh your library.';
       status.hidden = !!books.length;
     } catch (error) {

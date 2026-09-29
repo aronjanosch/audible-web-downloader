@@ -33,6 +33,8 @@ def _set_authenticated(account_name, value):
     account = manager.get_account(account_name)
     if account is not None and account.get("authenticated") != value:
         manager.update_account(account_name, {"authenticated": value})
+        from utils.events import record_event
+        record_event(account_name, "auth_restored" if value else "auth_lost")
 
 
 def _save_auth(auth, path: Path):

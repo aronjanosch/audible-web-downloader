@@ -3,6 +3,7 @@ Application package for Audible Book Downloader
 """
 from flask import Flask, render_template
 from flask_wtf.csrf import CSRFProtect
+import logging
 import os
 from pathlib import Path
 
@@ -13,14 +14,32 @@ def create_app():
                 template_folder='../templates',
                 static_folder='../static')
 
+    from utils.logging_config import configure_logging
+    configure_logging()
+
     # Configuration
     secret_key = os.environ.get('SECRET_KEY')
-    if not secret_key:
-        import secrets
-        secret_key = secrets.token_hex(32)
-        print("⚠️  WARNING: No SECRET_KEY environment variable set. Using generated key.")
-        print("⚠️  Set SECRET_KEY environment variable for production use.")
+    weak_keys = {'', 'change-me', 'changeme', 'dev', 'secret'}
+    if not secret_key or secret_key.strip().lower() in weak_keys:
+        if os.environ.get('FLASK_ENV') == 'development' or os.environ.get('AUDIBLE_ALLOW_EPHEMERAL_KEY') == '1':
+            import secrets
+            secret_key = secrets.token_hex(32)
+            logging.getLogger(__name__).warning(
+                "No usable SECRET_KEY set; using a random key. Sessions reset on restart.")
+        else:
+            raise RuntimeError(
+                "SECRET_KEY is not set (or is a placeholder). Generate one with "
+                "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"` "
+                "and export it before starting. For local development set FLASK_ENV=development.")
     app.config['SECRET_KEY'] = secret_key
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+    # Behind a reverse proxy, trust X-Forwarded-* only when told how many hops to trust.
+    proxies = os.environ.get('TRUSTED_PROXIES', '').strip()
+    if proxies.isdigit() and int(proxies) > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        hops = int(proxies)
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
     app.config['ACCOUNTS_FILE'] = "config/accounts.json"
     app.config['DOWNLOADS_DIR'] = "downloads"
     app.config['LOCAL_LIBRARY_PATH'] = os.environ.get('LOCAL_LIBRARY_PATH', '')
@@ -45,6 +64,9 @@ def create_app():
     from utils.security import bootstrap_admin, install_security
     bootstrap_admin()
     app.extensions['login_attempts'] = install_security(app, csrf)
+
+    from utils.web_perf import install_web_perf
+    install_web_perf(app)
 
     @app.context_processor
     def household_identity():
@@ -77,6 +99,8 @@ def create_app():
     from routes.scheduler import scheduler_bp
     from routes.books import books_bp
     from routes.security import security_bp
+    from routes.household import household_bp
+    from routes.health import health_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -87,9 +111,20 @@ def create_app():
     app.register_blueprint(scheduler_bp)
     app.register_blueprint(books_bp)
     app.register_blueprint(security_bp)
+    app.register_blueprint(household_bp)
+    app.register_blueprint(health_bp)
 
     from utils.scheduler import init_scheduler
     init_scheduler(app)
+
+    import atexit
+
+    def _stop_scheduler():
+        scheduler = getattr(app, 'scheduler', None)
+        if scheduler is not None and getattr(scheduler, 'running', False):
+            scheduler.shutdown(wait=False)
+
+    atexit.register(_stop_scheduler)
 
     # CSRF protection is now enabled for all routes by default
     # Audible posts the OAuth result outside our page session, so only those

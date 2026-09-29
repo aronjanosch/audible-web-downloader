@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, current_app, render_template, redirect, url_for
+from flask import Blueprint, request, jsonify, session, current_app, Response, render_template, redirect, url_for
 import asyncio
 import json
 import os
@@ -11,7 +11,7 @@ from utils.constants import get_account_auth_dir, get_auth_file_path
 from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
 from utils.errors import AccountNotFoundError, ValidationError, AuthenticationError, success_response, error_response
 from utils.account_manager import get_account_or_404
-from utils.library_cache import get_cached_library, write_library_cache
+from utils.library_cache import get_cached_library, write_library_cache, cache_stamp, merged_get, merged_put
 from utils.security import current_user, require_member_account
 from utils.token_lifecycle import load_authenticator, probe_authenticator
 
@@ -167,6 +167,16 @@ def fetch_all_libraries():
 
     force = request.args.get('force', '').lower() in ('1', 'true', 'yes')
 
+    # Fast path: every account's cache is fresh and unchanged since the merged body was built.
+    merged_key = None
+    if not force:
+        stamps = [cache_stamp(name) for name, _ in authenticated]
+        if all(stamp is not None for stamp in stamps):
+            merged_key = tuple((name, stamp) for (name, _), stamp in zip(authenticated, stamps))
+            body = merged_get(merged_key)
+            if body is not None:
+                return Response(body, mimetype='application/json')
+
     async def _fetch_all():
         cached_results, to_fetch = [], []
         for name, data in authenticated:
@@ -211,6 +221,10 @@ def fetch_all_libraries():
         if owner and owner not in by_asin[asin]['account_names']:
             by_asin[asin]['account_names'].append(owner)
 
+    if merged_key is not None and not to_fetch:
+        response = jsonify({'success': True, 'library': list(by_asin.values())})
+        merged_put(merged_key, response.get_data())
+        return response
     return success_response({'library': list(by_asin.values())})
 
 

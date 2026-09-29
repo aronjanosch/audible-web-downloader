@@ -8,43 +8,24 @@
 
 {% block content %}
 
-<!-- ── Onboarding Wizard ── -->
+<!-- ── Onboarding Wizard (frame 1h) ── -->
 <div id="onboardingWizard" hidden>
-    <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-6">
 
-            <!-- Step indicator -->
-            <div class="step-indicator mb-4">
-                <div class="step-item active" id="stepItem1">
-                    <div class="step-circle" id="wizardCircle1">1</div>
-                    <div class="step-label">Add Account</div>
-                </div>
-                <div class="step-line" id="wizardLine1"></div>
-                <div class="step-item" id="stepItem2">
-                    <div class="step-circle" id="wizardCircle2">2</div>
-                    <div class="step-label">Authenticate</div>
-                </div>
-                <div class="step-line" id="wizardLine2"></div>
-                <div class="step-item" id="stepItem3">
-                    <div class="step-circle" id="wizardCircle3">3</div>
-                    <div class="step-label">Add Library</div>
-                </div>
+    <!-- Step 1: Add Account -->
+    <div id="wizardStep1" class="wizard-card">
+        <div class="wizard-bars" aria-hidden="true"><span class="current"></span><span></span><span></span></div>
+        <div class="eyebrow">Step 1 · Account</div>
+        <h1 class="wizard-title">Add your Audible account</h1>
+        <p class="wizard-lead">Give the account a name and pick the region of your Audible marketplace.</p>
+        <form id="wizardAddAccountForm" class="wizard-foot" style="margin-top:0;gap:18px" novalidate>
+            <div class="field">
+                <label for="wizardAccountName" class="form-label">Account name</label>
+                <input type="text" class="form-control" id="wizardAccountName" placeholder="e.g. Family account" required autofocus autocomplete="off">
             </div>
-
-            <!-- Step 1: Add Account -->
-            <div id="wizardStep1" class="app-card p-4">
-                <h4 class="mb-1"><i class="fas fa-user-circle me-2 text-primary"></i>Add your Audible account</h4>
-                <p class="text-muted mb-4">Enter a name and select the region for your Audible account.</p>
-                <form id="wizardAddAccountForm">
-                    <div class="mb-3">
-                        <label for="wizardAccountName" class="form-label fw-semibold">Account Name</label>
-                        <input type="text" class="form-control" id="wizardAccountName"
-                               placeholder="e.g., My Account" required autofocus autocomplete="off">
-                    </div>
-                    <div class="mb-4">
-                        <label for="wizardAccountRegion" class="form-label fw-semibold">Region</label>
-                        <select class="form-select" id="wizardAccountRegion" required>
-                            <option value="us">United States</option>
+            <div class="field">
+                <label for="wizardAccountRegion" class="form-label">Region</label>
+                <select class="form-select" id="wizardAccountRegion" required>
+                    <option value="us">United States</option>
                             <option value="uk">United Kingdom</option>
                             <option value="de">Germany</option>
                             <option value="fr">France</option>
@@ -55,202 +36,172 @@
                             <option value="jp">Japan</option>
                             <option value="es">Spain</option>
                             <option value="br">Brazil</option>
-                        </select>
-                    </div>
-                    <button type="button" class="btn btn-primary w-100" id="wizardSubmitAddAccount">
-                        <i class="fas fa-arrow-right me-2"></i>Continue
-                    </button>
-                </form>
+                </select>
             </div>
+            <button type="button" class="btn btn-primary btn-lg" id="wizardSubmitAddAccount">Continue</button>
+        </form>
+    </div>
 
-            <!-- Step 2: Authenticate -->
-            <div id="wizardStep2" class="app-card p-4" hidden>
-                <h4 class="mb-1"><i class="fas fa-key me-2 text-warning"></i>Login to Audible</h4>
-                <p class="text-muted mb-3">
-                    Account <strong id="wizardAccountName">—</strong> needs to be authenticated with Audible.
-                    You'll be redirected to the Amazon login page.
-                </p>
-                <div class="alert alert-info small">
-                    <i class="fas fa-info-circle me-2"></i>
-                    After logging in you'll be redirected back here automatically.
-                </div>
-                <button type="button" class="btn btn-warning w-100 mb-2" id="wizardLoginBtn">
-                    <i class="fas fa-sign-in-alt me-2"></i>Login to Audible
-                </button>
-                <button type="button" class="btn btn-link text-muted w-100 btn-sm" id="wizardSkipAuthBtn">
-                    Skip for now
-                </button>
-            </div>
-
-            <!-- Step 3: Add Library -->
-            <div id="wizardStep3" class="app-card p-4" hidden>
-                <h4 class="mb-1"><i class="fas fa-folder me-2 text-success"></i>Add a download library</h4>
-                <p class="text-muted mb-4">
-                    Choose where downloaded audiobooks will be saved.
-                    This should be a path accessible to Audiobookshelf.
-                </p>
-                <form id="wizardAddLibraryForm">
-                    <div class="mb-3">
-                        <label for="wizardLibraryName" class="form-label fw-semibold">Library Name</label>
-                        <input type="text" class="form-control" id="wizardLibraryName"
-                               placeholder="e.g., Audiobooks" required>
-                    </div>
-                    <div class="mb-4">
-                        <label for="wizardLibraryPath" class="form-label fw-semibold">Library Path</label>
-                        <input type="text" class="form-control font-monospace" id="wizardLibraryPath"
-                               placeholder="/media/audiobooks" required>
-                        <div class="form-text">Absolute path to the folder on your server</div>
-                    </div>
-                    <button type="submit" class="btn btn-success w-100 mb-2">
-                        <i class="fas fa-check me-2"></i>Save & Finish
-                    </button>
-                    <button type="button" class="btn btn-link text-muted w-100 btn-sm" id="wizardSkipLibraryBtn">
-                        Skip for now
-                    </button>
-                </form>
-            </div>
-
+    <!-- Step 2: Connect -->
+    <div id="wizardStep2" class="wizard-card" hidden>
+        <div class="wizard-bars" aria-hidden="true"><span class="done"></span><span class="current"></span><span></span></div>
+        <div class="eyebrow">Step 2 · Connect</div>
+        <h1 class="wizard-title">Sign in to Audible</h1>
+        <p class="wizard-lead">“<strong id="wizardConnectName">—</strong>” needs a one-time login with Amazon. You come back here afterwards.</p>
+        <div class="wizard-note">Your password never reaches this app. Only a revocable token is stored, and it stays on your server.</div>
+        <div class="wizard-foot">
+            <button type="button" class="btn btn-accent btn-lg" id="wizardLoginBtn">Continue to Amazon</button>
+            <button type="button" class="wizard-skip" id="wizardSkipAuthBtn">Skip for now</button>
         </div>
+    </div>
+
+    <!-- Step 3: Add Library -->
+    <div id="wizardStep3" class="wizard-card" hidden>
+        <div class="wizard-bars" aria-hidden="true"><span class="done"></span><span class="done"></span><span class="current"></span></div>
+        <div class="eyebrow">Step 3 · Library</div>
+        <h1 class="wizard-title">Choose where books go</h1>
+        <p class="wizard-lead">Pick the folder for downloaded audiobooks. It should be a path Audiobookshelf can read.</p>
+        <form id="wizardAddLibraryForm" class="wizard-foot" style="margin-top:0;gap:18px">
+            <div class="field">
+                <label for="wizardLibraryName" class="form-label">Library name</label>
+                <input type="text" class="form-control" id="wizardLibraryName" placeholder="e.g. Audiobooks" required>
+            </div>
+            <div class="field">
+                <label for="wizardLibraryPath" class="form-label">Library path</label>
+                <input type="text" class="form-control font-monospace" id="wizardLibraryPath" placeholder="/media/audiobooks" required>
+                <div class="form-text">Absolute path to the folder on your server</div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg">Save and finish</button>
+            <button type="button" class="wizard-skip" id="wizardSkipLibraryBtn">Skip for now</button>
+        </form>
     </div>
 </div>
 
 <!-- ── Welcome (no authenticated accounts) ── -->
 <div id="welcomeMessage" class="empty-state" hidden>
-    <i class="fas fa-headphones"></i>
+    <i class="fas fa-headphones" aria-hidden="true"></i>
     <h4>No accounts yet</h4>
     <p>Add and authenticate an Audible account to get started.</p>
 </div>
 
-<!-- ── Library UI ── -->
+<!-- ── Library UI (frame 1a) ── -->
 <div id="libraryContent" hidden>
 
-    <!-- Library header row -->
-    <div class="library-header mb-3">
-        <!-- Refresh -->
-        <button class="btn btn-sm btn-outline-secondary" id="refreshLibraryBtn" hidden>
-            <i class="fas fa-sync me-1"></i>Refresh
-        </button>
-
-        <div class="header-spacer"></div>
-
-        <!-- Download destination -->
-        <div class="download-to-group" id="downloadToSection" hidden>
-            <label><i class="fas fa-folder me-1"></i>Download to:</label>
-            <div class="input-group input-group-sm" style="width:auto">
-                <select class="form-select form-select-sm" id="downloadLibrarySelect" aria-label="Download to library" style="min-width:150px">
+    <div class="lib-head">
+        <div>
+            <h1 class="page-title">Library</h1>
+            <div class="page-sub" id="librarySub" aria-live="polite">&nbsp;</div>
+        </div>
+        <div class="actions">
+            <div class="save-to" id="downloadToSection" hidden>
+                <span>Save to</span>
+                <select id="downloadLibrarySelect" aria-label="Download to library">
                     <option value="">Select library…</option>
                 </select>
-                <button class="btn btn-outline-secondary" type="button" id="syncLibraryBtn" title="Sync library state">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
+                <button class="icon-btn" type="button" id="syncLibraryBtn" title="Rescan folder for downloaded books" aria-label="Rescan folder for downloaded books"><i class="fas fa-folder-open" aria-hidden="true"></i></button>
             </div>
+            <button class="chip-btn strong" id="refreshLibraryBtn" type="button" hidden>↻ Sync</button>
         </div>
     </div>
 
-    <!-- Search & Filter bar -->
-    <div class="search-filter-bar mb-3">
-        <div class="search-row">
-            <!-- Search input -->
-            <div class="search-input-wrapper">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" placeholder="Search books by title or author…">
+    <div class="lib-toolbar">
+        <div class="lib-search-row">
+            <label class="lib-search">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="search" id="searchInput" placeholder="Search title, author, narrator or ASIN" aria-label="Search library" autocomplete="off">
+            </label>
+            <div class="seg view-switcher" role="group" aria-label="View">
+                <button type="button" class="active" id="cardViewBtn" aria-pressed="true">Grid</button>
+                <button type="button" id="listViewBtn" aria-pressed="false">List</button>
+                <button type="button" id="seriesViewBtn" aria-pressed="false">Series</button>
             </div>
-
-            <!-- Filter toggle -->
-            <button class="btn btn-sm btn-outline-secondary filter-toggle" id="filterToggleBtn">
-                <i class="fas fa-sliders-h me-1"></i>Filters
-                <span class="filter-active-count" id="filterActiveCount" style="display:none">0</span>
-            </button>
-
-            <!-- View switcher -->
-            <div class="btn-group view-switcher btn-group-sm">
-                <button type="button" class="btn active" id="cardViewBtn" title="Grid view">
-                    <i class="fas fa-th-large"></i>
-                </button>
-                <button type="button" class="btn" id="listViewBtn" title="List view">
-                    <i class="fas fa-list"></i>
-                </button>
-            </div>
+            <select class="sort-select" id="sortSelect" aria-label="Sort by">
+                <option value="">Recently added</option>
+                <option value="title">Title A–Z</option>
+                <option value="author">Author A–Z</option>
+                <option value="release">Release date</option>
+                <option value="length">Longest first</option>
+            </select>
         </div>
 
-        <!-- Controls row -->
-        <div class="controls-row mt-1">
-            <span class="book-count-text" id="bookCount"></span>
-            <div class="controls-spacer"></div>
-            <button class="btn btn-sm btn-outline-primary" id="selectAllVisibleBtn">
-                <i class="fas fa-check-double me-1"></i>Select All
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" id="clearSelectionBtn">
-                <i class="fas fa-times me-1"></i>Clear
-            </button>
+        <div class="lib-filter-row">
+            <div id="statusTabs" class="tabs" role="tablist" aria-label="Status"></div>
+            <span class="filter-sep" aria-hidden="true"></span>
+            <select class="chip-select" id="accountFilter" aria-label="Account" hidden><option value="">Account</option></select>
+            <select class="chip-select" id="authorFilter" aria-label="Author"><option value="">Author</option></select>
+            <select class="chip-select" id="seriesFilter" aria-label="Series"><option value="">Series</option></select>
+            <select class="chip-select" id="languageFilter" aria-label="Language"><option value="">Language</option></select>
+            <button class="link-btn" id="filterToggleBtn" type="button" aria-expanded="false" aria-controls="filterTray">More filters <span class="filter-count" id="filterActiveCount" style="display:none">0</span></button>
+            <button class="link-btn strong spacer" id="selectAllNewBtn" type="button">Select all new</button>
         </div>
 
-        <!-- Collapsible filter tray -->
         <div class="filter-tray" id="filterTray" hidden>
-            <div class="filter-tray-grid">
-                <select class="form-select form-select-sm" id="accountFilter" hidden>
-                    <option value="">All Accounts</option>
-                </select>
-                <select class="form-select form-select-sm" id="authorFilter">
-                    <option value="">All Authors</option>
-                </select>
-                <select class="form-select form-select-sm" id="seriesFilter">
-                    <option value="">All Series</option>
-                </select>
-                <select class="form-select form-select-sm" id="languageFilter">
-                    <option value="">All Languages</option>
-                </select>
-                <select class="form-select form-select-sm" id="narratorFilter">
-                    <option value="">All Narrators</option>
-                </select>
-                <select class="form-select form-select-sm" id="publisherFilter">
-                    <option value="">All Publishers</option>
-                </select>
-                <select class="form-select form-select-sm" id="releaseYearFilter">
-                    <option value="">All Years</option>
-                </select>
-            </div>
-            <div class="filter-tray-footer">
-                <div class="form-check mb-0">
-                    <input class="form-check-input" type="checkbox" id="hideDownloadedFilter">
-                    <label class="form-check-label small text-muted" for="hideDownloadedFilter">
-                        Hide already downloaded
-                    </label>
-                </div>
-                <button class="btn btn-sm btn-link text-muted p-0" id="clearFiltersBtn">
-                    Clear filters
-                </button>
-            </div>
+            <select class="chip-select" id="narratorFilter" aria-label="Narrator"><option value="">Narrator</option></select>
+            <select class="chip-select" id="publisherFilter" aria-label="Publisher"><option value="">Publisher</option></select>
+            <select class="chip-select" id="releaseYearFilter" aria-label="Year"><option value="">Year</option></select>
+            <label>
+                <input class="form-check-input" type="checkbox" id="hideDownloadedFilter">
+                Hide already downloaded
+            </label>
+            <button class="link-btn" id="clearFiltersBtn" type="button">Clear filters</button>
         </div>
+    </div>
+
+    <div class="lib-count">
+        <span id="bookCount" aria-live="polite"></span>
+        <button class="link-btn" id="selectAllVisibleBtn" type="button" style="height:auto">Select all visible</button>
     </div>
 
     <!-- Loading -->
     <div id="loadingSpinner" class="loading-state" hidden>
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading…</span>
-        </div>
+        <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div>
         <p class="mt-3 text-muted">Loading your library…</p>
     </div>
 
-    <!-- Book grid -->
-    <div id="libraryGrid" class="row g-3"></div>
-
-    <!-- Book list -->
+    <div id="libraryGrid"></div>
     <div id="libraryList" style="display:none"></div>
+    <div id="librarySeries" style="display:none"></div>
 
-    <!-- Empty state -->
     <div id="noBooksMessage" class="empty-state" hidden>
-        <i class="fas fa-book"></i>
+        <i class="fas fa-book" aria-hidden="true"></i>
         <h4>No books found</h4>
-        <p id="noBooksSubtext">Click "Load Library" to fetch your audiobooks, or adjust your filters.</p>
+        <p id="noBooksSubtext">Adjust your filters, or sync to fetch your audiobooks.</p>
     </div>
-
 </div>
 
-<!-- ── Floating Download Button ── -->
-<button id="downloadBtn" class="btn-fab" hidden>
-    <i class="fas fa-download me-2"></i>Download
-</button>
+<!-- ── Floating selection bar ── -->
+<div class="selection-bar" id="selectionBar" hidden role="region" aria-label="Selection">
+    <b id="selectionCount">0 selected</b>
+    <span class="dim est" id="selectionEstimate"></span>
+    <button type="button" class="clear" id="clearSelectionBtn">Clear</button>
+    <button type="button" id="downloadBtn" class="btn-fab">Download</button>
+</div>
+
+<!-- ── Duplicate detected (frame 1c) ── -->
+<div class="modal fade" id="duplicateModal" tabindex="-1" aria-labelledby="dupTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="dup-step" id="dupStep" hidden></div>
+            <div class="dup-head">
+                <div class="dup-cover" id="dupCover" aria-hidden="true"></div>
+                <div>
+                    <h2 class="dup-title" id="dupTitle">Already in your household</h2>
+                    <p class="dup-text" id="dupText"></p>
+                </div>
+            </div>
+            <dl class="dup-box">
+                <div><dt>Location</dt><dd class="mono" id="dupLocation">—</dd></div>
+                <div><dt>Added</dt><dd id="dupAdded">—</dd></div>
+                <div id="dupAbsRow"><dt>Audiobookshelf</dt><dd id="dupAbs">—</dd></div>
+            </dl>
+            <div class="dup-actions">
+                <button type="button" class="btn btn-primary" id="dupSkipBtn">Skip</button>
+                <button type="button" class="btn btn-outline-secondary" id="dupKeepBtn">Download a second copy anyway</button>
+            </div>
+            <label class="dup-always"><input type="checkbox" id="dupAlways"> Always skip household duplicates</label>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 

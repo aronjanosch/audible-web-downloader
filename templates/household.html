@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Household · Audible Downloader{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/household.css') }}">{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Household</h1>
+        <div class="page-sub" id="hhSummary" aria-live="polite">Loading…</div>
+    </div>
+    <div class="actions">
+        <button type="button" class="btn btn-primary" id="hhInviteBtn">Invite someone</button>
+    </div>
+</div>
+
+<div class="page-body hh-grid">
+    <div class="hh-main">
+        <div class="eyebrow">Needs attention</div>
+        <div id="hhAttention" class="hh-stack"></div>
+        <div class="eyebrow hh-gap">Members</div>
+        <div id="hhMembers" class="hh-members"></div>
+    </div>
+    <aside>
+        <div class="eyebrow hh-activity-label">Activity</div>
+        <div class="panel hh-activity" id="hhActivity" role="feed" aria-label="Recent household activity"></div>
+    </aside>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/household.js') }}"></script>
+{% endblock %}

@@ -1,28 +1,22 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-*.egg
-
-# Virtual environments
-venv/
-env/
-ENV/
-.venv
-
-# IDE
+# VCS / CI / editor
+.git/
+.github/
+.gitignore
 .vscode/
 .idea/
 *.swp
-*.swo
 *~
 
-# Data directories (will be mounted as volumes)
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Runtime state — always mounted as volumes, never baked into an image
 config/
 downloads/
 library/
@@ -30,24 +24,19 @@ library_data/
 .audible_*/
 .env
 .env.*
+!.env.example
 *.db
 *.db-shm
 *.db-wal
+accounts.json
+libraries.json
+settings.json
 
-# Git
-.git/
-.gitignore
-
-# Documentation
+# Not needed at runtime
+tests/
+scripts/
+docs/
 *.md
-CLAUDE.md
-GEMINI.md
-plan.md
-IMPLEMENTATION_SUMMARY.md
-
-# Tests
-test_*.py
-*_test.py
-
-# Lock files
-# uv.lock is intentionally included — required for reproducible Docker builds
+compose*.yml
+docker-compose*.yml
+Dockerfile

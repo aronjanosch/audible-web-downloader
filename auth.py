@@ -137,6 +137,7 @@ class AudibleAuth:
                         'length_mins': runtime_mins,
                         'release_date': release_date,
                         'release_year': release_year,
+                        'purchase_date': item.get('purchase_date', ''),
                         'publisher': item.get('publisher_name', ''),
                         'series': series_info,  # String for UI display
                         'series_data': series_data,  # Full list structure with sequence numbers

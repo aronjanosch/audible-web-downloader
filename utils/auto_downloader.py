@@ -161,6 +161,9 @@ def run_auto_download(account_name: str, region: str, rules: list, default_libra
 
         # Store ownership before considering downloads. A shared purchase belongs to
         # every Audible account that returned it, even if only one copy is needed.
+        from utils.db import get_db
+        known_asins = {row['asin'] for row in get_db().execute(
+            "SELECT asin FROM account_books WHERE account_name=?", (account_name,))}
         record_purchases(account_name, library)
         if not downloads_enabled:
             _update_last_run(config_manager, account_name, "Purchases recorded; automatic downloads disabled")
@@ -171,7 +174,6 @@ def run_auto_download(account_name: str, region: str, rules: list, default_libra
         mark_missing_downloads({book['asin'] for book in library if book.get('asin')})
 
         # Determine which ASINs are already downloaded (authoritative source: books table)
-        from utils.db import get_db
         from app.models import BookStatus
         db = get_db()
         converted_asins = {
@@ -183,6 +185,14 @@ def run_auto_download(account_name: str, region: str, rules: list, default_libra
         }
 
         new_books = [b for b in library if b.get('asin') and b['asin'] not in converted_asins]
+
+        # A title this account only just got, but the household already has on disk,
+        # is a duplicate we avoided downloading again.
+        from utils.events import record_duplicate_avoided
+        for book in library:
+            asin = book.get('asin')
+            if asin and asin not in known_asins and asin in converted_asins:
+                record_duplicate_avoided(account_name, asin, book.get('title'))
 
         if not new_books:
             logger.info("Auto-download: no new books for '%s'", account_name)
@@ -231,6 +241,10 @@ def run_auto_download(account_name: str, region: str, rules: list, default_libra
             )
             try:
                 claimed = claim_downloads(books)
+                claimed_asins = {b['asin'] for b in claimed}
+                for book in books:
+                    if book.get('asin') not in claimed_asins:
+                        record_duplicate_avoided(account_name, book['asin'], book.get('title'))
                 if not claimed:
                     download_counts.append(f"{lib_name}: already claimed")
                     continue

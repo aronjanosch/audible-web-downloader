@@ -1,285 +1,112 @@
-# Audible Book Downloader
+# Audible Web Downloader
 
-## Household sign in and first start
+A self-hosted web app that lets a household pool their **Audible purchases into one shared
+audiobook library**. Family and friends connect their own Audible account through an invite link;
+the app downloads, decrypts and organizes their books into a folder that
+[Audiobookshelf](https://www.audiobookshelf.org/) (or Plex) serves.
 
-Set a long random `SECRET_KEY` before starting the app. For Docker Compose, put
-`SECRET_KEY=<a random value>` in a private `.env` file (which is ignored by Git),
-then run `docker compose pull && docker compose up -d`. A quick way to generate one is
-`python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+> **Scope.** This is a private backup tool for books you (or your household) have already bought.
+> It is not a redistribution or piracy service, and contributions that make it one will be declined.
+> You are responsible for complying with Audible's terms and the copyright law where you live.
 
-On first boot, the app creates an admin. If `ADMIN_PASSWORD` is unset, read the
-random initial credentials from `config/initial-admin-credentials.json` on the
-host (mode 0600); remove that file after signing in and storing the password
-privately. You can set `ADMIN_USERNAME` and `ADMIN_PASSWORD` before first boot
-to supply your own credentials instead, then remove `ADMIN_PASSWORD` from the
-environment. Existing Audible accounts, books and tokens remain in place. An
-admin can issue invites; each member creates a household password and manages
-their own Audible connection.
-
-Put the app behind HTTPS when exposing it publicly. Session cookies are Secure
-by default; set `SESSION_COOKIE_SECURE=0` only for local HTTP development.
-Keep `config/` private and backed up: it contains the database and Audible tokens.
-
-A simple cross-platform Flask web application for downloading and converting Audible audiobooks to M4B format.
+<!-- Screenshots: add PNGs under docs/screenshots/ (library, queue drawer, household, settings)
+     and embed them here, e.g. ![Library](docs/screenshots/library.png). Use placeholder names only. -->
 
 ## Features
 
-- 🔐 **Household sign in**: Private admin and member accounts; each member reconnects their own Audible account
-- 📚 **Library Management**: Browse and search your entire Audible library
-- ⬇️ **Batch Downloads**: Download multiple books at once
-- 🔄 **Format Conversion**: Automatically converts AAX to M4B format
-- 🏷️ **Metadata Preservation**: Maintains book metadata and covers
-- 🌍 **Multi-Region Support**: Supports all Audible regions worldwide
-- 🎨 **Modern UI**: Clean, responsive web interface
+- **Household accounts** – admin and member roles; each member manages only their own Audible account.
+- **Library** – grid / list / series views, status filters (new, downloaded, queued, duplicates), search by title, author, narrator or ASIN, one-click batch download with size estimate.
+- **Household-aware duplicates** – a book owned by several accounts is downloaded once.
+- **Automatic downloads** – new purchases from any linked account are detected and queued.
+- **Live queue** – progress with steps (download → decrypt → convert → tag → Audiobookshelf) in a drawer available on every page.
+- **Long-lived Audible tokens** – automatic refresh, expiry/revocation detection, member self-service reconnect. See [docs/token-lifecycle.md](docs/token-lifecycle.md).
+- **Audiobookshelf integration** – scan trigger, ASIN/title matching, status sync. See [docs/audiobookshelf.md](docs/audiobookshelf.md).
+- **M4B import** – bring existing files into the library with Audible metadata matching.
+- **Household overview** – token health, needs-attention list, activity feed.
+- **Responsive UI**, light and dark mode, all regions supported by Audible.
 
-## Prerequisites
+## Quickstart (Docker Compose)
 
-- Python 3.13 or higher
-- FFmpeg (for audio conversion)
-- uv (recommended) or pip for dependency management
+Requirements: Docker with Compose v2. A reverse proxy with HTTPS is needed for sign-in over the internet (see below).
 
-### Installing FFmpeg
-
-**Ubuntu/Debian:**
 ```bash
-sudo apt update
-sudo apt install ffmpeg
-```
-
-**macOS:**
-```bash
-brew install ffmpeg
-```
-
-**Windows:**
-Download from [FFmpeg official website](https://ffmpeg.org/download.html)
-
-## Installation
-
-1. **Clone the repository:**
-```bash
-git clone <repository-url>
+git clone https://github.com/aronjanosch/audible-web-downloader.git
 cd audible-web-downloader
-```
-
-2. **Install dependencies using uv (recommended):**
-```bash
-uv sync
-```
-
-Or using pip:
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-### Docker Deployment (Recommended for Production)
-
-1. **Pull and start the published container:**
-```bash
-docker compose pull
+cp .env.example .env
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"    # paste as SECRET_KEY in .env
+mkdir -p config downloads library library_data
+sudo chown -R 1000:1000 config downloads library library_data     # container runs as uid 1000
 docker compose up -d
 ```
 
-2. **Access the application:**
-```
-http://localhost:5505
-```
+Open <http://localhost:5505>. Get the generated admin credentials from
+`config/initial-admin-credentials.json` (or set `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env` before
+the first start), sign in, then **delete that file**. Add an Audible account, invite your household,
+and point Audiobookshelf at the `library/` folder.
 
-3. **View logs:**
-```bash
-docker compose logs -f
-```
+The app **will not start without a real `SECRET_KEY`**. To pull instead of build, use a tagged image:
+`AUDIBLE_IMAGE=ghcr.io/aronjanosch/audible-web-downloader:1.0.0` in `.env`.
 
-4. **Stop the container:**
-```bash
-docker compose down
-```
+Full deployment guide (reverse proxy snippets for Caddy and nginx, backup/restore, upgrades,
+troubleshooting): **[docs/deployment.md](docs/deployment.md)**.
 
-**Benefits of Docker deployment:**
-- Persistent configuration via mounted `config/` volume (includes auth tokens)
-- Persistent downloads via mounted `downloads/` volume
-- Easy updates: pull a tested GHCR image and restart the container
-- Isolated environment with all dependencies included
-- Simple backup: backup the `config/` directory (includes `audible.db`, `settings.json`, and `auth/`) and the `downloads/` folder
+## Configuration
 
-GitHub Actions runs the test suite before publishing branch and commit SHA tags
-to `ghcr.io/aronjanosch/audible-web-downloader`. Set `AUDIBLE_IMAGE` to a tested
-tag in your private `.env` when you need a specific version. Keep host-specific
-mounts, networks, proxy labels, and credentials in a Compose file outside this
-public repository.
+| Variable | Default | Meaning |
+|---|---|---|
+| `SECRET_KEY` | required | Signs session cookies. |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | `admin`, generated | First-boot admin only. |
+| `SESSION_COOKIE_SECURE` | `1` | Cookies are HTTPS-only. Set `0` for plain HTTP on a trusted LAN. |
+| `TRUSTED_PROXIES` | `0` | Reverse-proxy hops to trust for `X-Forwarded-*` (needed for per-IP login rate limiting). |
+| `LOG_LEVEL` | `INFO` | Credential-looking values are masked in logs. |
+| `TZ` | `UTC` | Timezone. |
+| `BIND_ADDRESS`, `PORT` | `127.0.0.1`, `5505` | Published address (Compose). |
+| `ABS_URL`, `ABS_API_TOKEN`, `ABS_LIBRARY_ID` | empty | Audiobookshelf (all three or none). |
 
-### Starting the Application (Local Development)
+Persistent data: `config/` (database, settings, **Audible tokens** – back this up, encrypted),
+`library/` (finished audiobooks), `downloads/` (temporary), `library_data/` (cache).
 
-1. **Run the Flask application:**
-```bash
-python run.py
-```
+## How Audible sign-in works
 
-Or using uv:
-```bash
-uv run python run.py
-```
+Amazon's login happens on Amazon's own page; your password never reaches this app. The app stores
+a revocable device token under `config/auth/<account>/auth.json` (mode 0600). Access tokens are
+refreshed automatically (they last about an hour). If Amazon revokes a token, the account shows
+**Expired** in the household overview and the member reconnects from their own home page – no admin
+needed. Amazon documents refresh tokens as valid until the customer revokes them, with no fixed
+maximum lifetime; details and sources in [docs/token-lifecycle.md](docs/token-lifecycle.md).
 
-2. **Open your browser and navigate to:**
-```
-http://localhost:5505
-```
+## Security model
 
-### Using the Application
-
-1. **Add an Audible Account:**
-   - Enter an account name (e.g., "Main Account")
-   - Select your Audible region
-   - Click "Add Account"
-
-2. **Authenticate:**
-   - Select your account from the dropdown
-   - Click "Authenticate"
-   - Follow the authentication process in your browser
-   - Complete any verification steps (2FA, CAPTCHA, etc.)
-
-3. **Load Your Library:**
-   - After authentication, click "Refresh Library"
-   - Wait for your books to load
-
-4. **Download Books:**
-   - Search and browse your library
-   - Select books you want to download
-   - Choose download settings (cleanup AAX files)
-   - Click "Download Selected"
-
-### Audiobookshelf
-
-Mount the same library folder in Audiobookshelf and configure `ABS_URL`,
-`ABS_API_TOKEN`, and `ABS_LIBRARY_ID` to enable scan requests and status matching.
-See [Audiobookshelf integration](docs/audiobookshelf.md) for setup, matching
-rules, admin endpoints, and offline behavior.
-
-### Automatic household downloads
-
-Linked accounts are checked for new purchases on a schedule. Shared ASINs are
-downloaded once and each owner's purchase is retained for attribution. See
-[household automation](docs/household-automation.md) for routing and retry rules.
-
-### File Locations
-
-- **Downloads**: `./downloads/` directory
-- **Configuration**: `./config/` directory
-  - `audible.db` - SQLite database (accounts, libraries, download queue, book state, scan cache, library API cache, etc.)
-  - `settings.json` - Naming patterns, family-sharing invitation token, and other app settings
-  - `auth/{account_name}/auth.json` - Audible authentication tokens per account
-- **Legacy files** (optional): Older installs may still have `accounts.json`, `libraries.json`, or `library.json` under `config/`. They are not the live source of truth after migration; the app uses `audible.db`.
-
-## Supported Regions
-
-- 🇺🇸 United States (us)
-- 🇬🇧 United Kingdom (uk)
-- 🇩🇪 Germany (de)
-- 🇫🇷 France (fr)
-- 🇨🇦 Canada (ca)
-- 🇮🇹 Italy (it)
-- 🇦🇺 Australia (au)
-- 🇮🇳 India (in)
-- 🇯🇵 Japan (jp)
-- 🇪🇸 Spain (es)
-- 🇧🇷 Brazil (br)
-
-## Technical Details
-
-### Architecture
-
-- **Backend**: Flask with blueprints for modular organization
-- **Frontend**: Bootstrap 5 with vanilla JavaScript
-- **Authentication**: Audible's official Python library
-- **Audio Processing**: FFmpeg for AAX to M4B conversion
-- **Metadata**: Mutagen for audio file metadata
-
-### API Endpoints
-
-- `GET /` - Main application page
-- `GET /api/accounts` - Get all accounts
-- `POST /api/accounts` - Add new account
-- `POST /api/accounts/<name>/select` - Select account
-- `POST /api/auth/authenticate` - Authenticate account
-- `POST /api/auth/check` - Check authentication status
-- `POST /api/library/fetch` - Fetch user library
-- `POST /api/download/books` - Download selected books
-
-## Security Notes
-
-- This application uses your personal Audible credentials
-- Authentication files are stored locally and encrypted
-- No data is sent to external servers except Audible
-- Please respect copyright laws and terms of service
+Hashed passwords, 12-hour sessions, CSRF protection, login rate limiting, security headers,
+role checks on every route (asserted by tests), non-root container with read-only root filesystem
+support. See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md).
+Always serve it over HTTPS when it is reachable from the internet.
 
 ## Troubleshooting
 
-### Common Issues
+| Symptom | Fix |
+|---|---|
+| Exits with `SECRET_KEY is not set` | Set a random `SECRET_KEY` in `.env`. |
+| Sign-in reloads without an error | You are on plain HTTP with secure cookies: use HTTPS, or `SESSION_COOKIE_SECURE=0` on a LAN. |
+| `Permission denied` on `config/` | `sudo chown -R 1000:1000 config downloads library library_data`. |
+| Everyone gets "too many attempts" | Behind a proxy, set `TRUSTED_PROXIES=1`. |
+| Progress does not update | Disable response buffering for the app in your proxy (SSE). |
+| Account shows "Expired" | The member reconnects Audible from their home page. |
 
-1. **FFmpeg not found:**
-   - Ensure FFmpeg is installed and in your PATH
-   - Restart your terminal after installation
-
-2. **Authentication fails:**
-   - Check your internet connection
-   - Verify your Audible credentials
-   - Try clearing browser cookies and cache
-
-3. **Library doesn't load:**
-   - Ensure you're authenticated
-   - Check your Audible region selection
-   - Try refreshing the library
-
-4. **Downloads fail:**
-   - Check available disk space
-   - Ensure FFmpeg is working correctly
-   - Verify file permissions in downloads directory
-
-### Debug Mode
-
-Run with debug mode for detailed error messages:
-```bash
-FLASK_ENV=development python run.py
-```
+More in [docs/deployment.md](docs/deployment.md#9-troubleshooting). Health probe: `GET /healthz`.
 
 ## Development
 
-### Project Structure
-
-```
-audible-streamlit/
-├── app.py                 # Main Flask application
-├── auth.py               # Authentication module
-├── downloader.py         # Download and conversion logic
-├── run.py               # Application entry point
-├── requirements.txt     # Python dependencies
-├── routes/              # Flask blueprints
-│   ├── __init__.py
-│   ├── main.py         # Main routes
-│   ├── auth.py         # Authentication routes
-│   └── download.py     # Download routes
-├── templates/           # HTML templates
-│   ├── base.html       # Base template
-│   ├── index.html      # Main page
-│   └── errors/         # Error pages
-├── static/             # Static assets
-└── downloads/          # Downloaded books
+```bash
+uv sync                                                 # Python 3.13, uv.lock is the source of truth
+FLASK_ENV=development SESSION_COOKIE_SECURE=0 ./dev.sh  # http://localhost:5505
+uv run pytest && uv run ruff check . && node --test tests/dom_escaping.test.cjs
 ```
 
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+ffmpeg is required for AAX → M4B conversion. Architecture notes and guardrails (single gunicorn
+worker, additive migrations) are in [AGENTS.md](AGENTS.md); contribution guide in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-This project is for educational purposes. Please respect Audible's terms of service and copyright laws.
-
-## Disclaimer
-
-This software is provided as-is without any warranties. Use at your own risk and ensure compliance with applicable laws and terms of service.
+[MIT](LICENSE)

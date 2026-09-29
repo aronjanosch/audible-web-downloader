@@ -330,7 +330,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setupLibraryForm('addLibraryForm');
     setupLibraryForm('settingsAddLibraryForm');
     // Signed-out and invite pages render without the app navbar and must not call admin APIs.
-    if (document.querySelector('.app-navbar')) {
+    if (document.querySelector('.app-navbar, .topbar')) {
         loadLibraries();
         loadNamingSettings();
     }

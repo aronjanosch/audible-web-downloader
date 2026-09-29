@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _db_path: Optional[Path] = None
 _local = threading.local()
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA_DDL = """
 PRAGMA journal_mode=WAL;
@@ -132,6 +132,15 @@ CREATE TABLE IF NOT EXISTS abs_items (
     status TEXT NOT NULL,
     last_synced REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS account_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_name TEXT REFERENCES accounts(name) ON DELETE CASCADE,
+    kind         TEXT NOT NULL,
+    detail       TEXT,
+    created_at   REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_account_events_time ON account_events(created_at);
 """
 
 
@@ -165,6 +174,12 @@ def get_db() -> sqlite3.Connection:
         conn.execute("PRAGMA foreign_keys=ON")
         # Wait up to 30s when another thread/request holds the write lock (large batches + SSE, etc.)
         conn.execute("PRAGMA busy_timeout=30000")
+        # WAL + synchronous=NORMAL is crash-safe (may lose the last commit on power loss, never corrupts)
+        # and avoids an fsync per commit; the rest trades a little RAM for fewer page reads.
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA cache_size=-16384")      # 16 MiB page cache per connection
+        conn.execute("PRAGMA temp_store=MEMORY")
+        conn.execute("PRAGMA mmap_size=134217728")    # 128 MiB memory-mapped reads
         _local.conn = conn
     return conn
 
@@ -272,6 +287,19 @@ def migrate() -> None:
                     status TEXT NOT NULL,
                     last_synced REAL NOT NULL
                 );
+            """)
+
+        if current_version < 5:
+            # v4 → v5: additive activity log for the household overview
+            conn.executescript("""
+CREATE TABLE IF NOT EXISTS account_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_name TEXT REFERENCES accounts(name) ON DELETE CASCADE,
+    kind         TEXT NOT NULL,
+    detail       TEXT,
+    created_at   REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_account_events_time ON account_events(created_at);
             """)
 
         # PRAGMA assignments cannot use parameter binding.

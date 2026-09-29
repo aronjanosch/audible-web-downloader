@@ -1,6 +1,6 @@
 /**
  * onboarding.js — First-run setup wizard
- * Shown when no accounts exist. 3 steps: Add Account → Authenticate → Add Library
+ * Shown when no accounts exist. 3 steps: Add Account → Connect → Library (frame 1h)
  */
 
 const ONBOARDING_KEY = 'audible_onboarding_step';
@@ -59,22 +59,6 @@ function _showWizard(step) {
         if (el) el.hidden = n !== step;
     });
 
-    // Update step indicator circles and lines
-    [1, 2, 3].forEach(n => {
-        const circle = document.getElementById(`wizardCircle${n}`);
-        if (!circle) return;
-        const item = circle.closest('.step-item');
-        if (!item) return;
-        item.classList.toggle('active', n === step);
-        item.classList.toggle('done', n < step);
-    });
-    [1, 2].forEach(n => {
-        const line = document.getElementById(`wizardLine${n}`);
-        if (!line) return;
-        line.classList.toggle('done', n < step);
-        line.classList.toggle('active', n === step - 1);
-    });
-
     localStorage.setItem(ONBOARDING_KEY, String(step));
 }
 
@@ -100,7 +84,7 @@ document.addEventListener('onboarding:accountAdded', function (e) {
     _showWizard(2);
 
     // Update account name in step 2
-    const nameEl = document.getElementById('wizardAccountName');
+    const nameEl = document.getElementById('wizardConnectName');
     if (nameEl) nameEl.textContent = _onboardingAccountName;
 });
 
@@ -108,9 +92,9 @@ document.addEventListener('onboarding:accountAdded', function (e) {
 
 document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('wizardLoginBtn')?.addEventListener('click', function () {
-        const name = _onboardingAccountName || document.getElementById('wizardAccountName')?.textContent;
+        const name = _onboardingAccountName || document.getElementById('wizardConnectName')?.textContent;
         if (name) {
-            window.location.href = `/auth/login/${name}`;
+            window.location.href = `/auth/login/${encodeURIComponent(name)}`;
         }
     });
 

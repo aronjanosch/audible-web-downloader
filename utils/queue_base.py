@@ -48,6 +48,10 @@ class BaseQueueManager(ABC):
         self._queue: Dict = {}
         # Protects concurrent reads/writes from the download thread and SSE stream.
         self._lock = threading.RLock()
+        # Pause only gates *starting* work; jobs already holding a slot finish.
+        # Deliberately not persisted: the queue itself is in-memory, so a restart
+        # yields an empty, un-paused queue.
+        self._paused = False
 
         self._queue["_batch_info"] = {
             "current_batch_id": None,
@@ -58,6 +62,14 @@ class BaseQueueManager(ABC):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def is_paused(self) -> bool:
+        with self._lock:
+            return self._paused
+
+    def set_paused(self, paused: bool) -> None:
+        with self._lock:
+            self._paused = bool(paused)
 
     def get_all_items(self) -> Dict:
         """Return a snapshot of all queue items (excluding batch metadata)."""

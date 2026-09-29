@@ -86,10 +86,10 @@ def bootstrap_admin() -> None:
     if conn.execute("SELECT 1 FROM users WHERE role='admin' LIMIT 1").fetchone():
         return
     from utils.constants import CONFIG_DIR
-    username = os.environ.get("ADMIN_USERNAME", "admin")
+    username = os.environ.get("ADMIN_USERNAME") or "admin"
     if conn.execute("SELECT 1 FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone():
         username = "household-owner"
-    password = os.environ.get("ADMIN_PASSWORD")
+    password = os.environ.get("ADMIN_PASSWORD") or None  # compose passes "" when unset
     if password is None:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         path = CONFIG_DIR / "initial-admin-credentials.json"
@@ -126,7 +126,7 @@ def install_security(app, csrf):
     @app.before_request
     def guard_request():
         endpoint = request.endpoint or ""
-        if endpoint == "static":
+        if endpoint in {"static", "health.healthz"}:
             return None
         if endpoint in {"security.login", "security.login_page"}:
             if request.method == "POST":

@@ -103,6 +103,55 @@ def clear_completed_downloads():
     return success_response({'cleared': len(to_clear)})
 
 
+@download_bp.route('/api/download/pause', methods=['POST'])
+def pause_downloads():
+    """Stop starting queued downloads; jobs already running finish."""
+    DownloadQueueManager().set_paused(True)
+    return success_response({'paused': True})
+
+
+@download_bp.route('/api/download/resume', methods=['POST'])
+def resume_downloads():
+    DownloadQueueManager().set_paused(False)
+    return success_response({'paused': False})
+
+
+@download_bp.route('/api/download/retry/<asin>', methods=['POST'])
+def retry_download(asin):
+    """Re-queue a failed download using the context stored on its queue row."""
+    import threading
+
+    queue_manager = DownloadQueueManager()
+    item = queue_manager.get_download(asin)
+    if not item or item.get('state') != 'error':
+        return error_response('Only failed downloads can be retried', status_code=409)
+
+    account_name = item.get('downloaded_by_account')
+    library_path = item.get('library_path')
+    if not account_name or not library_path:
+        return error_response('Missing download context; start the download again from the library', status_code=409)
+
+    account_data, region = get_account_or_404(account_name)
+    library = get_cached_library(account_name) or []
+    book = next((b for b in library if b.get('asin') == asin), None)
+    if not book:
+        return error_response('Book not found in cached library; refresh the library and try again', status_code=404)
+
+    queue_manager.update_download(asin, {
+        'state': 'pending', 'error': None, 'error_type': None,
+        'progress_percent': 0, 'downloaded_bytes': 0, 'speed': 0, 'eta': 0,
+    })
+
+    def run():
+        try:
+            asyncio.run(download_books(account_name, region, [book], library_path=library_path))
+        except Exception as exc:  # the row carries the failure; never crash the thread silently
+            queue_manager.update_download(asin, {'state': 'error', 'error': str(exc), 'error_type': type(exc).__name__})
+
+    threading.Thread(target=run, name=f'retry-{asin}', daemon=True).start()
+    return success_response({'asin': asin, 'state': 'pending'})
+
+
 @download_bp.route('/api/download/status/<asin>')
 def download_status_asin(asin):
     """API endpoint to check download status for a specific book"""
@@ -158,7 +207,8 @@ def download_status():
         'active_downloads': stats['active'],
         'queued': stats['queued'],
         'completed': stats['completed'],
-        'failed': stats['failed']
+        'failed': stats['failed'],
+        'paused': stats.get('paused', False),
     })
 
 @download_bp.route('/api/library/sync', methods=['POST'])
@@ -253,6 +303,7 @@ def download_progress_stream():
                 update = {
                     'downloads': progress_data,
                     'stats': stats,
+                    'paused': queue_manager.is_paused(),
                     'timestamp': time.time()
                 }
 

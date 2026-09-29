@@ -48,7 +48,7 @@ def test_invited_member_sees_own_library(tmp_path, monkeypatch):
         assert page.status_code == 200
         assert 'Your books, at home.' in page.get_data(as_text=True)
         assert 'charlie' in page.get_data(as_text=True)
-        assert 'Pause downloads</button>' in page.get_data(as_text=True)
+        assert 'id="autoToggle" type="button" class="switch" role="switch" aria-checked="true"' in page.get_data(as_text=True)
         response = client.get('/api/library/all')
         assert response.status_code == 200
         assert response.json['library'][0]['title'] == 'First purchase'
@@ -73,7 +73,7 @@ def test_invited_member_sees_own_library(tmp_path, monkeypatch):
         }, headers={'X-CSRFToken': csrf})
         assert response.status_code == 200
         assert manager.get_account('charlie')['auto_download']['enabled'] is True
-        assert 'every 1 hour.' in client.get('/').get_data(as_text=True)
+        assert 'every 1 hour' in client.get('/').get_data(as_text=True)
     finally:
         conn = getattr(db._local, 'conn', None)
         if conn is not None:
