@@ -85,7 +85,7 @@ pydantic==2.12.3
     # via audible-web-downloader
 pydantic-core==2.41.4
     # via pydantic
-python-dotenv==1.1.1
+python-dotenv==1.2.3
     # via audible-web-downloader
 requests==2.32.5
     # via audible-web-downloader
