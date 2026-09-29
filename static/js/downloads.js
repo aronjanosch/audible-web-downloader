@@ -10,6 +10,8 @@ let _sseReconnectAttempt = 0;
 // ── SSE Connection ──
 
 function connectSSE() {
+    // The progress stream is admin-only; signed-out, invite and member pages must not retry a 401/403.
+    if (document.body.dataset.role !== 'admin') return;
     if (_eventSource) { _eventSource.close(); _eventSource = null; }
 
     _eventSource = new EventSource('/api/download/progress-stream');
@@ -66,6 +68,7 @@ function _updateDownloadBar(downloads, stats) {
     if (hasActivity) {
         document.documentElement.style.setProperty('--download-bar-height', '44px');
         bar.classList.add('visible');
+        bar.inert = false;
 
         let totalSpeed = 0, maxEta = 0;
         Object.values(downloads).forEach(d => {
@@ -86,6 +89,7 @@ function _updateDownloadBar(downloads, stats) {
     } else {
         document.documentElement.style.setProperty('--download-bar-height', '0px');
         bar.classList.remove('visible');
+        bar.inert = true;
     }
 }
 

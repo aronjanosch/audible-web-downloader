@@ -78,7 +78,7 @@ Additional Cleanup:
   - Empty directory segments are removed from paths
 """
 
-SETTINGS_FILE = Path(__file__).parent / "config" / "settings.json"
+from utils.constants import SETTINGS_FILE
 
 # Concurrent download slots (Audible license + temp download + processing per slot)
 DEFAULT_MAX_CONCURRENT_DOWNLOADS = 3

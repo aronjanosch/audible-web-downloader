@@ -2,11 +2,12 @@
 Application-wide path constants and configuration values.
 Centralized location for all file system paths and magic numbers.
 """
+import os
 from pathlib import Path
 
 # Base directories
 BASE_DIR = Path(__file__).parent.parent
-CONFIG_DIR = BASE_DIR / "config"
+CONFIG_DIR = Path(os.environ.get("AUDIBLE_CONFIG_DIR") or BASE_DIR / "config")
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 LIBRARY_DATA_DIR = BASE_DIR / "library_data"
 

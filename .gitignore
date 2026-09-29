@@ -224,3 +224,5 @@ settings.json
 config/
 
 library/
+scripts/browser/node_modules/
+scripts/browser/out/

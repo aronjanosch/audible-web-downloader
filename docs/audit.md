@@ -1,4 +1,4 @@
-# v1 evidence audit — in progress
+# v1 evidence audit — in progress (updated 2026-09-29)
 
 The six numbered requirements in `GOAL.md` remain the completion gate. This is
 a current-state audit, not a claim that v1 is done.
@@ -29,6 +29,17 @@ a current-state audit, not a claim that v1 is done.
 - **Local gates:** `uv sync --locked --dev`, `uv run --no-sync python -m pytest -q`
   (34 passed), `python -m compileall`, `node --check` for the new ABS settings UI,
   `node --test tests/dom_escaping.test.cjs`, and `git diff --check` passed on 2026-09-28.
+- **Browser proxies (item 5):** `scripts/browser/checks.mjs` drives real Chrome against
+  `scripts/e2e_server.py` (fake data, external Audible OAuth faked) at 360px: 22/22 checks pass.
+  axe-core reports zero critical or serious violations on invite landing, login, member library
+  and admin `/`, `/settings`, `/downloads`, `/import`; no horizontal scroll at 360px on any of them;
+  keyboard-only onboarding (skip link, Tab order, visible focus, Enter submit) reaches the OAuth step;
+  invite link -> registration -> member sign-in -> own book visible works end to end; no failed
+  requests or page errors. Bugs found and fixed by this run: unnamed select/links, focusable
+  content in `aria-hidden`, dark-theme contrast, invalid `pattern` regex, admin-only SSE/API calls
+  from invite and member pages. Screenshots land in `scripts/browser/out/` (gitignored).
+- **Test isolation:** plain `uv run pytest` (34 passed) no longer depends on cwd or on the
+  developer's real `config/` (`AUDIBLE_CONFIG_DIR`, `tests/conftest.py`).
 - **Hosted CI and image:** The `test` and `image` jobs in
   `.github/workflows/ci.yml` passed on 2026-09-28. The image job published to
   GHCR and booted the image as UID 1000 before checking `/login`.
@@ -48,12 +59,8 @@ a current-state audit, not a claim that v1 is done.
 
 ## STILL OPEN
 
-- Browser accessibility run with zero critical violations, keyboard-only onboarding
-  walkthrough, and visual check at 360px. The computer-use browser inventory was
-  empty (`browsers: []`); opening the in-app browser returned “Browser is not
-  available: iab.”
-- Full browser end-to-end test from invite link through rendering the library.
 - Live expired/revoked Audible credential and member reconnect exercise.
 - Authenticated Audiobookshelf scan and reconciliation against a live server.
-- Visual refinement of the admin interface and browser verification of its phone
-  layout. The existing admin interface still uses the older Bootstrap structure.
+- Visual refinement of the admin interface: it passes the proxies above but still uses the older
+  Bootstrap structure. Moderate/minor axe findings remain (1-2 per page). Bootstrap/Font Awesome
+  load from CDNs.
