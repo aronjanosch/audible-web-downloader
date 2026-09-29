@@ -38,6 +38,11 @@ a current-state audit, not a claim that v1 is done.
   requests or page errors. Bugs found and fixed by this run: unnamed select/links, focusable
   content in `aria-hidden`, dark-theme contrast, invalid `pattern` regex, admin-only SSE/API calls
   from invite and member pages. Screenshots land in `scripts/browser/out/` (gitignored).
+- **Audiobookshelf against a real server:** `scripts/abs_live_check.py` ran on 2026-09-29 against
+  a real Audiobookshelf 2.37.0 (run from source, fake m4b, throwaway user; seedhost runs 2.36.1, so
+  this also covers a version difference). Scan accepted, item listed with its ASIN, reconciliation
+  produced `matched` (asin) and `pending`, and a wrong token (HTTP 401) or an unreachable server raised
+  `AudiobookshelfError` with stored state unchanged. Output: `LIVE ABS CHECK PASSED`.
 - **Test isolation:** plain `uv run pytest` (34 passed) no longer depends on cwd or on the
   developer's real `config/` (`AUDIBLE_CONFIG_DIR`, `tests/conftest.py`).
 - **Hosted CI and image:** The `test` and `image` jobs in
@@ -59,8 +64,12 @@ a current-state audit, not a claim that v1 is done.
 
 ## STILL OPEN
 
-- Live expired/revoked Audible credential and member reconnect exercise.
-- Authenticated Audiobookshelf scan and reconciliation against a live server.
+- Live expired/revoked Audible credential and member reconnect exercise. Needs a real member's
+  Audible login and a token that actually expires or is revoked; not run because it would process
+  real people's account data. To unlock: a member re-authenticates via the app's reconnect action
+  on a disposable/consented account and the outcome is observed.
+- Same live ABS check against the household's own server (seedhost): needs `ABS_API_TOKEN` and
+  `ABS_LIBRARY_ID` in its private `.env`.
 - Visual refinement of the admin interface: it passes the proxies above but still uses the older
   Bootstrap structure. Moderate/minor axe findings remain (1-2 per page). Bootstrap/Font Awesome
   load from CDNs.
