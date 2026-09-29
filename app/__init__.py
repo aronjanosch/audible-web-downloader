@@ -92,9 +92,10 @@ def create_app():
     init_scheduler(app)
 
     # CSRF protection is now enabled for all routes by default
-    # Selectively exempt public invitation endpoints
-    from routes.invite import add_account, login_callback, account_login_callback
-    csrf.exempt(add_account)
+    # Audible posts the OAuth result outside our page session, so only those
+    # callback endpoints are exempt. The invite account form originates here
+    # and must carry the normal CSRF token despite also having an invite token.
+    from routes.invite import login_callback, account_login_callback
     csrf.exempt(login_callback)
     csrf.exempt(account_login_callback)
     
