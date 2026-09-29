@@ -159,10 +159,12 @@ def test_login_next_rejects_external_redirect_shapes(household):
 def test_invite_creates_scoped_member_login(household, monkeypatch):
     _, client, _, _ = household
     monkeypatch.setattr("routes.invite.settings_manager.validate_invitation_token", lambda token: token == "valid-invite")
+    payload = {"account_name": "charlie", "region": "us", "username": "charlie", "password": "charlie-password-123"}
+    assert client.post("/invite/valid-invite/add-account", json=payload).status_code == 400
     headers = _csrf(client)
     response = client.post(
         "/invite/valid-invite/add-account",
-        json={"account_name": "charlie", "region": "us", "username": "charlie", "password": "charlie-password-123"},
+        json=payload,
         headers=headers,
     )
     assert response.status_code == 200
