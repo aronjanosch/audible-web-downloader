@@ -7,6 +7,7 @@ cd "$(dirname "$0")"
 
 PORT="${PORT:-5505}"
 export FLASK_ENV=development
+export SESSION_COOKIE_SECURE=0
 
 echo "Starting Audible Downloader on http://localhost:${PORT}"
 uv run python run.py

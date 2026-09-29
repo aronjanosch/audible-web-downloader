@@ -34,6 +34,12 @@
                     <i class="fas fa-robot me-2"></i>Auto-Download
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-audiobookshelf" data-bs-toggle="tab"
+                        data-bs-target="#pane-audiobookshelf" type="button" role="tab">
+                    Audiobookshelf
+                </button>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -67,18 +73,18 @@
                     <form id="settingsAddLibraryForm" class="mb-4">
                         <div class="row g-2 align-items-end">
                             <div class="col-sm-4">
-                                <label class="form-label small fw-semibold">Name</label>
+                                <label for="settingsLibraryName" class="form-label small fw-semibold">Name</label>
                                 <input type="text" class="form-control form-control-sm"
                                        id="settingsLibraryName" placeholder="e.g., Audiobooks" required>
                             </div>
                             <div class="col-sm-6">
-                                <label class="form-label small fw-semibold">Path</label>
+                                <label for="settingsLibraryPath" class="form-label small fw-semibold">Path</label>
                                 <input type="text" class="form-control form-control-sm font-monospace"
                                        id="settingsLibraryPath" placeholder="/media/audiobooks" required>
                             </div>
                             <div class="col-sm-2">
-                                <button type="submit" class="btn btn-primary btn-sm w-100">
-                                    <i class="fas fa-plus"></i>
+                                <button type="submit" class="btn btn-primary btn-sm w-100" aria-label="Add library">
+                                    <i class="fas fa-plus" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -149,12 +155,25 @@
                 <div class="app-card p-4 mb-3">
                     <h5 class="mb-1">Automatic Downloads</h5>
                     <p class="text-muted small mb-4">
-                        Polls each account's Audible library on a schedule and downloads any new purchases automatically.
+                        Checks each linked account for new purchases. Turn on automatic downloads to send new titles to a configured library; when off, purchases remain in the tracked book list.
                     </p>
 
                     <div id="autoDownloadAccountList">
                         <p class="text-muted small">Loading…</p>
                     </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="pane-audiobookshelf" role="tabpanel" aria-labelledby="tab-audiobookshelf">
+                <div class="app-card p-4 mb-3">
+                    <h2 class="h5">Audiobookshelf status</h2>
+                    <p class="text-muted small">Matching uses ASIN first, then a unique title and author. A scan can take time to finish in Audiobookshelf.</p>
+                    <p id="absSummary" role="status" aria-live="polite">Loading integration status…</p>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button id="absScanButton" type="button" class="btn btn-outline-primary btn-sm">Request scan</button>
+                        <button id="absSyncButton" type="button" class="btn btn-outline-secondary btn-sm">Refresh matches</button>
+                    </div>
+                    <ul id="absBookStatus" class="list-group" aria-label="Audiobookshelf book status"></ul>
                 </div>
             </div>
 
@@ -164,6 +183,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/audiobookshelf-settings.js') }}"></script>
 <script>
 // ── Auto-Download ──────────────────────────────────────────────
 let _autoDownloadData = {};
@@ -220,7 +240,7 @@ function _buildAccountCard(name, acc, cfg, libNames) {
     ).join('');
 
     const defaultLibOptions = ['', ...libNames].map(lib =>
-        `<option value="${lib}" ${lib === defaultLib ? 'selected' : ''}>${lib || '— skip unmatched books —'}</option>`
+        `<option value="${_escHtml(lib)}" ${lib === defaultLib ? 'selected' : ''}>${_escHtml(lib || '— skip unmatched books —')}</option>`
     ).join('');
 
     const card = document.createElement('div');
@@ -229,22 +249,24 @@ function _buildAccountCard(name, acc, cfg, libNames) {
     card.innerHTML = `
         <div class="d-flex align-items-center justify-content-between mb-3">
             <div>
-                <span class="fw-semibold">${name}</span>
-                <span class="text-muted small ms-2">${acc.region?.toUpperCase() || ''}</span>
+                <span class="fw-semibold">${_escHtml(name)}</span>
+                <span class="text-muted small ms-2">${_escHtml(acc.region?.toUpperCase() || '')}</span>
             </div>
             <div class="form-check form-switch mb-0">
-                <input class="form-check-input auto-dl-toggle" type="checkbox" role="switch"
-                       id="autoToggle_${name}" ${enabled ? 'checked' : ''}>
-                <label class="form-check-label small" for="autoToggle_${name}">Enabled</label>
+                <label class="form-check-label small">
+                    <input class="form-check-input auto-dl-toggle" type="checkbox" role="switch"
+                           ${enabled ? 'checked' : ''}> Enabled
+                </label>
             </div>
         </div>
 
         <div class="row g-2 mb-3">
             <div class="col-auto">
-                <label class="form-label small fw-semibold mb-1">Check every</label>
-                <select class="form-select form-select-sm auto-dl-interval" style="width:auto">
-                    ${intervalOptions}
-                </select>
+                <label class="form-label small fw-semibold mb-1">Check every
+                    <select class="form-select form-select-sm auto-dl-interval" style="width:auto">
+                        ${intervalOptions}
+                    </select>
+                </label>
             </div>
         </div>
 
@@ -258,10 +280,11 @@ function _buildAccountCard(name, acc, cfg, libNames) {
         </button>
 
         <div class="mb-3">
-            <label class="form-label small fw-semibold mb-1">Default library</label>
-            <select class="form-select form-select-sm auto-dl-default-lib" style="max-width:260px">
-                ${defaultLibOptions}
-            </select>
+            <label class="form-label small fw-semibold mb-1">Default library
+                <select class="form-select form-select-sm auto-dl-default-lib" style="max-width:260px">
+                    ${defaultLibOptions}
+                </select>
+            </label>
             <div class="text-muted" style="font-size:0.75rem;margin-top:3px">
                 Books not matched by any rule — leave empty to skip them
             </div>
@@ -275,8 +298,8 @@ function _buildAccountCard(name, acc, cfg, libNames) {
         </div>
 
         <div class="text-muted" style="font-size:0.75rem;">
-            Last run: <strong>${lastRun}</strong>${lastResult ? ' — ' + lastResult : ''}
-            ${nextRun ? `<span class="ms-3">Next: <strong>${nextRun}</strong></span>` : ''}
+            Last run: <strong>${_escHtml(lastRun)}</strong>${lastResult ? ' — ' + _escHtml(lastResult) : ''}
+            ${nextRun ? `<span class="ms-3">Next: <strong>${_escHtml(nextRun)}</strong></span>` : ''}
         </div>
     `;
 
@@ -370,10 +393,10 @@ function _renderRulesRows(container, accountName, libNames) {
         row.className = 'd-flex gap-2 mb-1 align-items-center';
 
         const fieldOptions = _routableFields.map(f =>
-            `<option value="${f}" ${f === rule.field ? 'selected' : ''}>${f}</option>`
+            `<option value="${_escHtml(f)}" ${f === rule.field ? 'selected' : ''}>${_escHtml(f)}</option>`
         ).join('');
         const libOptions = ['', ...libNames].map(lib =>
-            `<option value="${lib}" ${lib === rule.library_name ? 'selected' : ''}>${lib || '— select —'}</option>`
+            `<option value="${_escHtml(lib)}" ${lib === rule.library_name ? 'selected' : ''}>${_escHtml(lib || '— select —')}</option>`
         ).join('');
 
         row.innerHTML = `

@@ -43,6 +43,13 @@
 /* ── Base ── */
 *, *::before, *::after { box-sizing: border-box; }
 
+.skip-link { position: fixed; top: -100px; left: 1rem; z-index: 2000; padding: .7rem 1rem; background: #172d2b; color: #fff; border-radius: .5rem; }
+.skip-link:focus { top: 1rem; color: #fff; }
+:focus-visible { outline: 3px solid #c27312; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
 body {
   background-color: var(--color-bg);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -50,6 +57,7 @@ body {
   margin: 0;
   padding-top: var(--navbar-height);
 }
+body.page-solo { padding-top: 0; }
 
 /* ── Navbar ── */
 .app-navbar {
@@ -474,6 +482,12 @@ body {
 
 @media (max-width: 480px) {
   .navbar-account select { min-width: 120px; }
+  .app-navbar { padding-inline: .65rem; }
+  .navbar-right { gap: .2rem; }
+  .navbar-icon-btn { width: 38px; height: 38px; padding: .3rem; }
+  .download-pill { width: 38px; height: 38px; padding: 0; justify-content: center; }
+  #downloadNavLabel { display: none; }
+  .navbar-right form .navbar-icon-btn { width: auto; padding-inline: .35rem; font-size: .78rem; }
 }
 
 /* ── Dark mode (Bootstrap color mode + app tokens) ── */

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% set auto_config = account.auto_download if account else {} %}
+{% set interval_hours = auto_config.interval_hours|default(6, true)|int %}
+{% block title %}My books · Audible Downloader{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/member.css') }}">{% endblock %}
+{% block content %}
+<div class="member-shell">
+  <header class="member-header">
+    <a class="member-brand" href="/" aria-label="My books home">Audible <span>household</span></a>
+    <form action="{{ url_for('security.logout') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="member-signout" type="submit">Sign out</button>
+    </form>
+  </header>
+  <section class="member-hero" aria-labelledby="member-title">
+    <p class="member-eyebrow">{{ account_name }}</p>
+    <h1 id="member-title">Your books, at home.</h1>
+    <p>Your Audible purchases appear here when your connection is active. Your household keeps one library copy of a shared title.</p>
+    {% if not account or not account.authenticated %}
+    <div class="member-alert" role="status">Your Audible connection needs attention. <a href="{{ url_for('auth.start_login', account_name=account_name) }}">Connect Audible</a></div>
+    {% else %}
+    <div class="member-actions">
+      <a class="member-button" href="{{ url_for('auth.start_login', account_name=account_name) }}">Reconnect Audible</a>
+      <button id="refreshBooks" class="member-button member-button-secondary" type="button">Refresh books</button>
+    </div>
+    {% endif %}
+  </section>
+  <section class="member-automation" aria-labelledby="automation-title">
+    <div><h2 id="automation-title">New purchases</h2><p>We check for new books every {{ interval_hours }} {{ 'hour' if interval_hours == 1 else 'hours' }}. Automatic downloads use your household's configured library.</p></div>
+    <button id="autoToggle" type="button" class="member-button member-button-secondary">{{ 'Pause downloads' if auto_config.enabled else 'Enable downloads' }}</button>
+    <p id="autoStatus" role="status" aria-live="polite"></p>
+  </section>
+  <section class="member-library" aria-labelledby="library-title">
+    <div class="member-library-heading"><h2 id="library-title">My library</h2><span id="bookCount" aria-live="polite"></span></div>
+    <p id="libraryStatus" role="status" aria-live="polite">Loading your library…</p>
+    <ul id="memberBooks" class="member-grid" aria-label="Audible books"></ul>
+  </section>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  const accountName = {{ account_name|tojson }};
+  const autoConfig = {{ auto_config|tojson }};
+  const toggle = document.getElementById('autoToggle');
+  const autoStatus = document.getElementById('autoStatus');
+  function showAutomation() { toggle.textContent = autoConfig.enabled ? 'Pause downloads' : 'Enable downloads'; }
+  showAutomation();
+  toggle.addEventListener('click', async () => {
+    toggle.disabled = true;
+    autoStatus.textContent = 'Saving…';
+    try {
+      const enabled = !autoConfig.enabled;
+      const response = await apiCall(`/api/accounts/${encodeURIComponent(accountName)}/auto-download`, {
+        method: 'PUT', body: JSON.stringify({ ...autoConfig, enabled })
+      });
+      Object.assign(autoConfig, response.auto_download);
+      showAutomation();
+      autoStatus.textContent = enabled ? 'New purchases will download automatically.' : 'New purchases will still appear here without downloading.';
+    } catch (error) { autoStatus.textContent = error.message; }
+    finally { toggle.disabled = false; }
+  });
+  const list = document.getElementById('memberBooks');
+  const status = document.getElementById('libraryStatus');
+  const count = document.getElementById('bookCount');
+  async function load(force) {
+    status.hidden = false;
+    status.textContent = 'Loading your library…';
+    list.replaceChildren();
+    try {
+      const response = await fetch('/api/library/all' + (force ? '?force=true' : ''), {credentials: 'same-origin'});
+      if (!response.ok) throw new Error('Could not load your library. Please try again.');
+      const data = await response.json();
+      const books = data.library || [];
+      count.textContent = books.length + (books.length === 1 ? ' book' : ' books');
+      for (const book of books) {
+        const item = document.createElement('li');
+        item.className = 'member-book';
+        const title = document.createElement('h3');
+        title.textContent = book.title || 'Untitled book';
+        const author = document.createElement('p');
+        author.textContent = book.authors || 'Author unknown';
+        item.append(title, author);
+        list.append(item);
+      }
+      status.textContent = books.length ? '' : 'No books yet. Connect Audible, then refresh your library.';
+      status.hidden = !!books.length;
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  }
+  document.getElementById('refreshBooks')?.addEventListener('click', () => load(true));
+  load(false);
+})();
+</script>
+{% endblock %}

@@ -82,22 +82,6 @@ def load_authenticator(account_name: str, region: str) -> audible.Authenticator:
     Raises:
         AuthenticationError: If auth file doesn't exist or is invalid
     """
-    from utils.constants import get_auth_file_path
-    from utils.errors import AuthenticationError
-    
-    auth_file = get_auth_file_path(account_name)
-    
-    if not auth_file.exists():
-        raise AuthenticationError(
-            f"Account '{account_name}' is not authenticated",
-            details={'account_name': account_name}
-        )
-    
-    try:
-        auth = audible.Authenticator.from_file(auth_file)
-        return auth
-    except Exception as e:
-        raise AuthenticationError(
-            f"Failed to load authentication for account '{account_name}': {str(e)}",
-            details={'account_name': account_name, 'error': str(e)}
-        )
+    from utils.token_lifecycle import load_authenticator as load_token_authenticator
+
+    return load_token_authenticator(account_name)

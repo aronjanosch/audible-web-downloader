@@ -1,0 +1,79 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install Python and locked dependencies
+        run: uv sync --locked --dev
+      - name: Compile Python modules
+        run: uv run --no-sync python -m compileall -q app routes utils tests auth.py downloader.py importer.py library_scanner.py library_storage.py settings.py
+      - name: Test
+        run: uv run --no-sync python -m pytest -q
+      - name: Check browser code escaping
+        run: node --test tests/dom_escaping.test.cjs
+      - name: Verify patch whitespace
+        run: git diff --check
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test published image as service user
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p "$RUNNER_TEMP/audible-smoke-config"
+          chmod 0777 "$RUNNER_TEMP/audible-smoke-config"
+          image="ghcr.io/${{ github.repository }}:sha-${{ github.sha }}"
+          docker run -d --name audible-smoke --user 1000:1000 \
+            -e SECRET_KEY=ci-smoke-only -e ADMIN_PASSWORD=ci-password-123 \
+            -v "$RUNNER_TEMP/audible-smoke-config:/app/config" "$image"
+          trap 'docker rm -f audible-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if docker exec audible-smoke python -c "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:5505/login', timeout=2).status == 200"; then
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' audible-smoke)" != true ]; then
+              break
+            fi
+            sleep 1
+          done
+          docker logs audible-smoke
+          exit 1

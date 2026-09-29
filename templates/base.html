@@ -22,7 +22,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="{% if hide_sidebar %}page-solo{% endif %}">
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
 {% if not hide_sidebar %}
 <!-- ── Navbar ── -->
@@ -36,6 +37,10 @@
         </div>
 
         <div class="navbar-right">
+            {% if household_user and household_user.role == 'member' %}
+            <a href="{{ url_for('auth.start_login', account_name=household_user.account_name) }}" class="navbar-icon-btn" title="Reconnect Audible">Reconnect Audible</a>
+            {% endif %}
+            {% if household_user and household_user.role == 'admin' %}
             <!-- Download status pill -->
             <a href="/downloads" class="download-pill" id="downloadNavPill" title="View downloads">
                 <i class="fas fa-download"></i>
@@ -62,6 +67,11 @@
             <button type="button" class="navbar-icon-btn js-open-add-account-modal" id="addAccountBtn" title="Add Audible Account">
                 <i class="fas fa-user-plus"></i>
             </button>
+            {% endif %}
+            <form action="{{ url_for('security.logout') }}" method="post" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="navbar-icon-btn" title="Sign out">Sign out</button>
+            </form>
         </div>
     </div>
 </nav>
@@ -86,7 +96,7 @@
 {% endif %}
 
 <!-- ── Content ── -->
-<main class="app-main">
+<main class="app-main" id="main-content" tabindex="-1">
     {% block content %}{% endblock %}
 </main>
 
@@ -104,7 +114,7 @@
                 <h5 class="modal-title" id="addAccountModalLabel">
                     <i class="fas fa-user-plus me-2"></i>Add Audible Account
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="modalAddAccountForm">
@@ -151,7 +161,7 @@
                 <h5 class="modal-title">
                     <i class="fas fa-user-plus me-2"></i>Account Invitation Link
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-info">
@@ -198,7 +208,7 @@
                 <h5 class="modal-title">
                     <i class="fas fa-users me-2"></i>Family Sharing
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-info">
@@ -250,7 +260,7 @@
                 <h5 class="modal-title">
                     <i class="fas fa-folder-tree me-2"></i>Configure Naming Pattern
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="mb-3">
@@ -318,7 +328,9 @@
 <script>
 // ── Global init ──
 document.addEventListener('DOMContentLoaded', function() {
+    {% if household_user and not hide_sidebar %}
     loadAccounts();
+    {% endif %}
 });
 </script>
 

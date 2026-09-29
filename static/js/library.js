@@ -116,7 +116,7 @@ function renderLibrary() {
     if (filters.series)    books = books.filter(b => b.series === filters.series);
     if (filters.publisher) books = books.filter(b => b.publisher === filters.publisher);
     if (filters.year)      books = books.filter(b => b.release_year === filters.year);
-    if (filters.account)   books = books.filter(b => b.account_name === filters.account);
+    if (filters.account)   books = books.filter(b => (b.account_names || [b.account_name]).includes(filters.account));
     if (filters.hideDownloaded) books = books.filter(b => !libraryStateAsins.has(b.asin));
 
     _displayBooks(books);
@@ -173,21 +173,21 @@ function _createBookCard(book, selectedAsins) {
 
     const div = document.createElement('div');
     div.innerHTML = `
-        <div class="book-card${isSelected ? ' selected' : ''}${inLibrary ? ' in-library' : ''}" data-asin="${book.asin}" tabindex="0" role="checkbox" aria-checked="${isSelected}">
+        <div class="book-card${isSelected ? ' selected' : ''}${inLibrary ? ' in-library' : ''}" data-asin="${_esc(book.asin)}" tabindex="0" role="checkbox" aria-checked="${isSelected}">
             <div class="book-cover-wrap">
                 ${book.cover_url
-                    ? `<img src="${book.cover_url}" alt="${_esc(book.title)}" loading="lazy">`
+                    ? `<img src="${_esc(book.cover_url)}" alt="${_esc(book.title)}" loading="lazy">`
                     : `<div class="book-cover-placeholder"><i class="fas fa-headphones"></i></div>`}
                 ${inLibrary ? '<span class="book-in-library-chip">In Library</span>' : ''}
                 <div class="book-checkbox-wrap">
                     <input type="checkbox" class="form-check-input" ${isSelected ? 'checked' : ''} tabindex="-1" aria-hidden="true">
                 </div>
-                <div class="book-status-overlay" id="overlay_${book.asin}"></div>
+                <div class="book-status-overlay" id="overlay_${_esc(book.asin)}"></div>
             </div>
             <div class="book-card-body">
                 <div class="book-card-title">${_esc(book.title)}</div>
                 <div class="book-card-author">${_esc(book.authors || '')}</div>
-                ${isUnified && book.account_name ? `<div class="book-account-badge">${_esc(book.account_name)}</div>` : ''}
+                ${isUnified && book.account_name ? `<div class="book-account-badge">${_esc((book.account_names || [book.account_name]).join(', '))}</div>` : ''}
             </div>
         </div>
     `;
@@ -214,7 +214,7 @@ function _createBookListItem(book, selectedAsins) {
     item.innerHTML = `
         <input type="checkbox" class="form-check-input flex-shrink-0" ${isSelected ? 'checked' : ''} aria-hidden="true" tabindex="-1">
         ${book.cover_url
-            ? `<img src="${book.cover_url}" class="book-list-cover" alt="" loading="lazy">`
+            ? `<img src="${_esc(book.cover_url)}" class="book-list-cover" alt="" loading="lazy">`
             : `<div class="book-list-cover-placeholder"><i class="fas fa-headphones"></i></div>`}
         <div class="book-list-info">
             <div class="book-list-title">${_esc(book.title)}</div>
@@ -223,7 +223,7 @@ function _createBookListItem(book, selectedAsins) {
         </div>
         <div class="book-list-status">
             ${inLibrary ? '<span class="badge bg-success"><i class="fas fa-check"></i> In Library</span>' : ''}
-            ${isUnified && book.account_name ? `<span class="badge bg-secondary ms-1">${_esc(book.account_name)}</span>` : ''}
+            ${isUnified && book.account_name ? `<span class="badge bg-secondary ms-1">${_esc((book.account_names || [book.account_name]).join(', '))}</span>` : ''}
         </div>
     `;
 
@@ -290,7 +290,7 @@ function populateFilterDropdowns(books) {
     _populateSelect('publisherFilter',   unique('publisher'),    'All Publishers');
     _populateSelect('releaseYearFilter', unique('release_year').reverse(), 'All Years');
 
-    const accounts = [...new Set(books.map(b => b.account_name).filter(Boolean))].sort();
+    const accounts = [...new Set(books.flatMap(b => b.account_names || [b.account_name]).filter(Boolean))].sort();
     const accountFilterEl = document.getElementById('accountFilter');
     if (accountFilterEl) {
         const multiAccount = accounts.length > 1;
@@ -303,7 +303,11 @@ function _populateSelect(id, values, placeholder) {
     const select = document.getElementById(id);
     if (!select) return;
     const current = select.value;
-    select.innerHTML = `<option value="">${placeholder}</option>`;
+    select.replaceChildren();
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = placeholder;
+    select.appendChild(empty);
     values.forEach(v => {
         const opt = document.createElement('option');
         opt.value = v;
@@ -342,7 +346,7 @@ function selectAllVisible() {
     if (filters.series)    books = books.filter(b => b.series === filters.series);
     if (filters.publisher) books = books.filter(b => b.publisher === filters.publisher);
     if (filters.year)      books = books.filter(b => b.release_year === filters.year);
-    if (filters.account)   books = books.filter(b => b.account_name === filters.account);
+    if (filters.account)   books = books.filter(b => (b.account_names || [b.account_name]).includes(filters.account));
     if (filters.hideDownloaded) books = books.filter(b => !libraryStateAsins.has(b.asin));
 
     AppState.selectAll(books.map(b => b.asin));

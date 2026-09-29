@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import secrets
+import sqlite3
 from pathlib import Path
 from functools import wraps
 from auth import AudibleAuth
@@ -16,6 +17,8 @@ import audible
 from settings import settings_manager
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oauth_status
+from utils.security import create_user, login_user, require_member_account
+from utils.db import get_db
 
 invite_bp = Blueprint('invite', __name__)
 
@@ -69,6 +72,8 @@ def add_account(token):
 
     account_name = data.get('account_name')
     region = data.get('region', 'us')
+    username = data.get('username')
+    password = data.get('password')
 
     if not account_name:
         return jsonify({'error': 'Account name is required'}), 400
@@ -76,6 +81,12 @@ def add_account(token):
     # Validate account name format
     if not account_name.replace('_', '').replace('-', '').isalnum():
         return jsonify({'error': 'Account name can only contain letters, numbers, hyphens, and underscores'}), 400
+    if not username or not password:
+        return jsonify({'error': 'Household username and password are required'}), 400
+    if not 3 <= len(username) <= 80 or not username.replace('_', '').replace('-', '').isalnum() or len(password) < 12:
+        return jsonify({'error': 'Username must be 3–80 letters, numbers, hyphens or underscores; password must be at least 12 characters'}), 400
+    if get_db().execute('SELECT 1 FROM users WHERE username=? COLLATE NOCASE', (username,)).fetchone():
+        return jsonify({'error': 'Username already exists'}), 409
 
     accounts = config_manager.get_accounts()
 
@@ -88,12 +99,24 @@ def add_account(token):
         return jsonify({'error': f'Unsupported region: {region}'}), 400
 
     # Create account
-    accounts[account_name] = {
+    new_account = {
         "region": region,
-        "authenticated": False
+        "authenticated": False,
+        "auto_download": {"enabled": True, "interval_hours": 6, "rules": []},
     }
 
-    config_manager.save_accounts(accounts)
+    try:
+        config_manager.create_account(account_name, new_account)
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Account name already exists'}), 409
+    try:
+        user = create_user(username, password, 'member', account_name)
+    except (ValueError, sqlite3.IntegrityError):
+        # Account names are unique; this compensates a failed identity insert.
+        get_db().execute('DELETE FROM accounts WHERE name=?', (account_name,))
+        get_db().commit()
+        return jsonify({'error': 'Could not create household login'}), 409
+    login_user(user)
 
     return jsonify({
         'success': True,
@@ -106,6 +129,7 @@ def add_account(token):
 @validate_token
 def start_login(token, account_name):
     """Start the Audible login process for invitation"""
+    require_member_account(account_name)
     accounts = config_manager.get_accounts()
 
     if account_name not in accounts:
@@ -141,6 +165,7 @@ def login_page(token, session_id):
         return "Login session not found", 404
 
     session_data = invite_login_sessions[session_id]
+    require_member_account(session_data['account_name'])
 
     # Verify token matches
     if session_data.get('token') != token:
@@ -161,7 +186,10 @@ def login_page(token, session_id):
 @validate_token
 def login_callback(token, session_id):
     """Handle the OAuth callback URL from user"""
-    data = request.get_json()
+    if session_id not in invite_login_sessions:
+        return jsonify({'error': 'Login session not found'}), 404
+    require_member_account(invite_login_sessions[session_id]['account_name'])
+    data = request.get_json() or {}
     response_url = data.get('response_url')
 
     success, error, code = handle_oauth_callback(
@@ -181,6 +209,8 @@ def login_callback(token, session_id):
 @validate_token
 def login_status(token, session_id):
     """Check login status"""
+    if session_id in invite_login_sessions:
+        require_member_account(invite_login_sessions[session_id]['account_name'])
     # Get account_name from session for the redirect URL
     if session_id in invite_login_sessions:
         account_name = invite_login_sessions[session_id]['account_name']
@@ -203,6 +233,7 @@ def login_status(token, session_id):
 @validate_token
 def success_page(token, account_name):
     """Display success page after account is added"""
+    require_member_account(account_name)
     accounts = config_manager.get_accounts()
 
     if account_name not in accounts:
@@ -237,6 +268,9 @@ def validate_account_token(f):
         if not matching_account:
             return render_template('invite/invalid_token.html'), 403
 
+        if f.__name__ not in {'account_landing_page', 'account_claim'}:
+            require_member_account(matching_account)
+
         # Pass the account_name to the route handler
         return f(token, matching_account, *args, **kwargs)
     return decorated_function
@@ -249,8 +283,8 @@ def account_landing_page(token, account_name):
     accounts = config_manager.get_accounts()
     account_data = accounts[account_name]
 
-    # Check if already authenticated
-    if account_data.get('authenticated'):
+    # Legacy authenticated accounts may still need a household identity.
+    if get_db().execute('SELECT 1 FROM users WHERE account_name=?', (account_name,)).fetchone():
         return render_template('invite/account_already_authenticated.html',
                              account_name=account_name)
 
@@ -258,6 +292,26 @@ def account_landing_page(token, account_name):
                          token=token,
                          account_name=account_name,
                          region=account_data['region'])
+
+
+@invite_bp.route('/invite/account/<token>/claim', methods=['POST'])
+@validate_account_token
+def account_claim(token, account_name):
+    """Let the invited member establish their own login before Audible OAuth."""
+    data = request.get_json(silent=True) or {}
+    if get_db().execute('SELECT 1 FROM users WHERE account_name=?', (account_name,)).fetchone():
+        return jsonify({'error': 'This invitation was already claimed'}), 409
+    try:
+        user = create_user(data.get('username'), data.get('password'), 'member', account_name)
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Username already exists'}), 409
+    account = config_manager.get_account(account_name)
+    config_manager.update_account(account_name, {'pending_invitation_token': None})
+    login_user(user)
+    destination = ('main.index' if account.get('authenticated') else 'auth.start_login')
+    return jsonify({'success': True, 'auth_url': url_for(destination, **({'account_name': account_name} if destination == 'auth.start_login' else {}))})
 
 
 @invite_bp.route('/invite/account/<token>/auth/login')
@@ -358,10 +412,8 @@ def account_login_status(token, account_name, session_id):
 
     # If authentication successful, remove pending_invitation_token
     if response.get('success'):
-        accounts = config_manager.get_accounts()
-        if account_name in accounts:
-            accounts[account_name].pop('pending_invitation_token', None)
-            config_manager.save_accounts(accounts)
+        if config_manager.get_account(account_name):
+            config_manager.update_account(account_name, {'pending_invitation_token': None})
 
     return jsonify(response), code
 

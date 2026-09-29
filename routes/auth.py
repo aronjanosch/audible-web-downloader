@@ -12,6 +12,8 @@ from utils.oauth_flow import start_oauth_login, handle_oauth_callback, check_oau
 from utils.errors import AccountNotFoundError, ValidationError, AuthenticationError, success_response, error_response
 from utils.account_manager import get_account_or_404
 from utils.library_cache import get_cached_library, write_library_cache
+from utils.security import current_user, require_member_account
+from utils.token_lifecycle import load_authenticator, probe_authenticator
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -27,16 +29,15 @@ def authenticate():
         
         if not account_name:
             raise ValidationError('Account name is required')
+        require_member_account(account_name)
         
         account_data, region = get_account_or_404(account_name)
-        accounts = config_manager.get_accounts()
         
         # Run authentication asynchronously
         auth = asyncio.run(authenticate_account(account_name, region))
         
         if auth:
-            accounts[account_name]['authenticated'] = True
-            config_manager.save_accounts(accounts)
+            config_manager.update_account(account_name, {'authenticated': True})
             return success_response(message='Authentication successful')
         else:
             raise AuthenticationError('Authentication failed')
@@ -48,40 +49,26 @@ def authenticate():
 
 @auth_bp.route('/api/auth/check', methods=['POST'])
 def check_auth():
-    """API endpoint to check if an account is authenticated"""
+    """Probe Audible, refreshing an expired access token when possible."""
     data = request.get_json()
     account_name = data.get('account_name')
     
     if not account_name:
         return jsonify({'error': 'Account name is required'}), 400
+    require_member_account(account_name)
     
     accounts = config_manager.get_accounts()
     
     if account_name not in accounts:
         return jsonify({'error': 'Account not found'}), 404
     
-    account_data = accounts[account_name]
-    region = account_data['region']
-    
-    # Check if we have a valid auth file
-    auth_file = get_auth_file_path(account_name)
-    
-    is_authenticated = False
-    if auth_file.exists():
-        try:
-            # Try to load the authenticator - if it works, we're authenticated
-            auth = audible.Authenticator.from_file(auth_file)
-            is_authenticated = True
-        except Exception:
-            # If loading fails, we're not authenticated
-            is_authenticated = False
-    
-    # Update account data if status changed
-    if accounts[account_name].get('authenticated') != is_authenticated:
-        accounts[account_name]['authenticated'] = is_authenticated
-        config_manager.save_accounts(accounts)
-    
-    return jsonify({'authenticated': is_authenticated})
+    try:
+        asyncio.run(probe_authenticator(account_name))
+    except AuthenticationError:
+        return jsonify({'authenticated': False, 'reauth_url': url_for('auth.start_login', account_name=account_name)})
+    except Exception:
+        return jsonify({'error': 'Audible is temporarily unavailable'}), 503
+    return jsonify({'authenticated': True})
 
 # Store for active login sessions
 login_sessions = {}
@@ -91,6 +78,7 @@ def start_login(account_name):
     """Start the Audible login process"""
     try:
         account_data, region = get_account_or_404(account_name)
+        require_member_account(account_name)
 
         # Get localization data
         template = search_template('country_code', region)
@@ -117,6 +105,7 @@ def login_page(session_id):
         return "Login session not found", 404
     
     session_data = login_sessions[session_id]
+    require_member_account(session_data['account_name'])
     
     # Wait for OAuth URL to be available
     if 'oauth_url' not in session_data:
@@ -130,7 +119,10 @@ def login_page(session_id):
 @auth_bp.route('/auth/callback/<session_id>', methods=['POST'])
 def login_callback(session_id):
     """Handle the OAuth callback URL from user"""
-    data = request.get_json()
+    if session_id not in login_sessions:
+        return jsonify({'error': 'Login session not found'}), 404
+    require_member_account(login_sessions[session_id]['account_name'])
+    data = request.get_json() or {}
     response_url = data.get('response_url')
 
     success, error, code = handle_oauth_callback(
@@ -147,6 +139,9 @@ def login_callback(session_id):
 @auth_bp.route('/auth/status/<session_id>')
 def login_status(session_id):
     """Check login status"""
+    if session_id not in login_sessions:
+        return jsonify({'error': 'Login session not found'}), 404
+    require_member_account(login_sessions[session_id]['account_name'])
     response, code = check_oauth_status(
         session_id=session_id,
         sessions_storage=login_sessions,
@@ -159,6 +154,9 @@ def login_status(session_id):
 def fetch_all_libraries():
     """Fetch Audible libraries from all authenticated accounts, using cache where fresh."""
     accounts = config_manager.get_accounts()
+    user = current_user()
+    if user['role'] != 'admin':
+        accounts = {user['account_name']: accounts[user['account_name']]} if user['account_name'] in accounts else {}
     authenticated = [
         (name, data) for name, data in accounts.items()
         if data.get('authenticated') and get_auth_file_path(name).exists()
@@ -185,7 +183,9 @@ def fetch_all_libraries():
     cached_results, to_fetch, live_results = asyncio.run(_fetch_all())
 
     combined = []
+    from utils.auto_downloader import record_purchases
     for name, books in cached_results:
+        record_purchases(name, books)
         for book in books:
             book.setdefault('account_name', name)
         combined.extend(books)
@@ -195,18 +195,23 @@ def fetch_all_libraries():
             continue
         for book in result:
             book['account_name'] = name
+        record_purchases(name, result)
         write_library_cache(name, result)
         combined.extend(result)
 
-    # Deduplicate by ASIN — first account wins
-    seen = set()
-    deduped = []
+    # Keep one catalog card per ASIN, with every owning account visible.
+    by_asin = {}
     for book in combined:
-        if book['asin'] not in seen:
-            seen.add(book['asin'])
-            deduped.append(book)
+        asin = book.get('asin')
+        if not asin:
+            continue
+        if asin not in by_asin:
+            by_asin[asin] = {**book, 'account_names': []}
+        owner = book.get('account_name')
+        if owner and owner not in by_asin[asin]['account_names']:
+            by_asin[asin]['account_names'].append(owner)
 
-    return success_response({'library': deduped})
+    return success_response({'library': list(by_asin.values())})
 
 
 @auth_bp.route('/api/library/fetch', methods=['POST'])
@@ -218,25 +223,18 @@ def fetch_library_route():
         
         if not account_name:
             raise ValidationError('Account name is required')
+        require_member_account(account_name)
         
         account_data, region = get_account_or_404(account_name)
         
-        # Check if authenticated by trying to load the auth file
-        auth_file = get_auth_file_path(account_name)
-        
-        if not auth_file.exists():
-            raise AuthenticationError('Account not authenticated')
-        
-        try:
-            # Try to load the authenticator - if it fails, we're not authenticated
-            auth = audible.Authenticator.from_file(auth_file)
-        except Exception:
-            raise AuthenticationError('Account not authenticated')
+        load_authenticator(account_name)
         
         force = request.args.get('force', '').lower() in ('1', 'true', 'yes')
         if not force:
             cached = get_cached_library(account_name)
             if cached is not None:
+                from utils.auto_downloader import record_purchases
+                record_purchases(account_name, cached)
                 return success_response({
                     'message': f'Loaded {len(cached)} books (cached)',
                     'library': cached,
@@ -248,6 +246,8 @@ def fetch_library_route():
         if library:
             for book in library:
                 book['account_name'] = account_name
+            from utils.auto_downloader import record_purchases
+            record_purchases(account_name, library)
             write_library_cache(account_name, library)
             return success_response({
                 'message': f'Loaded {len(library)} books',
@@ -259,4 +259,4 @@ def fetch_library_route():
     except (AccountNotFoundError, ValidationError, AuthenticationError):
         raise
     except Exception as e:
-        return error_response(f'Library fetch error: {str(e)}', status_code=500) 
+        return error_response(f'Library fetch error: {str(e)}', status_code=500)

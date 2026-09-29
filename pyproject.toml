@@ -18,3 +18,8 @@ dependencies = [
     "apscheduler>=3.10.0",
     "gunicorn>=25.3.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

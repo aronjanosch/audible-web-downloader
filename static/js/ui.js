@@ -2,9 +2,14 @@
  * ui.js — UI utilities: toasts, loading states, helpers
  */
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 /**
  * Show a Bootstrap toast notification.
- * @param {string} message  HTML allowed
+ * @param {string} message  Plain text
  * @param {'success'|'danger'|'warning'|'info'} type
  * @param {number} duration  ms, 0 = manual dismiss
  */
@@ -19,9 +24,7 @@ function showToast(message, type = 'info', duration = 5000) {
         info: 'fa-info-circle'
     };
 
-    const id = 'toast-' + Date.now();
     const toastEl = document.createElement('div');
-    toastEl.id = id;
     toastEl.className = `toast align-items-center text-white bg-${type} border-0`;
     toastEl.setAttribute('role', 'alert');
     toastEl.setAttribute('aria-live', 'assertive');
@@ -30,11 +33,12 @@ function showToast(message, type = 'info', duration = 5000) {
         <div class="d-flex">
             <div class="toast-body d-flex align-items-center gap-2">
                 <i class="fas ${icons[type] || icons.info}"></i>
-                <span>${message}</span>
+                <span class="toast-message"></span>
             </div>
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
     `;
+    toastEl.querySelector('.toast-message').textContent = message;
 
     container.appendChild(toastEl);
 

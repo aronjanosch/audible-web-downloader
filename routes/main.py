@@ -2,12 +2,14 @@ from flask import Blueprint, render_template, request, jsonify, session, current
 import json
 import os
 import shutil
+import sqlite3
 from pathlib import Path
 from settings import settings_manager
 from utils.config_manager import get_config_manager, ConfigurationError
 from utils.constants import get_account_auth_dir, CONFIG_DIR
 from utils.errors import AccountNotFoundError, LibraryNotFoundError, ValidationError, success_response, error_response
 from utils.account_manager import get_account_or_404, get_library_config
+from utils.security import current_user, require_member_account
 
 main_bp = Blueprint('main', __name__)
 
@@ -18,6 +20,13 @@ config_manager = get_config_manager()
 def index():
     """Main page with account management and library display"""
     accounts = config_manager.get_accounts()
+    user = current_user()
+    if user and user['role'] == 'member':
+        accounts = {name: data for name, data in accounts.items() if name == user['account_name']}
+        return render_template(
+            'member.html', account_name=user['account_name'],
+            account=accounts.get(user['account_name']), hide_sidebar=True,
+        )
     current_account = session.get('current_account')
 
     # Get current account data
@@ -58,13 +67,18 @@ def importer():
 @main_bp.route('/api/session', methods=['GET'])
 def get_session_state():
     """Return session fields needed by the SPA (active account, etc.)."""
-    return jsonify({'current_account': session.get('current_account')})
+    user = current_user()
+    account = user['account_name'] if user['role'] == 'member' else session.get('current_account')
+    return jsonify({'current_account': account, 'role': user['role'], 'username': user['username']})
 
 
 @main_bp.route('/api/accounts', methods=['GET'])
 def get_accounts():
     """API endpoint to get all accounts"""
     accounts = config_manager.get_accounts()
+    user = current_user()
+    if user['role'] == 'member':
+        accounts = {name: data for name, data in accounts.items() if name == user['account_name']}
     return jsonify(accounts)
 
 @main_bp.route('/api/accounts', methods=['POST'])
@@ -86,22 +100,25 @@ def add_account():
     if account_name in accounts:
         return jsonify({'error': 'Account name already exists'}), 400
 
-    accounts[account_name] = {
+    new_account = {
         "region": region,
-        "authenticated": False
+        "authenticated": False,
+        "auto_download": {"enabled": True, "interval_hours": 6, "rules": []},
     }
 
-    config_manager.save_accounts(accounts)
+    try:
+        config_manager.create_account(account_name, new_account)
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Account name already exists'}), 409
     session['current_account'] = account_name
 
-    return jsonify({'success': True, 'account': accounts[account_name]})
+    return jsonify({'success': True, 'account': config_manager.get_account(account_name)})
 
 @main_bp.route('/api/accounts/<account_name>/generate-invite-link', methods=['POST'])
 def generate_account_invite_link(account_name):
     """Generate a unique invitation link for a specific account"""
     try:
         account_data, region = get_account_or_404(account_name)
-        accounts = config_manager.get_accounts()
 
         # Check if already authenticated
         if account_data.get('authenticated'):
@@ -112,8 +129,7 @@ def generate_account_invite_link(account_name):
         token = secrets.token_urlsafe(32)
 
         # Store token in account data
-        accounts[account_name]['pending_invitation_token'] = token
-        config_manager.save_accounts(accounts)
+        config_manager.update_account(account_name, {'pending_invitation_token': token})
 
         # Build invitation URL
         invitation_url = request.url_root.rstrip('/') + '/invite/account/' + token
@@ -134,12 +150,9 @@ def revoke_account_invite_link(account_name):
     """Revoke the invitation link for a specific account"""
     try:
         account_data, region = get_account_or_404(account_name)
-        accounts = config_manager.get_accounts()
-
         # Remove pending invitation token
-        if 'pending_invitation_token' in accounts[account_name]:
-            accounts[account_name].pop('pending_invitation_token')
-            config_manager.save_accounts(accounts)
+        if account_data.get('pending_invitation_token'):
+            config_manager.update_account(account_name, {'pending_invitation_token': None})
 
         return success_response(message='Invitation link revoked')
     except AccountNotFoundError:
@@ -151,6 +164,7 @@ def revoke_account_invite_link(account_name):
 def select_account(account_name):
     """API endpoint to select an account"""
     try:
+        require_member_account(account_name)
         account_data, region = get_account_or_404(account_name)
         session['current_account'] = account_name
         return success_response()
@@ -162,11 +176,8 @@ def delete_account(account_name):
     """API endpoint to delete an account"""
     try:
         account_data, region = get_account_or_404(account_name)
-        accounts = config_manager.get_accounts()
-
         # Remove account from SQLite
-        del accounts[account_name]
-        config_manager.save_accounts(accounts)
+        config_manager.delete_account(account_name)
 
         # Clean up auth directory if it exists
         auth_dir = get_account_auth_dir(account_name)

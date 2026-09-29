@@ -76,9 +76,9 @@ function _renderScanResults(files, count, totalSize) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><input type="checkbox" class="form-check-input scan-file-cb" data-idx="${idx}" checked></td>
-            <td class="small text-truncate" style="max-width:200px" title="${f.file_path}">${_basename(f.file_path)}</td>
-            <td class="small">${f.title || '—'}</td>
-            <td class="small">${f.author || '—'}</td>
+            <td class="small text-truncate" style="max-width:200px" title="${escapeHtml(f.file_path)}">${escapeHtml(_basename(f.file_path))}</td>
+            <td class="small">${escapeHtml(f.title || '—')}</td>
+            <td class="small">${escapeHtml(f.author || '—')}</td>
             <td class="small text-nowrap">${_formatSize(f.file_size)}</td>
         `;
         tbody.appendChild(tr);
@@ -160,7 +160,7 @@ function _renderMatchResults(files, stats) {
             <div class="match-item-header">
                 <div class="d-flex align-items-center gap-2">
                     <input type="checkbox" class="form-check-input match-file-cb" data-idx="${idx}" ${item.selected !== false && !isDuplicate && !isNotFound ? 'checked' : ''}>
-                    <strong class="small">${_basename(item.file_info?.file_path || '')}</strong>
+                    <strong class="small">${escapeHtml(_basename(item.file_info?.file_path || ''))}</strong>
                 </div>
                 <div class="d-flex gap-2 align-items-center">
                     ${isDuplicate ? '<span class="badge bg-danger">Duplicate</span>' : ''}
@@ -172,14 +172,14 @@ function _renderMatchResults(files, stats) {
                 <div class="row g-2">
                     <div class="col-md-6">
                         <div class="small text-muted fw-bold mb-1">Local File</div>
-                        <div class="small">${item.file_info?.title || '—'}</div>
-                        <div class="small text-muted">${item.file_info?.author || ''}</div>
+                        <div class="small">${escapeHtml(item.file_info?.title || '—')}</div>
+                        <div class="small text-muted">${escapeHtml(item.file_info?.author || '')}</div>
                     </div>
                     <div class="col-md-6">
                         <div class="small text-muted fw-bold mb-1">Audible Match</div>
                         ${match && !match.no_match ? `
-                            <div class="small">${match.title || '—'}</div>
-                            <div class="small text-muted">${match.authors || ''}</div>
+                            <div class="small">${escapeHtml(match.title || '—')}</div>
+                            <div class="small text-muted">${escapeHtml(match.authors || '')}</div>
                         ` : '<div class="small text-muted">No match found</div>'}
                     </div>
                 </div>
@@ -289,14 +289,15 @@ function _renderImportItems(imports) {
     container.innerHTML = '';
     Object.entries(imports).forEach(([key, item]) => {
         const el = document.createElement('div');
-        el.className = `import-progress-item state-${item.state || 'pending'}`;
+        const safeState = ['pending', 'importing', 'organizing', 'completed', 'error', 'skipped'].includes(item.state) ? item.state : 'pending';
+        el.className = `import-progress-item state-${safeState}`;
         el.innerHTML = `
             <div class="import-progress-info">
-                <div class="import-progress-title">${item.title || key}</div>
-                <div class="import-progress-sub">${_stateLabel(item.state)}</div>
-                ${item.error ? `<div class="text-danger small mt-1"><i class="fas fa-exclamation-triangle me-1"></i>${item.error}</div>` : ''}
+                <div class="import-progress-title">${escapeHtml(item.title || key)}</div>
+                <div class="import-progress-sub">${escapeHtml(_stateLabel(item.state))}</div>
+                ${item.error ? `<div class="text-danger small mt-1"><i class="fas fa-exclamation-triangle me-1"></i>${escapeHtml(item.error)}</div>` : ''}
             </div>
-            <span class="state-badge state-${item.state}">${_stateLabel(item.state)}</span>
+            <span class="state-badge state-${safeState}">${escapeHtml(_stateLabel(item.state))}</span>
         `;
         container.appendChild(el);
     });
