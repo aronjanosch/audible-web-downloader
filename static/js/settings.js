@@ -329,8 +329,11 @@ document.addEventListener('DOMContentLoaded', function () {
     setupNamingPatternModal();
     setupLibraryForm('addLibraryForm');
     setupLibraryForm('settingsAddLibraryForm');
-    loadLibraries();
-    loadNamingSettings();
+    // Signed-out and invite pages render without the app navbar and must not call admin APIs.
+    if (document.querySelector('.app-navbar')) {
+        loadLibraries();
+        loadNamingSettings();
+    }
 
     // Settings page: delete account button
     document.getElementById('deleteAccountBtn')?.addEventListener('click', function () {

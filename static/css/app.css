@@ -572,3 +572,27 @@ body.page-solo { padding-top: 0; }
   border-color: var(--color-primary);
   background: var(--color-bg);
 }
+
+/* Dark-theme contrast: Bootstrap's default outline/success colours miss WCAG AA on our surfaces. */
+[data-bs-theme="dark"] .btn-outline-secondary {
+  --bs-btn-color: #b8bec6;
+  --bs-btn-border-color: #6c757d;
+  --bs-btn-hover-bg: #6c757d;
+  --bs-btn-hover-color: #fff;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+  --bs-btn-color: #8bb4ff;
+  --bs-btn-border-color: #8bb4ff;
+  --bs-btn-hover-bg: #0d6efd;
+  --bs-btn-hover-color: #fff;
+}
+
+[data-bs-theme="dark"] .text-success {
+  color: var(--color-success) !important;
+}
+
+[data-bs-theme="dark"] .book-account-badge {
+  color: #b0b6be;
+  opacity: 1;
+}

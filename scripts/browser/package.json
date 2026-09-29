@@ -1,0 +1,10 @@
+{
+  "name": "audible-browser-checks",
+  "private": true,
+  "type": "module",
+  "description": "Browser proxies for GOAL.md item 5: axe accessibility, keyboard walkthrough, 360px layout, invite-to-library E2E.",
+  "dependencies": {
+    "axe-core": "^4.10.0",
+    "puppeteer-core": "^24.0.0"
+  }
+}

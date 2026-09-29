@@ -179,7 +179,7 @@ function _createBookCard(book, selectedAsins) {
                     ? `<img src="${_esc(book.cover_url)}" alt="${_esc(book.title)}" loading="lazy">`
                     : `<div class="book-cover-placeholder"><i class="fas fa-headphones"></i></div>`}
                 ${inLibrary ? '<span class="book-in-library-chip">In Library</span>' : ''}
-                <div class="book-checkbox-wrap">
+                <div class="book-checkbox-wrap" inert>
                     <input type="checkbox" class="form-check-input" ${isSelected ? 'checked' : ''} tabindex="-1" aria-hidden="true">
                 </div>
                 <div class="book-status-overlay" id="overlay_${_esc(book.asin)}"></div>
