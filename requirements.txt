@@ -75,7 +75,7 @@ pillow==11.3.0
     # via audible
 pyaes==1.6.1
     # via audible
-pyasn1==0.6.1
+pyasn1==0.6.4
     # via rsa
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation == 'PyPy'
     # via cffi
