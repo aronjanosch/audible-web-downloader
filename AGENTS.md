@@ -46,7 +46,7 @@ Python `3.13` (see `.python-version`). ffmpeg is required at runtime for AAX→M
   `static/css/app.css` ("Audible Redesign" system, DM Sans, warm paper/green/amber), page CSS/JS
   beside it; top bar + queue drawer live in `templates/base.html` / `static/js/queue-drawer.js`.
 - **Persistence:** raw `sqlite3` in `utils/db.py`, WAL mode, thread-local connections,
-  hand-rolled migrations keyed on `PRAGMA user_version` (currently `SCHEMA_VERSION = 5`).
+  hand-rolled migrations keyed on `PRAGMA user_version` (see `SCHEMA_VERSION` in `utils/db.py`).
   Legacy JSON (`accounts.json`, `libraries.json`, `library.json`) is imported once on
   first migrate.
 - **Queues:** in-memory, process-level singletons in `utils/queue_base.py`
